@@ -1,0 +1,518 @@
+"""Rotas da API. Perfis: 'admin' vê e edita tudo; 'gestor' vê e edita só os projetos que gerencia."""
+from __future__ import annotations
+
+import math
+import re
+import sqlite3
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field, field_validator
+
+from . import config, export_xlsx, importers, security
+from .db import MESES, NOMES_MESES, audit, connect, tx
+
+router = APIRouter(prefix="/api")
+SOMA_MESES = "+".join(MESES)
+
+
+# ---------------------------------------------------------------- acesso
+
+def _conn():
+    c = connect()
+    try:
+        yield c
+    finally:
+        c.close()
+
+
+def usuario_atual(request: Request, c: sqlite3.Connection = Depends(_conn)) -> dict:
+    uid = security.read_session(request.cookies.get(config.COOKIE_NAME))
+    row = c.execute("SELECT * FROM users WHERE id=? AND ativo=1", (uid,)).fetchone() if uid else None
+    if not row:
+        raise HTTPException(401, "Sessão expirada. Entre novamente.")
+    return dict(row)
+
+
+def usuario_liberado(u: dict = Depends(usuario_atual)) -> dict:
+    if u["trocar_senha"]:
+        raise HTTPException(403, "Troque a senha provisória para continuar.")
+    return u
+
+
+def exige_admin(u: dict = Depends(usuario_liberado)) -> dict:
+    if u["perfil"] != "admin":
+        raise HTTPException(403, "Apenas o administrador pode fazer isso.")
+    return u
+
+
+def permitidos(c: sqlite3.Connection, u: dict) -> set[str]:
+    if u["perfil"] == "admin":
+        return {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
+    rows = c.execute("SELECT orcamento FROM projetos WHERE gerente=? UNION "
+                     "SELECT orcamento FROM user_projetos WHERE user_id=?", (u["gerente"], u["id"]))
+    return {r[0] for r in rows}
+
+
+def exige_acesso(c: sqlite3.Connection, u: dict, orcamento: str) -> sqlite3.Row:
+    p = c.execute("SELECT * FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
+    if not p or orcamento not in permitidos(c, u):
+        raise HTTPException(404, "Projeto não encontrado.")
+    return p
+
+
+def _arred(v: float) -> float:
+    return round(float(v), 2)
+
+
+# ---------------------------------------------------------------- modelos
+
+class LoginIn(BaseModel):
+    login: str = Field(min_length=1, max_length=60)
+    senha: str = Field(min_length=1, max_length=200)
+
+
+class SenhaIn(BaseModel):
+    atual: str
+    nova: str = Field(max_length=200)
+
+
+def _validar_meses(v: list[float]) -> list[float]:
+    if len(v) != 12:
+        raise ValueError("Informe os 12 meses.")
+    for x in v:
+        if not math.isfinite(x) or x < 0 or x > 1e11:
+            raise ValueError("Valores mensais devem ser números entre 0 e 100 bilhões.")
+    return [_arred(x) for x in v]
+
+
+class LinhaIn(BaseModel):
+    edt: str = Field(min_length=1, max_length=200)
+    tarefa: str = Field(min_length=1, max_length=200)
+    conta_codigo: str = Field(min_length=1, max_length=20)
+    meses: list[float]
+    obs: str = Field(default="", max_length=1000)
+
+    _m = field_validator("meses")(_validar_meses)
+
+
+class LinhaPatch(BaseModel):
+    edt: str | None = Field(default=None, min_length=1, max_length=200)
+    tarefa: str | None = Field(default=None, min_length=1, max_length=200)
+    conta_codigo: str | None = Field(default=None, min_length=1, max_length=20)
+    meses: list[float] | None = None
+    obs: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("meses")
+    @classmethod
+    def _m(cls, v):
+        return None if v is None else _validar_meses(v)
+
+
+class ProjetoPatch(BaseModel):
+    n_projeto: str | None = Field(default=None, max_length=12)
+    descricao: str | None = Field(default=None, min_length=3, max_length=200)
+
+    @field_validator("n_projeto")
+    @classmethod
+    def _n(cls, v):
+        if v is not None and v != "" and not re.fullmatch(r"\d{1,10}", v):
+            raise ValueError("O Nº do Projeto deve conter apenas dígitos.")
+        return v
+
+
+class PremissasIn(BaseModel):
+    reajuste_pessoal: float = Field(ge=-50, le=100)
+    reajuste_geral: float = Field(ge=-50, le=100)
+    dolar: float = Field(gt=0, le=50)
+
+
+class AplicarIn(BaseModel):
+    orcamentos: list[str] | None = None
+    sobrescrever_editadas: bool = False
+    simular: bool = True
+
+
+class UsuarioIn(BaseModel):
+    login: str = Field(pattern=r"^[a-z0-9._-]{3,30}$")
+    nome: str = Field(min_length=2, max_length=100)
+    perfil: str = Field(pattern="^(admin|gestor)$")
+    gerente: str | None = Field(default=None, max_length=100)
+
+
+class UsuarioPatch(BaseModel):
+    nome: str | None = Field(default=None, min_length=2, max_length=100)
+    perfil: str | None = Field(default=None, pattern="^(admin|gestor)$")
+    gerente: str | None = Field(default=None, max_length=100)
+    ativo: bool | None = None
+
+
+# ---------------------------------------------------------------- sessão
+
+def _publico(u: dict) -> dict:
+    return {"id": u["id"], "login": u["login"], "nome": u["nome"], "perfil": u["perfil"],
+            "gerente": u["gerente"], "trocar_senha": bool(u["trocar_senha"])}
+
+
+@router.post("/login")
+def login(dados: LoginIn, request: Request, response: Response, c: sqlite3.Connection = Depends(_conn)):
+    chave = f"{request.client.host if request.client else '-'}|{dados.login.lower()}"
+    espera = security.bloqueado(chave)
+    if espera:
+        raise HTTPException(429, f"Muitas tentativas. Tente de novo em {espera // 60 + 1} minuto(s).")
+    row = c.execute("SELECT * FROM users WHERE login=? AND ativo=1", (dados.login.strip(),)).fetchone()
+    if not row or not security.verify_password(dados.senha, row["senha_hash"]):
+        security.registrar_falha(chave)
+        raise HTTPException(401, "Usuário ou senha incorretos.")
+    security.limpar_falhas(chave)
+    response.set_cookie(config.COOKIE_NAME, security.make_session(row["id"]), max_age=config.SESSION_MAX_AGE,
+                        httponly=True, samesite="lax", secure=config.COOKIE_SECURE, path="/")
+    return _publico(dict(row))
+
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(config.COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@router.get("/me")
+def me(u: dict = Depends(usuario_atual)):
+    return _publico(u)
+
+
+@router.post("/me/senha")
+def trocar_senha(dados: SenhaIn, u: dict = Depends(usuario_atual)):
+    if not security.verify_password(dados.atual, u["senha_hash"]):
+        raise HTTPException(400, "A senha atual não confere.")
+    erro = security.senha_valida(dados.nova)
+    if erro:
+        raise HTTPException(400, erro)
+    if dados.nova == dados.atual:
+        raise HTTPException(400, "A nova senha deve ser diferente da atual.")
+    with tx() as c:
+        c.execute("UPDATE users SET senha_hash=?, trocar_senha=0 WHERE id=?", (security.hash_password(dados.nova), u["id"]))
+        audit(c, u["login"], "trocou a própria senha")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- referência
+
+@router.get("/contas")
+def contas(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    return [dict(r) for r in c.execute("SELECT codigo, descricao, grupo FROM contas ORDER BY grupo, descricao")]
+
+
+@router.get("/premissas")
+def ler_premissas(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    return {r["chave"]: {"valor": r["valor"], "descricao": r["descricao"]} for r in c.execute("SELECT * FROM premissas")}
+
+
+@router.put("/premissas")
+def gravar_premissas(dados: PremissasIn, u: dict = Depends(exige_admin)):
+    with tx() as c:
+        for chave, valor in dados.model_dump().items():
+            c.execute("UPDATE premissas SET valor=? WHERE chave=?", (valor, chave))
+        audit(c, u["login"], "alterou premissas", detalhe=str(dados.model_dump()))
+    return {"ok": True}
+
+
+def _fator(grupo: str, prem: dict[str, float]) -> float:
+    return 1 + (prem["reajuste_pessoal"] if grupo == "Pessoal" else prem["reajuste_geral"]) / 100
+
+
+@router.post("/premissas/aplicar")
+def aplicar_premissas(dados: AplicarIn, u: dict = Depends(exige_admin)):
+    """Recalcula as linhas de 2027 a partir do 2026 aprovado com os reajustes. Por padrão só simula."""
+    with tx() as c:
+        prem = {r["chave"]: r["valor"] for r in c.execute("SELECT chave, valor FROM premissas")}
+        sql = (f"SELECT l.id, l.orcamento, l.editada, k.grupo, {', '.join('l.' + m for m in MESES)}, "
+               f"{', '.join('b.' + m + ' AS b_' + m for m in MESES)} "
+               "FROM linhas l JOIN linhas b ON b.id = l.base_id JOIN contas k ON k.codigo = l.conta_codigo "
+               "WHERE l.ciclo = ?")
+        antes = depois = 0.0
+        afetadas = ignoradas_editadas = 0
+        for r in c.execute(sql, (config.CICLO_PLANO,)).fetchall():
+            if dados.orcamentos and r["orcamento"] not in dados.orcamentos:
+                continue
+            if r["editada"] and not dados.sobrescrever_editadas:
+                ignoradas_editadas += 1
+                continue
+            novos = [_arred(r["b_" + m] * _fator(r["grupo"], prem)) for m in MESES]
+            antes += sum(r[m] for m in MESES)
+            depois += sum(novos)
+            afetadas += 1
+            if not dados.simular:
+                c.execute(f"UPDATE linhas SET {', '.join(m + '=?' for m in MESES)}, editada=0, "
+                          "atualizado_por=?, atualizado_em=datetime('now') WHERE id=?", (*novos, u["login"], r["id"]))
+        if not dados.simular:
+            audit(c, u["login"], "aplicou premissas", detalhe=f"{afetadas} linhas; {prem}")
+    return {"simulacao": dados.simular, "linhas_afetadas": afetadas, "linhas_editadas_preservadas": ignoradas_editadas,
+            "total_antes": _arred(antes), "total_depois": _arred(depois)}
+
+
+# ---------------------------------------------------------------- projetos e linhas
+
+def _linha(r: sqlite3.Row) -> dict:
+    meses = [_arred(r[m]) for m in MESES]
+    ref = None
+    if r["base_id"] is not None:
+        rm = [_arred(r["b_" + m]) for m in MESES]
+        ref = {"meses": rm, "total": _arred(sum(rm))}
+    return {"id": r["id"], "edt": r["edt"], "tarefa": r["tarefa"], "conta_codigo": r["conta_codigo"],
+            "conta_desc": r["conta_desc"], "grupo": r["grupo"], "meses": meses, "total": _arred(sum(meses)),
+            "obs": r["obs"], "editada": bool(r["editada"]), "ref": ref,
+            "realizado": _arred(r["realizado"] or 0), "empenhado": _arred(r["empenhado"] or 0),
+            "atualizado_por": r["atualizado_por"], "atualizado_em": r["atualizado_em"]}
+
+
+@router.get("/projetos")
+def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    ids = sorted(permitidos(c, u))
+    if not ids:
+        return []
+    marks = ",".join("?" for _ in ids)
+    rows = c.execute(
+        f"""SELECT p.*,
+            (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_BASE} AND orcamento=p.orcamento) AS t_base,
+            (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_plano,
+            (SELECT COUNT(*) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS n_linhas,
+            (SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=p.orcamento) AS realizado,
+            (SELECT COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=p.orcamento) AS empenhado
+            FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.origem, p.descricao""", ids).fetchall()
+    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "origem", "gerente", "n_linhas")},
+             "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
+             "total_2027": _arred(r["t_plano"]), "realizado_2026": _arred(r["realizado"]),
+             "empenhado_2026": _arred(r["empenhado"]),
+             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] else [])} for r in rows]
+
+
+@router.patch("/projetos/{orcamento}")
+def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(exige_admin)):
+    with tx() as c:
+        p = exige_acesso(c, u, orcamento)
+        if dados.n_projeto is not None:
+            c.execute("UPDATE projetos SET n_projeto=? WHERE orcamento=?", (dados.n_projeto, orcamento))
+        if dados.descricao is not None:
+            c.execute("UPDATE projetos SET descricao=? WHERE orcamento=?", (dados.descricao.strip(), orcamento))
+        audit(c, u["login"], "editou projeto", orcamento, detalhe=str(dados.model_dump(exclude_none=True)))
+    return {"ok": True}
+
+
+_SQL_LINHAS = f"""
+SELECT l.*, k.descricao AS conta_desc, k.grupo,
+       {', '.join('b.' + m + ' AS b_' + m for m in MESES)},
+       e.realizado, e.empenhado
+FROM linhas l
+JOIN contas k ON k.codigo = l.conta_codigo
+LEFT JOIN linhas b ON b.id = l.base_id
+LEFT JOIN execucao e ON l.base_id IS NOT NULL AND e.orcamento = l.orcamento
+     AND e.edt = b.edt AND e.tarefa = b.tarefa AND e.conta_codigo = b.conta_codigo
+WHERE l.ciclo = {config.CICLO_PLANO}"""
+
+
+@router.get("/projetos/{orcamento}")
+def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    p = exige_acesso(c, u, orcamento)
+    rows = c.execute(_SQL_LINHAS + " AND l.orcamento=? ORDER BY l.edt, l.tarefa, l.conta_codigo, l.id", (orcamento,)).fetchall()
+    linhas = [_linha(r) for r in rows]
+    ex = c.execute("SELECT COALESCE(SUM(realizado),0), COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=?",
+                   (orcamento,)).fetchone()
+    casado_r = sum(x["realizado"] for x in linhas)
+    casado_e = sum(x["empenhado"] for x in linhas)
+    return {
+        "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "origem", "gerente", "diretoria")}
+                   | {"original_2026": _arred(p["original_2026"])},
+        "linhas": linhas,
+        "totais": {"plano": _arred(sum(x["total"] for x in linhas)),
+                   "base": _arred(sum((x["ref"] or {"total": 0})["total"] for x in linhas)),
+                   "realizado": _arred(ex[0]), "empenhado": _arred(ex[1]),
+                   "realizado_sem_linha": _arred(ex[0] - casado_r), "empenhado_sem_linha": _arred(ex[1] - casado_e)},
+    }
+
+
+def _checar_conta(c: sqlite3.Connection, codigo: str) -> None:
+    if not c.execute("SELECT 1 FROM contas WHERE codigo=?", (codigo,)).fetchone():
+        raise HTTPException(422, "Conta contábil fora da lista do template.")
+
+
+@router.post("/projetos/{orcamento}/linhas", status_code=201)
+def criar_linha(orcamento: str, dados: LinhaIn, u: dict = Depends(usuario_liberado)):
+    with tx() as c:
+        exige_acesso(c, u, orcamento)
+        _checar_conta(c, dados.conta_codigo)
+        cur = c.execute(
+            f"INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, {', '.join(MESES)}, editada, obs, atualizado_por) "
+            f"VALUES (?,?,?,?,?,{', '.join('?' for _ in MESES)},1,?,?)",
+            (config.CICLO_PLANO, orcamento, dados.edt.strip(), dados.tarefa.strip(), dados.conta_codigo,
+             *dados.meses, dados.obs.strip(), u["login"]))
+        audit(c, u["login"], "criou linha", orcamento, cur.lastrowid, f"{dados.tarefa} / {dados.conta_codigo} / {_arred(sum(dados.meses))}")
+        row = c.execute(_SQL_LINHAS + " AND l.id=?", (cur.lastrowid,)).fetchone()
+    return _linha(row)
+
+
+def _linha_do_usuario(c: sqlite3.Connection, u: dict, linha_id: int) -> sqlite3.Row:
+    r = c.execute("SELECT * FROM linhas WHERE id=? AND ciclo=?", (linha_id, config.CICLO_PLANO)).fetchone()
+    if not r:
+        raise HTTPException(404, "Linha não encontrada.")
+    exige_acesso(c, u, r["orcamento"])
+    return r
+
+
+@router.put("/linhas/{linha_id}")
+def editar_linha(linha_id: int, dados: LinhaPatch, u: dict = Depends(usuario_liberado)):
+    with tx() as c:
+        atual = _linha_do_usuario(c, u, linha_id)
+        novo = dados.model_dump(exclude_none=True)
+        if "conta_codigo" in novo:
+            _checar_conta(c, novo["conta_codigo"])
+        sets, vals = [], []
+        for campo in ("edt", "tarefa", "conta_codigo", "obs"):
+            if campo in novo:
+                sets.append(f"{campo}=?")
+                vals.append(novo[campo].strip())
+        if "meses" in novo:
+            sets += [f"{m}=?" for m in MESES]
+            vals += novo["meses"]
+        if not sets:
+            raise HTTPException(422, "Nada para alterar.")
+        antes = _arred(sum(atual[m] for m in MESES))
+        c.execute(f"UPDATE linhas SET {', '.join(sets)}, editada=1, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
+                  (*vals, u["login"], linha_id))
+        depois = _arred(sum(novo["meses"])) if "meses" in novo else antes
+        audit(c, u["login"], "editou linha", atual["orcamento"], linha_id, f"total {antes} para {depois}")
+        row = c.execute(_SQL_LINHAS + " AND l.id=?", (linha_id,)).fetchone()
+    return _linha(row)
+
+
+@router.delete("/linhas/{linha_id}")
+def excluir_linha(linha_id: int, u: dict = Depends(usuario_liberado)):
+    with tx() as c:
+        atual = _linha_do_usuario(c, u, linha_id)
+        c.execute("DELETE FROM linhas WHERE id=?", (linha_id,))
+        audit(c, u["login"], "excluiu linha", atual["orcamento"], linha_id,
+              f"{atual['tarefa']} / {atual['conta_codigo']} / {_arred(sum(atual[m] for m in MESES))}")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- resumo
+
+@router.get("/resumo")
+def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    ids = sorted(permitidos(c, u))
+    marks = ",".join("?" for _ in ids) or "''"
+    por_origem = c.execute(
+        f"""SELECT p.origem, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN projetos p USING (orcamento)
+            WHERE l.orcamento IN ({marks}) GROUP BY p.origem, l.ciclo""", ids).fetchall()
+    por_grupo = c.execute(
+        f"""SELECT k.grupo, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN contas k ON k.codigo=l.conta_codigo
+            WHERE l.orcamento IN ({marks}) GROUP BY k.grupo, l.ciclo""", ids).fetchall()
+    mensal = c.execute(
+        f"SELECT {', '.join(f'SUM({m}) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks})",
+        (config.CICLO_PLANO, *ids)).fetchone()
+
+    def agrupar(rows, chave):
+        out: dict[str, dict] = {}
+        for r in rows:
+            d = out.setdefault(r[chave], {"nome": r[chave], "base": 0.0, "plano": 0.0})
+            d["base" if r["ciclo"] == config.CICLO_BASE else "plano"] = _arred(r["t"])
+        return sorted(out.values(), key=lambda d: -d["plano"])
+
+    origens, grupos = agrupar(por_origem, "origem"), agrupar(por_grupo, "grupo")
+    return {"ciclo_base": config.CICLO_BASE, "ciclo_plano": config.CICLO_PLANO,
+            "total_base": _arred(sum(o["base"] for o in origens)), "total_plano": _arred(sum(o["plano"] for o in origens)),
+            "por_origem": origens, "por_grupo": grupos,
+            "mensal_plano": [{"mes": NOMES_MESES[i], "valor": _arred(mensal[m] or 0)} for i, m in enumerate(MESES)]}
+
+
+# ---------------------------------------------------------------- usuários (admin)
+
+def _usuario_row(r: sqlite3.Row) -> dict:
+    return {"id": r["id"], "login": r["login"], "nome": r["nome"], "perfil": r["perfil"], "gerente": r["gerente"],
+            "ativo": bool(r["ativo"]), "trocar_senha": bool(r["trocar_senha"])}
+
+
+@router.get("/usuarios")
+def listar_usuarios(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    gerentes = [r[0] for r in c.execute("SELECT DISTINCT gerente FROM projetos ORDER BY gerente")]
+    return {"usuarios": [_usuario_row(r) for r in c.execute("SELECT * FROM users ORDER BY perfil, nome")],
+            "gerentes": gerentes}
+
+
+@router.post("/usuarios", status_code=201)
+def criar_usuario(dados: UsuarioIn, u: dict = Depends(exige_admin)):
+    if dados.perfil == "gestor" and not dados.gerente:
+        raise HTTPException(422, "Informe o gerente de projetos que este gestor representa.")
+    temp = security.senha_temporaria()
+    with tx() as c:
+        if c.execute("SELECT 1 FROM users WHERE login=?", (dados.login,)).fetchone():
+            raise HTTPException(409, "Já existe um usuário com esse login.")
+        cur = c.execute("INSERT INTO users (login, nome, senha_hash, perfil, gerente, trocar_senha) VALUES (?,?,?,?,?,1)",
+                        (dados.login, dados.nome, security.hash_password(temp), dados.perfil, dados.gerente))
+        audit(c, u["login"], "criou usuário", detalhe=f"{dados.login} ({dados.perfil})")
+        row = c.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
+    return {**_usuario_row(row), "senha_temporaria": temp}
+
+
+@router.patch("/usuarios/{uid}")
+def editar_usuario(uid: int, dados: UsuarioPatch, u: dict = Depends(exige_admin)):
+    with tx() as c:
+        alvo = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+        if not alvo:
+            raise HTTPException(404, "Usuário não encontrado.")
+        if uid == u["id"] and (dados.ativo is False or dados.perfil == "gestor"):
+            raise HTTPException(400, "Você não pode desativar nem rebaixar o próprio acesso.")
+        campos = dados.model_dump(exclude_none=True)
+        if "ativo" in campos:
+            campos["ativo"] = int(campos["ativo"])
+        if campos:
+            c.execute(f"UPDATE users SET {', '.join(k + '=?' for k in campos)} WHERE id=?", (*campos.values(), uid))
+            audit(c, u["login"], "editou usuário", detalhe=f"{alvo['login']}: {campos}")
+        row = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    return _usuario_row(row)
+
+
+@router.post("/usuarios/{uid}/reset-senha")
+def resetar_senha(uid: int, u: dict = Depends(exige_admin)):
+    temp = security.senha_temporaria()
+    with tx() as c:
+        alvo = c.execute("SELECT login FROM users WHERE id=?", (uid,)).fetchone()
+        if not alvo:
+            raise HTTPException(404, "Usuário não encontrado.")
+        c.execute("UPDATE users SET senha_hash=?, trocar_senha=1 WHERE id=?", (security.hash_password(temp), uid))
+        audit(c, u["login"], "redefiniu senha", detalhe=alvo["login"])
+    return {"senha_temporaria": temp}
+
+
+# ---------------------------------------------------------------- exportação e auditoria (admin)
+
+def _aviso(a: export_xlsx.Aviso) -> dict:
+    return {"nivel": a.nivel, "mensagem": a.mensagem, "orcamento": a.orcamento}
+
+
+@router.get("/export/preflight")
+def preflight(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    r = export_xlsx.preparar(c)
+    return {"bloqueado": r.bloqueado, "linhas": len(r.linhas),
+            "total": _arred(sum(sum(x["meses"]) for x in r.linhas)), "avisos": [_aviso(a) for a in r.avisos]}
+
+
+@router.get("/export/xlsx")
+def exportar(u: dict = Depends(exige_admin)):
+    with tx() as c:
+        r = export_xlsx.preparar(c)
+        if r.bloqueado:
+            raise HTTPException(409, "Há pendências que impedem a exportação. Veja a lista de conferência.")
+        conteudo = export_xlsx.gerar(r.linhas)
+        audit(c, u["login"], "exportou template", detalhe=f"{len(r.linhas)} linhas")
+    nome = f"Planejamento_Anual_{config.CICLO_PLANO}_ESR_{datetime.now():%Y%m%d_%H%M}.xlsx"
+    return StreamingResponse(iter([conteudo]),
+                             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+@router.get("/auditoria")
+def ver_auditoria(limite: int = 200, _: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    rows = c.execute("SELECT * FROM auditoria ORDER BY id DESC LIMIT ?", (max(1, min(limite, 1000)),)).fetchall()
+    return [dict(r) for r in rows]
