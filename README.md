@@ -27,3 +27,6 @@ App de planejamento anual (FastAPI + SQLite + React). Endereço: https://orcamen
 
 ## Desenvolvimento
 `pip install -r requirements.txt`, `python -m pytest tests` (precisa das planilhas em ORC_TEST_UPLOADS) e `cd web && npm i && npm run dev`.
+
+## HTTPS
+O HTTPS é feito pelo Traefik que já roda na VPS (labels no `docker-compose.yml`). Diagnóstico local: `curl -I http://127.0.0.1:3004/`.

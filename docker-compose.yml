@@ -1,3 +1,4 @@
+# O Traefik que já roda na VPS (rede host, provedor Docker, resolvedor "letsencrypt") faz o HTTPS.
 services:
   app:
     build: .
@@ -5,15 +6,13 @@ services:
     volumes:
       - orc_data:/data
       - ./dados:/dados:ro        # planilhas de origem, só para a carga inicial
-    expose: ["8000"]
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    depends_on: [app]
+    ports:
+      - "127.0.0.1:3004:8000"    # só local, útil para diagnóstico
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.orcamento.rule=Host(`orcamento.lmguimaraes.com.br`)
+      - traefik.http.routers.orcamento.entrypoints=websecure
+      - traefik.http.routers.orcamento.tls.certresolver=letsencrypt
+      - traefik.http.services.orcamento.loadbalancer.server.port=8000
 volumes:
   orc_data:
-  caddy_data:
