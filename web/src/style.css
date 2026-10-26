@@ -249,3 +249,4 @@ td.total-cel{display:table-cell;text-align:right}td.total-cel small{display:bloc
 .tab.ger .ger-pessoa.n2 .ger-nome { padding-left: 2.8rem; }
 .tab.ger .ger-pessoa.n2 .ger-nome::before { content: "\2514\00a0"; color: #8a97a8; }
 .tab.ger .ger-linha.dir td { background: #dfe7f2; border-top: 3px solid var(--azul, #003366); }
+.tab.ger .ger-linha.dss td { background: #c9d6e8; border-top: 3px solid #003366; }

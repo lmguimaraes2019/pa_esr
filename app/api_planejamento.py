@@ -115,14 +115,10 @@ def _situacao(c: sqlite3.Connection, u: dict) -> dict:
     return {"projetos": projetos, "etapas": etapas, "pendencias": pend}
 
 
-def _executado(c: sqlite3.Connection, ids: set[str]) -> float:
-    if not ids:
-        return 0.0
-    marks = ",".join("?" for _ in ids)
-    return _arred(c.execute(f"SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento IN ({marks})", sorted(ids)).fetchone()[0])
-
-
 DIRETORIA = ("leandro", "celia")      # projetos cadastrados com estes gerentes pertencem à Diretoria Adjunta
+GER_DSS = "DSS - Diretoria de Serviços e Soluções"
+GER_DIR = "Diretoria Adjunta"
+ORDEM_CARGO = {"diretor_executivo": 0, "pmo": 1, "diretor_adjunto": 2, "gerente": 3, "coordenador": 4}
 
 
 def _sem_acento(t: str) -> str:
@@ -130,50 +126,73 @@ def _sem_acento(t: str) -> str:
     return "".join(ch for ch in unicodedata.normalize("NFD", t or "") if unicodedata.category(ch) != "Mn").lower().strip()
 
 
-def _diretoria(c: sqlite3.Connection) -> dict:
-    """Projetos da Diretoria Adjunta (gerente Leandro ou Célia), acima de todas as gerências."""
-    por: dict[str, list[str]] = {}
-    for r in c.execute("SELECT orcamento, gerente FROM projetos ORDER BY orcamento"):
-        for chave in DIRETORIA:
-            if _sem_acento(r["gerente"]).startswith(chave):
-                por.setdefault(r["gerente"], []).append(r["orcamento"])
-    def agrega(ids: list[str]) -> dict:
-        res = list(resumir(c, ids).values())
-        return {"projetos": len(res), "aprovado": _arred(sum(p["despesas"]["aprovado"] for p in res)), "executado": _executado(c, set(ids)),
-                "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "pendencias": sum(p["pendencias"] for p in res)}
-    todos = sorted({o for ids in por.values() for o in ids})
-    return {**agrega(todos), "responsaveis": [{"nome": n, **agrega(ids)} for n, ids in sorted(por.items())]}
+def _executado(c: sqlite3.Connection, ids: set[str]) -> float:
+    if not ids:
+        return 0.0
+    marks = ",".join("?" for _ in ids)
+    return _arred(c.execute(f"SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento IN ({marks})", sorted(ids)).fetchone()[0])
+
+
+def _agrega(c: sqlite3.Connection, ids) -> dict:
+    ids = sorted(set(ids))
+    res = list(resumir(c, ids).values())
+    return {"projetos": len(res), "aprovado": _arred(sum(p["despesas"]["aprovado"] for p in res)), "executado": _executado(c, set(ids)),
+            "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "pendencias": sum(p["pendencias"] for p in res)}
+
+
+def _nivel(gerencia: str) -> str:
+    g = _sem_acento(gerencia)
+    return "dss" if g.startswith("dss") else "diretoria" if g.startswith("diretoria adjunta") else "gerencia"
 
 
 def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
-    """Acompanhamento do admin: gerências, com o gerente e os coordenadores abaixo.
-    Os totais da gerência somam cada projeto uma vez, ainda que gerente e coordenador o acompanhem."""
-    grupos: dict[str, list[dict]] = {}
-    for r in c.execute("SELECT * FROM users WHERE ativo=1 AND perfil<>'admin' ORDER BY nome").fetchall():
-        grupos.setdefault((r["gerencia"] or "").strip(), []).append(dict(r))
+    """Acompanhamento do admin, em níveis: DSS, Diretoria Adjunta e gerências.
+    DSS soma todos os projetos; a Diretoria Adjunta, os projetos de Leandro e Célia; cada gerência, os projetos
+    que seus gestores acompanham (cada projeto uma vez, ainda que gerente e coordenador o acompanhem)."""
+    todos_ids = [r[0] for r in c.execute("SELECT orcamento FROM projetos")]
+    dir_ids = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos")
+               if any(_sem_acento(r["gerente"]).startswith(k) for k in DIRETORIA)]
+    grupos: dict[str, list[dict]] = {GER_DSS: [], GER_DIR: []}
+    for r in c.execute("SELECT * FROM users WHERE ativo=1 ORDER BY nome").fetchall():
+        nome = (r["gerencia"] or "").strip()
+        nv = _nivel(nome)
+        grupos.setdefault(GER_DSS if nv == "dss" else GER_DIR if nv == "diretoria" else nome, []).append(dict(r))
     out = []
-    for nome, membros in sorted(grupos.items(), key=lambda kv: (kv[0] == "", kv[0].lower())):
+    ordem = sorted(grupos.items(), key=lambda kv: ({GER_DSS: 0, GER_DIR: 1}.get(kv[0], 3 if kv[0] == "" else 2), kv[0].lower()))
+    for nome, membros in ordem:
+        nv = _nivel(nome) if nome else "gerencia"
+        if nv != "gerencia" and not membros and nv != "dss" and not dir_ids:
+            continue
         ids: set[str] = set()
         pessoas, pend, todos_concluidos, conc_em = [], 0, True, None
         for m in membros:
-            ids |= set(permitidos(c, m))
-            su = _situacao(c, m)
             cu = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (m["login"],)).fetchone()
-            pend += su["pendencias"]
-            todos_concluidos = todos_concluidos and bool(cu)
-            if cu and (conc_em is None or cu["concluido_em"] > conc_em):
-                conc_em = cu["concluido_em"]
-            pessoas.append({"login": m["login"], "nome": m["nome"], "cargo": m["cargo"], "projetos": len(su["projetos"]),
-                            "plano": su["etapas"]["despesas"]["plano"], "pendencias": su["pendencias"],
-                            "concluido_em": cu["concluido_em"] if cu else None, "obs": cu["obs"] if cu else ""})
-        res = list(resumir(c, sorted(ids)).values())
-        aprovado = _arred(sum(p["despesas"]["aprovado"] for p in res))
-        executado = _executado(c, ids)
-        pessoas.sort(key=lambda p: ({"gerente": 0, "coordenador": 1}.get(p["cargo"], 2), p["nome"].lower()))
-        out.append({"gerencia": nome, "projetos": len(res), "aprovado": aprovado, "executado": executado,
-                    "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "pendencias": pend,
-                    "concluido": todos_concluidos and bool(membros), "concluido_em": conc_em if todos_concluidos else None,
-                    "pessoas": pessoas})
+            base = {"login": m["login"], "nome": m["nome"], "cargo": m["cargo"], "projetos": None, "plano": None, "pendencias": 0,
+                    "concluido_em": cu["concluido_em"] if cu else None, "obs": cu["obs"] if cu else ""}
+            if nv == "diretoria":      # projetos em que o nome do usuário é o gerente cadastrado
+                pri = _sem_acento(m["nome"]).split(" ")[0]
+                meus = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos") if _sem_acento(r["gerente"]).startswith(pri)]
+                a = _agrega(c, meus)
+                base.update(projetos=a["projetos"], plano=a["plano"], pendencias=a["pendencias"], aprovado=a["aprovado"], executado=a["executado"])
+            elif m["perfil"] != "admin" and nv == "gerencia":
+                ids |= set(permitidos(c, m))
+                su = _situacao(c, m)
+                pend += su["pendencias"]
+                todos_concluidos = todos_concluidos and bool(cu)
+                if cu and (conc_em is None or cu["concluido_em"] > conc_em):
+                    conc_em = cu["concluido_em"]
+                base.update(projetos=len(su["projetos"]), plano=su["etapas"]["despesas"]["plano"], pendencias=su["pendencias"])
+            pessoas.append(base)
+        pessoas.sort(key=lambda p: (ORDEM_CARGO.get(p["cargo"], 9), p["nome"].lower()))
+        if nv == "dss":
+            a = _agrega(c, todos_ids)
+        elif nv == "diretoria":
+            a = _agrega(c, dir_ids)
+        else:
+            a = _agrega(c, ids)
+            a["pendencias"] = pend
+        out.append({"gerencia": nome, "nivel": nv, **a, "concluido": nv == "gerencia" and todos_concluidos and bool(membros),
+                    "concluido_em": conc_em if todos_concluidos else None, "pessoas": pessoas})
     return out
 
 
@@ -184,7 +203,6 @@ def planejamento(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = De
     s["concluido"] = dict(conc) if conc else None
     if u["perfil"] == "admin":
         s["gerencias"] = _por_gerencia(c)
-        s["diretoria"] = _diretoria(c)
     return s
 
 

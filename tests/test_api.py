@@ -124,9 +124,9 @@ def test_exportacao_bloqueada_ate_preencher_numero(client):
 
 def test_usuarios_admin_e_csrf(client):
     entrar(client)
-    r = client.post("/api/usuarios", json={"login": "novo.gestor", "nome": "Novo Gestor", "perfil": "gestor", "gerente": "X"})
+    r = client.post("/api/usuarios", json={"login": "novo.gestor", "nome": "Novo Gestor", "perfil": "gestor", "gerente": "X", "gerencia": "G", "cargo": "gerente"})
     assert r.status_code == 201 and len(r.json()["senha_temporaria"]) >= 10
-    assert client.post("/api/usuarios", json={"login": "novo.gestor", "nome": "Outro", "perfil": "admin"}).status_code == 409
+    assert client.post("/api/usuarios", json={"login": "novo.gestor", "nome": "Outro", "perfil": "admin", "gerencia": "G", "cargo": "pmo"}).status_code == 409
     me = client.get("/api/me").json()
     assert client.patch(f"/api/usuarios/{me['id']}", json={"ativo": False}).status_code == 400
     r = client.post("/api/logout", headers={"origin": "https://malicioso.example"})
@@ -137,7 +137,7 @@ def test_editar_acessos_do_usuario(client):
     entrar(client)
     dados = client.get("/api/usuarios").json()
     g1, g2 = dados["gerentes"][0], dados["gerentes"][1]
-    r = client.post("/api/usuarios", json={"login": "ed.teste", "nome": "Ed Teste", "perfil": "gestor", "gerentes": [g1]})
+    r = client.post("/api/usuarios", json={"login": "ed.teste", "nome": "Ed Teste", "perfil": "gestor", "gerentes": [g1], "gerencia": "G", "cargo": "gerente"})
     assert r.status_code == 201 and r.json()["gerentes"] == [g1]
     uid = r.json()["id"]
     r = client.patch(f"/api/usuarios/{uid}", json={"gerentes": [g1, g2], "projetos": [dados["projetos"][0]["orcamento"]], "nome": "Ed Novo"})
@@ -410,8 +410,15 @@ def test_acompanhamento_por_gerencia(client):
     assert {"aprovado", "executado", "plano", "pendencias"} <= set(t)
 
 
-def test_diretoria_adjunta(client):
+def test_gerencia_e_cargo_obrigatorios_e_niveis(client):
     entrar(client)
-    d = client.get("/api/planejamento").json()["diretoria"]
-    assert d["projetos"] == sum(r["projetos"] for r in d["responsaveis"])
-    assert d["projetos"] > 0 and {"aprovado", "executado", "plano", "pendencias"} <= set(d)
+    sem = {"login": "sem.cargo", "nome": "Sem Cargo", "perfil": "admin"}
+    assert client.post("/api/usuarios", json=sem).status_code == 422
+    for lg, cargo, ger in (("dir.exec", "diretor_executivo", "DSS - Diretoria de Serviços e Soluções"), ("pmo.x", "pmo", "DSS - Diretoria de Serviços e Soluções"),
+                           ("dir.adj", "diretor_adjunto", "Diretoria Adjunta")):
+        r = client.post("/api/usuarios", json={"login": lg, "nome": "Pessoa " + lg, "perfil": "admin", "gerencia": ger, "cargo": cargo})
+        assert r.status_code == 201, r.text
+    g = client.get("/api/planejamento").json()["gerencias"]
+    assert [x["nivel"] for x in g[:2]] == ["dss", "diretoria"]
+    assert g[0]["projetos"] >= g[1]["projetos"] > 0
+    assert {p["cargo"] for p in g[0]["pessoas"]} == {"diretor_executivo", "pmo"}

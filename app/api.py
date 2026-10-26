@@ -155,7 +155,7 @@ class UsuarioIn(BaseModel):
     gerentes: list[str] | None = Field(default=None, max_length=30)
     projetos: list[str] | None = Field(default=None, max_length=100)
     gerencia: str | None = Field(default=None, max_length=100)
-    cargo: str | None = Field(default=None, pattern="^(gerente|coordenador|)$")
+    cargo: str | None = Field(default=None, pattern="^(gerente|coordenador|diretor_adjunto|diretor_executivo|pmo|)$")
 
 
 class UsuarioPatch(BaseModel):
@@ -165,7 +165,7 @@ class UsuarioPatch(BaseModel):
     projetos: list[str] | None = Field(default=None, max_length=100)
     ativo: bool | None = None
     gerencia: str | None = Field(default=None, max_length=100)
-    cargo: str | None = Field(default=None, pattern="^(gerente|coordenador|)$")
+    cargo: str | None = Field(default=None, pattern="^(gerente|coordenador|diretor_adjunto|diretor_executivo|pmo|)$")
 
 
 # ---------------------------------------------------------------- sessão
@@ -747,6 +747,8 @@ def criar_usuario(dados: UsuarioIn, u: dict = Depends(exige_admin)):
     gerentes = dados.gerentes if dados.gerentes is not None else ([dados.gerente] if dados.gerente else [])
     if dados.perfil == "gestor" and not (gerentes or dados.projetos):
         raise HTTPException(422, "Informe ao menos um gerente de projetos ou um projeto que este gestor acompanha.")
+    if not (dados.gerencia or "").strip() or not dados.cargo:
+        raise HTTPException(422, "Informe a gerência e o cargo do usuário.")
     temp = security.senha_temporaria()
     with tx() as c:
         if c.execute("SELECT 1 FROM users WHERE login=?", (dados.login,)).fetchone():
@@ -778,6 +780,10 @@ def editar_usuario(uid: int, dados: UsuarioPatch, u: dict = Depends(exige_admin)
             c.execute(f"UPDATE users SET {', '.join(k + '=?' for k in campos)} WHERE id=?", (*campos.values(), uid))
         _grava_acessos(c, uid, gerentes, projetos)
         perfil = campos.get("perfil", alvo["perfil"])
+        if any(k in campos for k in ("gerencia", "cargo", "perfil")):
+            novo = c.execute("SELECT gerencia, cargo FROM users WHERE id=?", (uid,)).fetchone()
+            if not novo["gerencia"] or not novo["cargo"]:
+                raise HTTPException(422, "Informe a gerência e o cargo do usuário.")
         if perfil == "gestor":
             tem = c.execute("SELECT (SELECT COUNT(*) FROM user_gerentes WHERE user_id=?) + "
                             "(SELECT COUNT(*) FROM user_projetos WHERE user_id=?)", (uid, uid)).fetchone()[0]
