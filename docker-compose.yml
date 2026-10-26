@@ -14,5 +14,11 @@ services:
       - traefik.http.routers.orcamento.entrypoints=websecure
       - traefik.http.routers.orcamento.tls.certresolver=letsencrypt
       - traefik.http.services.orcamento.loadbalancer.server.port=8000
+      # porta 80: redireciona http para https (entrypoint "web" do Traefik)
+      - traefik.http.routers.orcamento-http.rule=Host(`orcamento.lmguimaraes.com.br`)
+      - traefik.http.routers.orcamento-http.entrypoints=web
+      - traefik.http.routers.orcamento-http.middlewares=orcamento-https
+      - traefik.http.middlewares.orcamento-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.orcamento-https.redirectscheme.permanent=true
 volumes:
   orc_data:

@@ -37,6 +37,8 @@ async def protecoes(request: Request, call_next):
     resp = await call_next(request)
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("X-Frame-Options", "DENY")
+    if config.COOKIE_SECURE:
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
     if request.url.path.startswith("/api"):
         resp.headers["Cache-Control"] = "no-store"
