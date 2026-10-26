@@ -113,3 +113,10 @@ code{font-size:1.1rem;background:var(--ref);padding:2px 8px;border-radius:4px}
 .custos{display:flex;gap:4px;flex-wrap:wrap}.custos span{font-size:.7rem;background:var(--ref);border-radius:4px;padding:1px 6px;color:var(--cinza);white-space:nowrap}
 .mini{width:84px}
 @media (max-width:700px){main{padding:16px 12px}.topo{padding:0 12px}.topo nav button{padding:14px 10px 10px}}
+
+button.icone{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;margin:0 2px;border:1px solid var(--bd,#C6C6C6);border-radius:8px;background:#fff;color:var(--azul)}
+button.icone:hover:not(:disabled){background:var(--azul);color:#fff;border-color:var(--azul)}
+button.icone.perigo{color:#B42318}
+button.icone.perigo:hover:not(:disabled){background:#B42318;color:#fff;border-color:#B42318}
+button.icone:disabled{opacity:.35;cursor:not-allowed}
+button.icone:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}

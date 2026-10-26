@@ -16,6 +16,42 @@ function Celula({ valor, onSalvar, travada }) {
     onChange={(e) => setTxt(e.target.value)} onBlur={fim} onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setTxt(null); e.target.blur(); } }} />;
 }
 
+const Lapis = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
+const Lixeira = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></svg>;
+
+function EditarLinha({ l, contas, onSalvar, onFechar }) {
+  const trava = l.fonte === "viagens";
+  const [f, setF] = useState({ edt: l.edt, tarefa: l.tarefa, conta_codigo: l.conta_codigo, obs: l.obs || "" });
+  const [meses, setMeses] = useState(l.meses.map((v) => (v ? String(v).replace(".", ",") : "")));
+  const [erro, setErro] = useState("");
+  const total = meses.reduce((a, v) => a + (lerNumero(v) || 0), 0);
+  const salvar = async (e) => {
+    e.preventDefault();
+    const nums = meses.map(lerNumero);
+    if (nums.some((n) => Number.isNaN(n) || n < 0)) return setErro("Use apenas valores positivos nos meses.");
+    try { await onSalvar(trava ? { obs: f.obs } : { ...f, meses: nums.map((n) => Math.round(n * 100) / 100) }); onFechar(); } catch (x) { setErro(x.message); }
+  };
+  return (
+    <form className="cartao" onSubmit={salvar}>
+      <h3>Editar linha: {l.tarefa} | {l.conta_desc}</h3>
+      {trava && <div className="nota aviso">Esta linha vem do plano de viagens. Só a observação pode ser alterada aqui; os valores mudam na aba Viagens.</div>}
+      <div className="grade">
+        <label>Meta/EDT<input value={f.edt} disabled={trava} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
+        <label>Ação/Tarefa<input value={f.tarefa} disabled={trava} onChange={(e) => setF({ ...f, tarefa: e.target.value })} required /></label>
+        <label>Conta contábil<select value={f.conta_codigo} disabled={trava} onChange={(e) => setF({ ...f, conta_codigo: e.target.value })}>
+          {contas.map((c) => <option key={c.codigo} value={c.codigo}>{c.grupo} | {c.descricao}</option>)}</select></label>
+        <label>Observação<input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
+      </div>
+      <div className="grade" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+        {MESES.map((m, i) => <label key={m}>{m}<input value={meses[i]} disabled={trava} inputMode="decimal" onChange={(e) => setMeses(meses.map((v, k) => (k === i ? e.target.value : v)))} /></label>)}
+      </div>
+      <p><strong>Total 2027: {fmt(total)}</strong> {l.ref && <span className="mudo">(aprovado em 2026: {fmt(l.ref.total)})</span>}</p>
+      {erro && <p className="erro" role="alert">{erro}</p>}
+      <div className="acoes"><button className="primario">Salvar alterações</button><button type="button" onClick={onFechar}>Cancelar</button></div>
+    </form>
+  );
+}
+
 function NovaLinha({ contas, onCriar, onFechar }) {
   const [f, setF] = useState({ edt: "", tarefa: "", conta: "", total: "" });
   const [erro, setErro] = useState("");
@@ -104,6 +140,7 @@ const FILTROS = [["todas", "Todas"], ["ajustes", "Ajustadas e novas"], ["mantida
 
 function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   const [nova, setNova] = useState(false);
+  const [editando, setEditando] = useState(null);
   const [filtro, setFiltro] = useState("todas");
   const t = d.totais;
   const trocar = async (l, corpo) => {
@@ -129,13 +166,13 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
       </div>
       {t.alertas > 0 && <div className="nota aviso"><strong>{t.alertas} linha(s) pedem atenção.</strong> Em 2026 o executado ficou acima do aprovado ou abaixo de metade dele. Use o filtro "Com alerta" para revisar.</div>}
       {t.removidas > 0 && <div className="nota aviso">{t.removidas} linha(s) de 2026 não existem mais no plano de 2027 (veja no passo 1, situação "removida").</div>}
-      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Edite os meses direto na tabela e tecle Enter. Cada alteração fica registrada com o seu usuário. Linhas do plano de viagens são alteradas na aba <button className="link" onClick={irViagens}>Viagens</button>.</p>
+      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Edite os meses direto na tabela e tecle Enter, ou use o ícone de lápis para editar a linha inteira e a lixeira para excluí-la. Cada alteração fica registrada com o seu usuário. Linhas do plano de viagens são alteradas na aba <button className="link" onClick={irViagens}>Viagens</button>.</p>
       <div className="filtros">{FILTROS.map(([k, n]) => (
         <button key={k} className={filtro === k ? "on" : ""} onClick={() => setFiltro(k)}>
           {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
       <div className="rolagem">
         <table className="tab grid">
-          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th><th /></tr></thead>
+          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th><th>Ações</th></tr></thead>
           <tbody>
             {grupos.length === 0 && <tr><td colSpan={16} className="mudo">Nenhuma linha neste filtro.</td></tr>}
             {grupos.map(([k, ls]) => (
@@ -156,8 +193,9 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                       <td className="n"><strong>{fmtN(l.total)}</strong></td>
                       <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">+{fmtN(l.total)}</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="icone" title="Editar esta linha" aria-label="Editar linha" onClick={() => { setNova(false); setEditando(l); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }}><Lapis /></button>
+                        <button className="icone perigo" title={l.fonte === "viagens" ? "Linha do plano de viagens: altere o plano na aba Viagens" : "Excluir esta linha do orçamento de 2027"} aria-label="Excluir linha" disabled={l.fonte === "viagens"} onClick={() => excluir(l)}><Lixeira /></button>
                         {l.status === "ajustada" && <button className="link" title="Voltar aos valores aprovados em 2026" onClick={() => trocar(l, { meses: l.ref.meses })}>desfazer</button>}
-                        {l.fonte !== "viagens" && <button className="link" title="Excluir esta linha do orçamento de 2027" onClick={() => excluir(l)}>excluir</button>}
                       </td>
                     </tr>
                     {l.ref && (
@@ -169,6 +207,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
           <tfoot><tr><td>Total do plano 2027</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(d.linhas.reduce((a, l) => a + l.meses[i], 0))}</td>)}<td className="n">{fmtN(t.plano)}</td><td className="n"><Delta de={t.base} para={t.plano} /></td><td /></tr></tfoot>
         </table>
       </div>
+      {editando && <EditarLinha key={editando.id} l={editando} contas={contas} onFechar={() => setEditando(null)} onSalvar={async (b) => { await api(`/linhas/${editando.id}`, { method: "PUT", body: b }); recarregar(); }} />}
       {nova ? <NovaLinha contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${d.projeto.orcamento}/linhas`, { method: "POST", body: b }); recarregar(); }} />
             : <button className="primario" onClick={() => setNova(true)}>+ Nova linha</button>}
     </>
