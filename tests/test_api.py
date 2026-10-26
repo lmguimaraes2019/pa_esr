@@ -420,5 +420,5 @@ def test_gerencia_e_cargo_obrigatorios_e_niveis(client):
         assert r.status_code == 201, r.text
     g = client.get("/api/planejamento").json()["gerencias"]
     assert [x["nivel"] for x in g[:2]] == ["dss", "diretoria"]
-    assert g[0]["projetos"] >= g[1]["projetos"] > 0
+    assert g[0]["projetos"] == g[1]["projetos"] > 0 and g[0]["plano"] == g[1]["plano"]      # DSS repete a Diretoria Adjunta
     assert {p["cargo"] for p in g[0]["pessoas"]} == {"diretor_executivo", "pmo"}

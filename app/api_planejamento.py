@@ -147,11 +147,10 @@ def _nivel(gerencia: str) -> str:
 
 def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
     """Acompanhamento do admin, em níveis: DSS, Diretoria Adjunta e gerências.
-    DSS soma todos os projetos; a Diretoria Adjunta, os projetos de Leandro e Célia; cada gerência, os projetos
+    DSS e Diretoria Adjunta somam todos os projetos da ESR (a DSS repete a Diretoria Adjunta); abaixo da Diretoria
+    ficam Leandro e Célia, só com os projetos cadastrados em nome de cada um; cada gerência, os projetos
     que seus gestores acompanham (cada projeto uma vez, ainda que gerente e coordenador o acompanhem)."""
     todos_ids = [r[0] for r in c.execute("SELECT orcamento FROM projetos")]
-    dir_ids = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos")
-               if any(_sem_acento(r["gerente"]).startswith(k) for k in DIRETORIA)]
     grupos: dict[str, list[dict]] = {GER_DSS: [], GER_DIR: []}
     for r in c.execute("SELECT * FROM users WHERE ativo=1 ORDER BY nome").fetchall():
         nome = (r["gerencia"] or "").strip()
@@ -161,7 +160,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
     ordem = sorted(grupos.items(), key=lambda kv: ({GER_DSS: 0, GER_DIR: 1}.get(kv[0], 3 if kv[0] == "" else 2), kv[0].lower()))
     for nome, membros in ordem:
         nv = _nivel(nome) if nome else "gerencia"
-        if nv != "gerencia" and not membros and nv != "dss" and not dir_ids:
+        if nv == "diretoria" and not membros and not todos_ids:
             continue
         ids: set[str] = set()
         pessoas, pend, todos_concluidos, conc_em = [], 0, True, None
@@ -184,10 +183,8 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
                 base.update(projetos=len(su["projetos"]), plano=su["etapas"]["despesas"]["plano"], pendencias=su["pendencias"])
             pessoas.append(base)
         pessoas.sort(key=lambda p: (ORDEM_CARGO.get(p["cargo"], 9), p["nome"].lower()))
-        if nv == "dss":
+        if nv in ("dss", "diretoria"):      # a DSS repete a Diretoria Adjunta: ambas somam todos os projetos da ESR
             a = _agrega(c, todos_ids)
-        elif nv == "diretoria":
-            a = _agrega(c, dir_ids)
         else:
             a = _agrega(c, ids)
             a["pendencias"] = pend
