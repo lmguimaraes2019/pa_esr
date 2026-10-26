@@ -332,5 +332,6 @@ def test_receita_intercompany(client):
     o = client.put(f"/api/receitas/{d['id']}", json={"ano": 2028}).json()
     assert o["conta_em_2027"] is False
     assert client.get("/api/receitas").json()["totais"]["receita"] == base
+    assert client.put(f"/api/receitas/{d['id']}", json={"ano": 2019}).status_code == 422
     assert client.put(f"/api/receitas/{d['id']}", json={"ano": 2027, "valor": 600}).json()["total"] == 600
     assert client.delete(f"/api/receitas/{d['id']}").status_code == 200

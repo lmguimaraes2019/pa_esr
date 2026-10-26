@@ -4,7 +4,6 @@ import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira } from "./ui.jsx
 
 const FONTES_SUGERIDAS = ["Contrato de gestão", "Parcerias", "Growth", "Fomento", "Turmas abertas", "Projetos especiais", "Outras receitas"];
 const vazio = { id: null, tipo: "receita", orcamento: "", fonte: "", descricao: "", obs: "", meses: Array(12).fill(""), ano: 2027, cliente: "", origem_cliente: "", gestor_cliente: "" };
-const ANOS = [2026, 2027, 2028, 2029, 2030];
 
 function Formulario({ inicial, dados, onSalvar, onFechar }) {
   const [f, setF] = useState({ ...inicial, meses: inicial.meses.map((v) => (v ? String(v).replace(".", ",") : "")), valor: inicial.id && inicial.total ? String(inicial.total).replace(".", ",") : "" });
@@ -24,6 +23,8 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
     if (inter) {
       const v = lerNumero(f.valor);
       if (Number.isNaN(v) || v <= 0) return setErro("Informe o valor da transferência.");
+      const ano = Number(f.ano);
+      if (!Number.isInteger(ano) || ano < 2020 || ano > 2100) return setErro("Informe um ano válido, a partir de 2020.");
       const corpo = { orcamento: f.orcamento, ano: Number(f.ano), cliente: f.cliente, origem_cliente: f.origem_cliente, gestor_cliente: f.gestor_cliente, obs: f.obs, descricao: f.descricao };
       try { await onSalvar(f.id ? { ...corpo, valor: v } : { ...corpo, tipo: "intercompany", valor: v }); onFechar(); } catch (x) { setErro(x.message); }
       return;
@@ -41,16 +42,16 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       {inter ? (
         <>
           <p className="mudo">Recurso que o projeto recebe de outro projeto da casa. O valor anual é dividido em 12 parcelas iguais, que podem ser ajustadas mês a mês na tabela.</p>
-          <div className="grade">
+          <div className="grade" style={{ alignItems: "end" }}>
             <label><span>Projeto que recebe <span className="obrig">*</span></span><select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
               <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
-            <label><span>Ano <span className="obrig">*</span></span><select value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })}>{ANOS.map((a) => <option key={a}>{a}</option>)}</select></label>
+            <label><span>Ano <span className="obrig">*</span></span><input type="number" min="2020" max="2100" step="1" value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })} required /></label>
             <label><span>Projeto cliente <span className="obrig">*</span></span><input value={f.cliente} onChange={(e) => setF({ ...f, cliente: e.target.value })} placeholder="ex.: nome do projeto que paga a transferência" required /></label>
             <label><span>Origem de recursos <span className="obrig">*</span></span><select value={f.origem_cliente} onChange={(e) => setF({ ...f, origem_cliente: e.target.value })} required>
               <option value="">Selecione…</option>{dados.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
-            <label><span>Gestor do projeto cliente <span className="obrig">*</span></span><input list="gestores-ic" value={f.gestor_cliente} onChange={(e) => setF({ ...f, gestor_cliente: e.target.value })} required /></label>
+            <label><span>Gestor do cliente <span className="obrig">*</span></span><input list="gestores-ic" value={f.gestor_cliente} onChange={(e) => setF({ ...f, gestor_cliente: e.target.value })} required /></label>
             <datalist id="gestores-ic">{dados.gerentes.map((g) => <option key={g} value={g} />)}</datalist>
-            <label><span>Valor da transferência (R$) <span className="obrig">*</span></span><input value={f.valor} inputMode="decimal" onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="ex.: 250.000,00" required /></label>
+            <label><span>Valor (R$) <span className="obrig">*</span></span><input value={f.valor} inputMode="decimal" onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="ex.: 250.000,00" required /></label>
             <label>Observação<input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
           </div>
           {Number(f.ano) !== 2027 && <p className="nota aviso">Transferências de {f.ano} ficam registradas, mas só as de 2027 entram nos totais do plano 2027.</p>}

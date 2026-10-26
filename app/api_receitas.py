@@ -41,7 +41,7 @@ class ReceitaIn(BaseModel):
     meses: list[float] | None = None
     obs: str = Field(default="", max_length=1000)
     tipo: str = Field(default="receita", pattern="^(receita|intercompany)$")
-    ano: int = Field(default=2027, ge=2026, le=2035)
+    ano: int = Field(default=2027, ge=2020, le=2100)
     cliente: str = Field(default="", max_length=120)          # projeto cliente (campo aberto)
     origem_cliente: str = Field(default="", max_length=80)
     gestor_cliente: str = Field(default="", max_length=80)
@@ -59,7 +59,7 @@ class ReceitaPatch(BaseModel):
     descricao: str | None = Field(default=None, max_length=200)
     meses: list[float] | None = None
     obs: str | None = Field(default=None, max_length=1000)
-    ano: int | None = Field(default=None, ge=2026, le=2035)
+    ano: int | None = Field(default=None, ge=2020, le=2100)
     cliente: str | None = Field(default=None, max_length=120)
     origem_cliente: str | None = Field(default=None, max_length=80)
     gestor_cliente: str | None = Field(default=None, max_length=80)
