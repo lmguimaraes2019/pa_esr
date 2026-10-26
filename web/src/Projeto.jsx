@@ -1,23 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
-import { Kpi, Delta, pct, Passos, Selo } from "./ui.jsx";
-
-function Celula({ valor, onSalvar, travada }) {
-  const [txt, setTxt] = useState(null);
-  if (travada) return <span className="n" style={{ padding: "5px 6px", display: "block", width: 92 }}>{valor ? fmtN(valor) : ""}</span>;
-  const mostra = txt ?? (valor ? fmtN(valor) : "");
-  const fim = () => {
-    if (txt === null) return;
-    const n = lerNumero(txt);
-    setTxt(null);
-    if (!Number.isNaN(n) && Math.abs(n - valor) > 0.004) onSalvar(Math.max(0, Math.round(n * 100) / 100));
-  };
-  return <input className="cel" inputMode="decimal" value={mostra} onFocus={(e) => { setTxt(valor ? String(valor).replace(".", ",") : ""); e.target.select(); }}
-    onChange={(e) => setTxt(e.target.value)} onBlur={fim} onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setTxt(null); e.target.blur(); } }} />;
-}
-
-const Lapis = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
-const Lixeira = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></svg>;
+import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer } from "./ui.jsx";
 
 function EditarLinha({ l, contas, onSalvar, onFechar }) {
   const trava = l.fonte === "viagens";
@@ -32,7 +15,7 @@ function EditarLinha({ l, contas, onSalvar, onFechar }) {
     try { await onSalvar(trava ? { obs: f.obs } : { ...f, meses: nums.map((n) => Math.round(n * 100) / 100) }); onFechar(); } catch (x) { setErro(x.message); }
   };
   return (
-    <form className="cartao" onSubmit={salvar}>
+    <form className="cartao" id="form-linha" onSubmit={salvar}>
       <h3>Editar linha: {l.tarefa} | {l.conta_desc}</h3>
       {trava && <div className="nota aviso">Esta linha vem do plano de viagens. Só a observação pode ser alterada aqui; os valores mudam na aba Viagens.</div>}
       <div className="grade">
@@ -65,7 +48,7 @@ function NovaLinha({ contas, onCriar, onFechar }) {
     try { await onCriar({ edt: f.edt, tarefa: f.tarefa, conta_codigo: f.conta, meses }); onFechar(); } catch (x) { setErro(x.message); }
   };
   return (
-    <form className="cartao" onSubmit={salvar}>
+    <form className="cartao" id="form-nova" onSubmit={salvar}>
       <h3>Nova linha no plano 2027</h3>
       <div className="grade">
         <label>Meta/EDT<input value={f.edt} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
@@ -166,27 +149,33 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
       </div>
       {t.alertas > 0 && <div className="nota aviso"><strong>{t.alertas} linha(s) pedem atenção.</strong> Em 2026 o executado ficou acima do aprovado ou abaixo de metade dele. Use o filtro "Com alerta" para revisar.</div>}
       {t.removidas > 0 && <div className="nota aviso">{t.removidas} linha(s) de 2026 não existem mais no plano de 2027 (veja no passo 1, situação "removida").</div>}
-      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Edite os meses direto na tabela e tecle Enter, ou use o ícone de lápis para editar a linha inteira e a lixeira para excluí-la. Cada alteração fica registrada com o seu usuário. Linhas do plano de viagens são alteradas na aba <button className="link" onClick={irViagens}>Viagens</button>.</p>
+      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Cada alteração fica registrada com o seu usuário. Linhas do plano de viagens são alteradas na aba <button className="link" onClick={irViagens}>Viagens</button>.</p>
+      <div className="barra-ferramentas">
       <div className="filtros">{FILTROS.map(([k, n]) => (
         <button key={k} className={filtro === k ? "on" : ""} onClick={() => setFiltro(k)}>
           {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
+        <button className="destaque" onClick={() => { setEditando(null); setNova(true); setTimeout(() => document.getElementById("form-nova")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>+ Nova linha</button>
+      </div>
+      <p className="legenda-icones"><span><Lapis /> editar a linha inteira</span><span className="perigo"><Lixeira /> excluir de 2027</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
       <div className="rolagem">
         <table className="tab grid">
-          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th><th /></tr></thead>
+          <thead><tr><th className="col-acoes">Ações</th><th className="col-conta">Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th></tr></thead>
           <tbody>
             {grupos.length === 0 && <tr><td colSpan={16} className="mudo">Nenhuma linha neste filtro.</td></tr>}
             {grupos.map(([k, ls]) => (
               <React.Fragment key={k}>
-                <tr className="grupo"><td colSpan={16}>{k}</td></tr>
+                <tr className="grupo"><td className="col-acoes" /><td className="col-conta" colSpan={15}>{k}</td></tr>
                 {ls.map((l) => (
                   <React.Fragment key={l.id}>
                     <tr className={l.status}>
-                      <td title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
-                        <div className="acoes-linha">
-                        <button className="icone" title="Editar esta linha" aria-label="Editar linha" onClick={() => { setNova(false); setEditando(l); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }}><Lapis /></button>
-                        <button className="icone perigo" title={l.fonte === "viagens" ? "Linha do plano de viagens: altere o plano na aba Viagens" : "Excluir esta linha do orçamento de 2027"} aria-label="Excluir linha" disabled={l.fonte === "viagens"} onClick={() => excluir(l)}><Lixeira /></button>
-                        {l.status === "ajustada" && <button className="link" title="Voltar aos valores aprovados em 2026" onClick={() => trocar(l, { meses: l.ref.meses })}>desfazer</button>}
-                      </div>
+                      <td className="col-acoes">
+                        <div className="barra-icones">
+                          <BotaoIcone icone={<Lapis />} dica="Editar a linha inteira" onClick={() => { setNova(false); setEditando(l); setTimeout(() => document.getElementById("form-linha")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
+                          <BotaoIcone icone={<Lixeira />} tom="perigo" desligado={l.fonte === "viagens"} dica={l.fonte === "viagens" ? "Linha do plano de viagens: altere o plano na aba Viagens" : "Excluir esta linha de 2027"} onClick={() => excluir(l)} />
+                          <BotaoIcone icone={<Desfazer />} desligado={l.status !== "ajustada"} dica={l.status === "ajustada" ? "Voltar aos valores aprovados em 2026" : "Sem alterações para desfazer"} onClick={() => trocar(l, { meses: l.ref.meses })} />
+                        </div>
+                      </td>
+                      <td className="col-conta" title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
                         <span className="mudo">{l.grupo}</span>
                         {l.status === "ajustada" && <span className="tag ajustada">ajustada</span>}
                         {l.status === "nova" && <span className="tag nova">nova</span>}
@@ -200,17 +189,17 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                       <td />
                     </tr>
                     {l.ref && (
-                      <tr className="ref"><td>2026 aprovado · executado {fmt(l.executado)}</td>
-                        {l.ref.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}<td className="n">{fmtN(l.ref.total)}</td><td /><td /></tr>)}
+                      <tr className="ref"><td className="col-acoes" /><td className="col-conta">2026 aprovado · executado {fmt(l.executado)}</td>
+                        {l.ref.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}<td className="n">{fmtN(l.ref.total)}</td><td /></tr>)}
                   </React.Fragment>))}
               </React.Fragment>))}
           </tbody>
-          <tfoot><tr><td>Total do plano 2027</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(d.linhas.reduce((a, l) => a + l.meses[i], 0))}</td>)}<td className="n">{fmtN(t.plano)}</td><td className="n"><Delta de={t.base} para={t.plano} /></td><td /></tr></tfoot>
+          <tfoot><tr><td className="col-acoes" /><td className="col-conta">Total do plano 2027</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(d.linhas.reduce((a, l) => a + l.meses[i], 0))}</td>)}<td className="n">{fmtN(t.plano)}</td><td className="n"><Delta de={t.base} para={t.plano} /></td></tr></tfoot>
         </table>
       </div>
       {editando && <EditarLinha key={editando.id} l={editando} contas={contas} onFechar={() => setEditando(null)} onSalvar={async (b) => { await api(`/linhas/${editando.id}`, { method: "PUT", body: b }); recarregar(); }} />}
       {nova ? <NovaLinha contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${d.projeto.orcamento}/linhas`, { method: "POST", body: b }); recarregar(); }} />
-            : <button className="primario" onClick={() => setNova(true)}>+ Nova linha</button>}
+            : null}
     </>
   );
 }

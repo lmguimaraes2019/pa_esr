@@ -67,6 +67,22 @@ CREATE TABLE IF NOT EXISTS linhas (
 );
 CREATE INDEX IF NOT EXISTS idx_linhas_ciclo_orc ON linhas (ciclo, orcamento);
 
+CREATE TABLE IF NOT EXISTS receitas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ciclo INTEGER NOT NULL,
+    orcamento TEXT NOT NULL REFERENCES projetos(orcamento),
+    fonte TEXT NOT NULL,
+    descricao TEXT NOT NULL DEFAULT '',
+    {_COLS_MESES},
+    base_id INTEGER,
+    obs TEXT NOT NULL DEFAULT '',
+    atualizado_por TEXT NOT NULL DEFAULT '',
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_receitas_ciclo_orc ON receitas (ciclo, orcamento);
+
+CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
+
 CREATE TABLE IF NOT EXISTS execucao (
     orcamento TEXT NOT NULL,
     edt TEXT NOT NULL,
@@ -176,9 +192,30 @@ def init_db() -> None:
         cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}
         if "fonte" not in cols:      # migração: origem da linha ('manual' ou 'viagens')
             c.execute("ALTER TABLE linhas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'manual'")
+        semear_receitas(c)
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))
+
+
+def semear_receitas(c: sqlite3.Connection) -> bool:
+    """Previsão de receita 2026 do Growth (R$ 500 mil por mês, aba 'Previsão Receita 2026' do consolidado) e a cópia de 2027.
+    Roda uma única vez, quando o projeto existe."""
+    if c.execute("SELECT 1 FROM meta WHERE chave='receitas_semeadas'").fetchone():
+        return False
+    p = c.execute("SELECT orcamento FROM projetos WHERE descricao LIKE '%ASSOCIACAO-GROWTH%' ORDER BY orcamento LIMIT 1").fetchone()
+    if not p:
+        return False
+    cols = ", ".join(MESES)
+    marks = ", ".join("?" for _ in MESES)
+    base = c.execute(
+        f"INSERT INTO receitas (ciclo, orcamento, fonte, descricao, {cols}, atualizado_por) VALUES (2026,?,?,?,{marks},?)",
+        (p[0], "Growth", "Previsão de receita 2026", *[500000.0] * 12, "carga inicial")).lastrowid
+    c.execute(
+        f"INSERT INTO receitas (ciclo, orcamento, fonte, descricao, {cols}, base_id, atualizado_por) VALUES (2027,?,?,?,{marks},?,?)",
+        (p[0], "Growth", "Previsão de receita 2026", *[500000.0] * 12, base, "carga inicial"))
+    c.execute("INSERT INTO meta (chave, valor) VALUES ('receitas_semeadas', '1')")
+    return True
 
 
 def audit(c: sqlite3.Connection, usuario: str, acao: str, orcamento: str | None = None,

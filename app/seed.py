@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from . import config, importers
-from .db import MESES, init_db, tx, audit
+from .db import MESES, init_db, semear_receitas, tx, audit
 from .security import hash_password, senha_temporaria
 
 
@@ -36,7 +36,7 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
         if c.execute("SELECT COUNT(*) FROM projetos").fetchone()[0]:
             if not reset:
                 raise SystemExit("O banco já tem dados. Use --reset para recarregar (apaga linhas e usuários).")
-            for t in ("auditoria", "user_gerentes", "user_projetos", "linhas", "execucao", "projetos", "contas", "users"):
+            for t in ("auditoria", "receitas", "meta", "user_gerentes", "user_projetos", "linhas", "execucao", "projetos", "contas", "users"):
                 c.execute(f"DELETE FROM {t}")
 
         c.executemany("INSERT INTO contas (codigo, descricao, grupo) VALUES (?,?,?)", contas)
@@ -74,6 +74,7 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
                       (login, gerente, hash_password(senha), "gestor", gerente))
             c.execute("INSERT INTO user_gerentes (user_id, gerente) SELECT id, gerente FROM users WHERE login=?", (login,))
             credenciais.append((login, senha, "gestor"))
+        semear_receitas(c)
         audit(c, "carga inicial", "seed", detalhe=f"{len(projetos)} projetos, {len(base)} linhas base")
 
     arq = config.DATA_DIR / "senhas_iniciais.txt"

@@ -166,3 +166,19 @@ def test_restaurar_linha_e_importar_execucao(client):
     assert r2.status_code == 200
     assert r2.json()["realizado_depois"] == r.json()["realizado_depois"] == r.json()["realizado_antes"]
     assert client.post("/api/execucao/importar", files={"arquivo": ("x.xlsx", b"nao e excel")}).status_code == 422
+
+
+def test_receitas(client):
+    entrar(client)
+    r = client.get("/api/receitas").json()
+    assert r["totais"]["receita_2026"] == 6000000 and r["linhas"][0]["fonte"] == "Growth"
+    orc = r["projetos"][0]["orcamento"]
+    c = client.post("/api/receitas", json={"orcamento": orc, "fonte": "Parcerias", "meses": [1000] * 12})
+    assert c.status_code == 201 and c.json()["total"] == 12000
+    rid = c.json()["id"]
+    assert client.put(f"/api/receitas/{rid}", json={"meses": [2000] + [0] * 11}).json()["total"] == 2000
+    assert client.post("/api/receitas", json={"orcamento": orc, "fonte": "X", "meses": [1] * 11}).status_code == 422
+    assert client.post("/api/receitas", json={"orcamento": "9999", "fonte": "X", "meses": [1] * 12}).status_code == 404
+    t = client.get("/api/receitas").json()["totais"]
+    assert t["receita"] == 6000000 + 2000
+    assert client.delete(f"/api/receitas/{rid}").status_code == 200
