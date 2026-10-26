@@ -129,6 +129,37 @@ function Passado({ d, irPlano, recarregar, setErro }) {
 /* ---------------------------------------------------------------- passo 2: o que muda em 2027 */
 const FILTROS = [["todas", "Todas"], ["ajustes", "Ajustadas e novas"], ["mantida", "Mantidas de 2026"], ["viagens", "Do plano de viagens"], ["alerta", "Com alerta"]];
 
+function DadosOrcamento({ d, admin, recarregar, setErro }) {
+  const p = d.projeto;
+  const [listas, setListas] = useState(null);
+  const [origem, setOrigem] = useState(p.origem);
+  const [nome, setNome] = useState(p.descricao);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { api("/listas").then(setListas).catch(() => {}); }, []);
+  useEffect(() => { setOrigem(p.origem); setNome(p.descricao); }, [p.origem, p.descricao]);
+  if (!listas) return null;
+  const pode = admin || p.novo;
+  const salvar = async (corpo, texto) => {
+    try { setErro(""); setMsg(""); await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: corpo }); setMsg(texto); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  return (
+    <section className="cartao dados-orc">
+      <h3>Dados do orçamento</h3>
+      <div className="grade">
+        <label>Origem de recursos
+          <select value={origem} onChange={(e) => setOrigem(e.target.value)}>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+        {pode && <label>Nome do orçamento<input value={nome} onChange={(e) => setNome(e.target.value)} /></label>}
+      </div>
+      <div className="acoes">
+        <button className="primario" disabled={origem === p.origem} onClick={() => salvar({ origem }, `Origem alterada para ${origem}.`)}>Salvar origem</button>
+        {pode && <button disabled={nome.trim() === p.descricao || nome.trim().length < 3} onClick={() => salvar({ descricao: nome }, "Nome atualizado.")}>Salvar nome</button>}
+        {msg && <span className="ok">{msg}</span>}
+      </div>
+      <p className="mudo">A origem define em qual coluna do Template do PMO e em qual grupo do resumo este orçamento aparece. A mudança vale para todas as linhas do orçamento e fica registrada no histórico.</p>
+    </section>
+  );
+}
+
 function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   const [nova, setNova] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -155,6 +186,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   const s = t.status;
   return (
     <>
+      <DadosOrcamento d={d} admin={admin} recarregar={recarregar} setErro={setErro} />
       <div className="kpis">
         <Kpi rotulo="Plano 2027" valor={fmt(t.plano)} tom="f27" />
         <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
@@ -236,7 +268,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens }) {
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">Orçamento {p.orcamento} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p></div>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p></div>
         {admin && !p.n_projeto && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
       </div>
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Entender 2026"], ["plano", "Planejar 2027"]]} />

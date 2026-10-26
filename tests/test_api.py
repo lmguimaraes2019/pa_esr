@@ -195,3 +195,24 @@ def test_excluir_e_restaurar_grupo(client):
     assert client.delete(f"/api/projetos/{p}/linhas", params={"edt": l["edt"]}).status_code == 404
     assert client.post(f"/api/projetos/{p}/linhas/restaurar", params={"edt": l["edt"]}).json()["linhas"] == n
     assert client.post(f"/api/projetos/{p}/linhas/restaurar", params={"edt": l["edt"]}).json()["linhas"] == 0
+
+
+def test_orcamento_novo_e_mudanca_de_origem(client):
+    entrar(client)
+    L = client.get("/api/listas").json()
+    assert "Associacao" in L["origens"] and L["gerentes"]
+    r = client.post("/api/projetos", json={"descricao": "Projeto de teste novo", "origem": "Associacao", "gerente": L["gerentes"][0]})
+    assert r.status_code == 201
+    o = r.json()["orcamento"]
+    assert o.startswith("N27-")
+    assert client.post("/api/projetos", json={"descricao": "Outro", "origem": "Inexistente", "gerente": L["gerentes"][0]}).status_code == 422
+    lista = {p["orcamento"]: p for p in client.get("/api/projetos").json()}
+    assert lista[o]["novo"] is True and lista[o]["total_2027"] == 0
+    d = client.get(f"/api/projetos/{o}").json()
+    assert d["projeto"]["novo"] is True and d["linhas"] == []
+    assert client.post(f"/api/projetos/{o}/linhas", json={"edt": "01", "tarefa": "Teste", "conta_codigo": client.get("/api/contas").json()[0]["codigo"], "meses": [10] * 12}).status_code == 201
+    assert client.patch(f"/api/projetos/{o}", json={"origem": "Fomento"}).status_code == 200
+    assert client.get(f"/api/projetos/{o}").json()["projeto"]["origem"] == "Fomento"
+    assert client.patch(f"/api/projetos/{o}", json={"origem": "Xis"}).status_code == 422
+    seg = client.get("/api/export/preflight").json()
+    assert seg["bloqueado"] and any(o in (a["orcamento"] or "") for a in seg["avisos"])

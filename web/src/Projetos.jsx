@@ -2,18 +2,46 @@ import React, { useEffect, useState } from "react";
 import { api, fmt } from "./api.js";
 import { Delta, pct, Selo } from "./ui.jsx";
 
+function NovoOrcamento({ listas, onCriar, onFechar }) {
+  const [f, setF] = useState({ descricao: "", origem: "", gerente: "" });
+  const [erro, setErro] = useState("");
+  const salvar = async (e) => {
+    e.preventDefault(); setErro("");
+    try { await onCriar(f); } catch (x) { setErro(x.message); }
+  };
+  return (
+    <form className="cartao" onSubmit={salvar}>
+      <h3>Novo orçamento 2027</h3>
+      <p className="mudo">Não precisa de número agora: o orçamento nasce marcado como <span className="tag ok">novo</span>. O Nº do Projeto, exigido na exportação ao PMO, pode ser informado depois pelo administrador.</p>
+      <div className="grade">
+        <label>Nome do orçamento<input value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} required minLength={3} placeholder="ex.: DSS-ESR-ASSOCIACAO-NOVO PROGRAMA" /></label>
+        <label>Origem de recursos<select value={f.origem} onChange={(e) => setF({ ...f, origem: e.target.value })} required>
+          <option value="">Selecione…</option>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+        <label>Gerente do projeto<select value={f.gerente} onChange={(e) => setF({ ...f, gerente: e.target.value })} required>
+          <option value="">Selecione…</option>{listas.gerentes.map((g) => <option key={g}>{g}</option>)}</select></label>
+      </div>
+      {erro && <p className="erro" role="alert">{erro}</p>}
+      <div className="acoes"><button className="primario">Criar orçamento</button><button type="button" onClick={onFechar}>Cancelar</button></div>
+    </form>
+  );
+}
+
 export default function Projetos({ abrir }) {
   const [ps, setPs] = useState(null);
   const [erro, setErro] = useState("");
-  useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); }, []);
+  const [novo, setNovo] = useState(false);
+  const [listas, setListas] = useState(null);
+  useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!ps) return <p>Carregando…</p>;
-  if (!ps.length) return <p className="mudo">Nenhum projeto associado ao seu usuário.</p>;
   const soma = (k) => ps.reduce((a, p) => a + p[k], 0);
   return (
     <>
-      <h2>Orçamento 2027 por projeto</h2>
-      <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027.</p>
+      <div className="cab"><div><h2>Orçamento 2027 por projeto</h2>
+        <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027.</p></div>
+        {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
+      {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}
+      {!ps.length && <p className="mudo">Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima.</p>}
       <table className="tab clic">
         <thead>
           <tr className="grupos"><th colSpan={4} style={{ background: "#fff" }} /><th colSpan={3} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th></tr>
@@ -21,7 +49,7 @@ export default function Projetos({ abrir }) {
         </thead>
         <tbody>{ps.map((p) => (
           <tr key={p.orcamento} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
-            <td>{p.orcamento}</td>
+            <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
             <td>{p.descricao} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
             <td>{p.origem}</td><td>{p.gerente}</td>
             <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.realizado_2026 + p.empenhado_2026)}</td><td className="n">{pct(p.realizado_2026 + p.empenhado_2026, p.total_2026)}</td>
