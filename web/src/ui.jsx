@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fmt, fmtN, lerNumero } from "./api.js";
+import { fmt, fmtN, fmtI, lerNumero } from "./api.js";
 
 export function Kpi({ rotulo, valor, sub, tom }) {
   return <div className={"kpi " + (tom || "")}><span>{rotulo}</span><strong>{valor}</strong>{sub && <small>{sub}</small>}</div>;
@@ -30,8 +30,8 @@ export function Selo({ ano }) {
 
 export function Celula({ valor, onSalvar, travada }) {
   const [txt, setTxt] = useState(null);
-  if (travada) return <span className="n" style={{ padding: "5px 6px", display: "block", width: 106 }}>{valor ? fmtN(valor) : ""}</span>;
-  const mostra = txt ?? (valor ? fmtN(valor) : "");
+  if (travada) return <span className="n cel-fixa" title={valor ? fmtN(valor) : ""}>{fmtI(valor)}</span>;
+  const mostra = txt ?? fmtI(valor);
   const fim = () => {
     if (txt === null) return;
     const n = lerNumero(txt);
@@ -39,7 +39,17 @@ export function Celula({ valor, onSalvar, travada }) {
     if (!Number.isNaN(n) && Math.abs(n - valor) > 0.004) onSalvar(Math.max(0, Math.round(n * 100) / 100));
   };
   return <input className="cel" inputMode="decimal" value={mostra} onFocus={(e) => { setTxt(valor ? String(valor).replace(".", ",") : ""); e.target.select(); }}
-    onChange={(e) => setTxt(e.target.value)} onBlur={fim} onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setTxt(null); e.target.blur(); } }} />;
+    onChange={(e) => setTxt(e.target.value)} title={valor ? fmtN(valor) : ""} onBlur={fim}
+    onKeyDown={(e) => {
+      if (e.key === "Escape") { setTxt(null); e.target.blur(); }
+      if (e.key === "Enter") {      // grava e desce para a mesma coluna da linha de baixo
+        const el = e.target, col = el.closest("td")?.cellIndex;
+        const todas = [...(el.closest("table")?.querySelectorAll("input.cel") || [])].filter((x) => x.closest("td")?.cellIndex === col);
+        const prox = todas[todas.indexOf(el) + 1];
+        el.blur();
+        if (prox) setTimeout(() => prox.focus(), 0);
+      }
+    }} />;
 }
 
 const svg = (children) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;

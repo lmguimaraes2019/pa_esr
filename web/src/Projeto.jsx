@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ResumoProjeto } from "./Planejamento.jsx";
-import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
+import { api, fmt, fmtN, fmtI, lerNumero, MESES } from "./api.js";
 import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer } from "./ui.jsx";
 
 function EditarLinha({ l, contas, onSalvar, onFechar }) {
@@ -216,17 +216,18 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
       </div>
       <p className="legenda-icones"><span><Lapis /> editar a linha inteira</span><span className="perigo"><Lixeira /> excluir de 2027 (na linha, na ação ou na Meta/EDT inteira)</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
       <div className="rolagem">
-        <table className="tab grid">
-          <thead><tr><th className="col-acoes">Ações</th><th className="col-conta">Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th></tr></thead>
+        <table className="tab grid plano-grid">
+          <colgroup><col className="c-acoes" /><col className="c-conta" />{MESES.map((m) => <col key={m} />)}<col className="c-total" /></colgroup>
+          <thead><tr><th className="col-acoes">Ações</th><th className="col-conta">Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th></tr></thead>
           <tbody>
-            {grupos.length === 0 && <tr><td colSpan={16} className="mudo">Nenhuma linha neste filtro.</td></tr>}
+            {grupos.length === 0 && <tr><td colSpan={15} className="mudo">Nenhuma linha neste filtro.</td></tr>}
             {grupos.map(([k, ls], gi) => (
               <React.Fragment key={k}>
                 {(gi === 0 || grupos[gi - 1][1][0].edt !== ls[0].edt) && (
                   <tr className="meta"><td className="col-acoes"><div className="barra-icones"><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir toda a Meta/EDT (todas as ações)" onClick={() => excluirGrupo(ls[0].edt)} /></div></td>
-                    <td className="col-conta" colSpan={15}><span className="rotulo-nivel">Meta/EDT</span> {ls[0].edt}</td></tr>)}
+                    <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Meta/EDT</span> {ls[0].edt}</td></tr>)}
                 <tr className="grupo"><td className="col-acoes"><div className="barra-icones"><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta Ação/Tarefa" onClick={() => excluirGrupo(ls[0].edt, ls[0].tarefa)} /></div></td>
-                  <td className="col-conta" colSpan={15}><span className="rotulo-nivel">Ação/Tarefa</span> {ls[0].tarefa}</td></tr>
+                  <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Ação/Tarefa</span> {ls[0].tarefa}</td></tr>
                 {ls.map((l) => (
                   <React.Fragment key={l.id}>
                     <tr className={l.status}>
@@ -246,17 +247,15 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
                         {l.alertas.map((a) => <span key={a} className="alerta">⚠ {a}</span>)}
                       </td>
                       {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} travada={l.fonte !== "manual"} onSalvar={(n) => salvarMeses(l, i, n)} /></td>)}
-                      <td className="n"><strong>{fmtN(l.total)}</strong></td>
-                      <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">+{fmtN(l.total)}</span>}</td>
-                      <td />
+                      <td className="n total-cel"><strong>{fmtN(l.total)}</strong><small>{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">nova</span>}</small></td>
                     </tr>
                     {l.ref && (
                       <tr className="ref"><td className="col-acoes" /><td className="col-conta">2026 aprovado · executado {fmt(l.executado)}</td>
-                        {l.ref.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}<td className="n">{fmtN(l.ref.total)}</td><td /></tr>)}
+                        {l.ref.meses.map((v, i) => <td key={i} className="n" title={v ? fmtN(v) : ""}>{fmtI(v)}</td>)}<td className="n">{fmtN(l.ref.total)}</td></tr>)}
                   </React.Fragment>))}
               </React.Fragment>))}
           </tbody>
-          <tfoot><tr><td className="col-acoes" /><td className="col-conta">Total do plano 2027</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(d.linhas.reduce((a, l) => a + l.meses[i], 0))}</td>)}<td className="n">{fmtN(t.plano)}</td><td className="n"><Delta de={t.base} para={t.plano} /></td></tr></tfoot>
+          <tfoot><tr><td className="col-acoes" /><td className="col-conta">Total do plano 2027</td>{MESES.map((_, i) => { const v = d.linhas.reduce((a, l) => a + l.meses[i], 0); return <td key={i} className="n" title={fmtN(v)}>{fmtI(v)}</td>; })}<td className="n total-cel"><strong>{fmtN(t.plano)}</strong><small><Delta de={t.base} para={t.plano} /></small></td></tr></tfoot>
         </table>
       </div>
       {editando && <EditarLinha key={editando.id} l={editando} contas={contas} onFechar={() => setEditando(null)} onSalvar={async (b) => { await api(`/linhas/${editando.id}`, { method: "PUT", body: b }); recarregar(); }} />}

@@ -21,6 +21,9 @@ const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" 
 const num = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const fmt = (v) => brl.format(v || 0);
 export const fmtN = (v) => num.format(v || 0);
+const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+/** Valor sem centavos, para caber os 12 meses na tela; o valor exato aparece ao editar e na dica. */
+export const fmtI = (v) => (Math.abs(v || 0) < 0.5 ? (v ? "0" : "") : inteiro.format(v));
 export const mi = (v) => (v / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " mi";
 
 // aceita "1.234,56", "1234,56" ou "1234.56"

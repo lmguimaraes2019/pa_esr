@@ -33,7 +33,7 @@ label input,label select,label textarea{text-transform:none;letter-spacing:0;fon
 .topo nav button.on{border-bottom-color:var(--laranja);font-weight:800}
 .quem{color:var(--cinza-claro);font-size:.85rem;display:flex;align-items:center;gap:6px}
 .quem button.link{color:#fff}
-main{padding:28px 24px 60px;max-width:1560px;margin:0 auto}
+main{padding:28px 24px 60px;max-width:1720px;margin:0 auto}
 
 /* cartões, kpis */
 .cartao{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:18px;margin:16px 0}
@@ -211,3 +211,19 @@ h3.secao{margin:26px 0 10px;color:var(--azul)}
 
 button.perigo-btn{color:#B42318;border-color:#B42318;background:#fff}
 button.perigo-btn:hover{background:#FFF1EF}
+
+/* tabela de despesas do projeto: os 12 meses cabem na tela, sem rolagem lateral em telas largas */
+.plano-grid{min-width:1240px;width:100%;table-layout:fixed}
+.plano-grid col.c-acoes{width:112px}.plano-grid col.c-conta{width:250px}.plano-grid col.c-total{width:118px}
+.plano-grid .col-acoes{min-width:112px;width:112px}
+.plano-grid .col-conta{left:112px;min-width:250px}
+.plano-grid th,.plano-grid td{padding-left:4px;padding-right:4px}
+.plano-grid th.n{font-size:.66rem;letter-spacing:.02em}
+.plano-grid .cel{width:100%;font-size:.8rem;padding:6px 4px;box-sizing:border-box}
+.plano-grid .cel-fixa{display:block;padding:6px 4px;font-size:.8rem;font-variant-numeric:tabular-nums;color:var(--cinza)}
+.plano-grid td.n{font-size:.8rem;font-variant-numeric:tabular-nums}
+.plano-grid .barra-icones{gap:3px}.plano-grid button.icone{width:30px;height:30px}
+.plano-grid td.col-conta{word-break:break-word}
+.total-cel{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:.85rem}
+.total-cel small{font-size:.7rem;font-weight:600}
+td.total-cel{display:table-cell;text-align:right}td.total-cel small{display:block}
