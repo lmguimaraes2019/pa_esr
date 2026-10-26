@@ -48,19 +48,28 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       {inter ? (
         <>
           <p className="mudo">Recurso que o projeto recebe de outro projeto da casa. O ano é só a referência: a transferência é sempre contabilizada no orçamento de 2027 e não precisa ser calendarizada.</p>
-          <div className="grade" style={{ alignItems: "end" }}>
-            <label><span>Projeto que recebe <span className="obrig">*</span></span><select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
-              <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
-            <label><span>Ano de referência <span className="obrig">*</span></span><input type="number" min="2020" max="2100" step="1" value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })} required /></label>
-            <label><span>Projeto cliente <span className="obrig">*</span></span><input value={f.cliente} onChange={(e) => setF({ ...f, cliente: e.target.value })} placeholder="ex.: nome do projeto que paga a transferência" required /></label>
-            <label><span>Origem de recursos <span className="obrig">*</span></span><select value={f.origem_cliente} onChange={(e) => setF({ ...f, origem_cliente: e.target.value })} required>
-              <option value="">Selecione…</option>{dados.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
-            <label><span>Gestor do cliente <span className="obrig">*</span></span><input list="gestores-ic" value={f.gestor_cliente} onChange={(e) => setF({ ...f, gestor_cliente: e.target.value })} required /></label>
-            <datalist id="gestores-ic">{dados.gerentes.map((g) => <option key={g} value={g} />)}</datalist>
-            <label><span>Valor (R$) <span className="obrig">*</span></span><input value={f.valor} inputMode="decimal" onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="ex.: 250.000,00" required /></label>
-            <label>Observação<input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
+          <div className="ic-form">
+            <fieldset><legend>Quem recebe</legend>
+              <label><span>Projeto que recebe <span className="obrig">*</span></span><select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
+                <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
+            </fieldset>
+            <fieldset><legend>Quem paga (projeto cliente)</legend>
+              <label><span>Projeto cliente <span className="obrig">*</span></span><input value={f.cliente} onChange={(e) => setF({ ...f, cliente: e.target.value })} placeholder="ex.: 2356 - DSS-DAGSOL-SDS-RGHU FASE 5" required /></label>
+              <div className="ic-linha">
+                <label><span>Origem de recursos <span className="obrig">*</span></span><select value={f.origem_cliente} onChange={(e) => setF({ ...f, origem_cliente: e.target.value })} required>
+                  <option value="">Selecione…</option>{dados.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+                <label><span>Gestor do cliente <span className="obrig">*</span></span><input list="gestores-ic" value={f.gestor_cliente} onChange={(e) => setF({ ...f, gestor_cliente: e.target.value })} required /></label>
+                <datalist id="gestores-ic">{dados.gerentes.map((g) => <option key={g} value={g} />)}</datalist>
+              </div>
+            </fieldset>
+            <fieldset><legend>Valor</legend>
+              <div className="ic-linha">
+                <label><span>Valor (R$) <span className="obrig">*</span></span><input value={f.valor} inputMode="decimal" onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="250.000,00" required /></label>
+                <label><span>Ano de referência <span className="obrig">*</span></span><input type="number" min="2020" max="2100" step="1" value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })} required /></label>
+                <label><span>Observação</span><input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
+              </div>
+            </fieldset>
           </div>
-
           {erro && <p className="erro" role="alert">{erro}</p>}
           <div className="acoes"><button className="primario">Salvar transferência</button><button type="button" onClick={onFechar}>Cancelar</button></div>
         </>
@@ -91,7 +100,9 @@ function Lancamentos({ dados, recarregar, setErro }) {
   const [origem, setOrigem] = useState("todas");
   const [proj, setProj] = useState("todos");
   const origens = [...new Set(dados.projetos.map((p) => p.origem))];
-  const lista = dados.linhas.filter((l) => (origem === "todas" || l.origem === origem) && (proj === "todos" || l.orcamento === proj));
+  const filtrada = dados.linhas.filter((l) => (origem === "todas" || l.origem === origem) && (proj === "todos" || l.orcamento === proj));
+  const lista = filtrada.filter((l) => l.tipo !== "intercompany");
+  const listaIc = filtrada.filter((l) => l.tipo === "intercompany");
   const trocar = async (l, corpo) => { try { setErro(""); await api(`/receitas/${l.id}`, { method: "PUT", body: corpo }); recarregar(); } catch (e) { setErro(e.message); } };
   const excluir = async (l) => {
     if (!window.confirm(`Excluir a receita "${l.fonte}" do projeto ${l.orcamento} (${fmt(l.total)})?`)) return;
@@ -130,9 +141,8 @@ function Lancamentos({ dados, recarregar, setErro }) {
                     <BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta receita" onClick={() => excluir(l)} /></div></td>
                   <td className="col-conta" title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
                     <span className="mudo">{l.orcamento} | {l.projeto}</span><br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
-                    {l.tipo === "intercompany" && <><br /><span className="tag viagens">intercompany, ref. {l.ano}</span> <span>cliente: <strong>{l.cliente}</strong></span><br /><span className="mudo">{l.origem_cliente} | gestor {l.gestor_cliente}</span></>}
                     {l.descricao && <><br /><span className="mudo">{l.descricao}</span></>}</td>
-                  {!l.calendarizada ? <td colSpan={12} className="mudo" style={{ textAlign: "center" }}>sem calendarização, contabilizada no total de 2027</td> : l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
+                  {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
                   <td className="n"><strong>{fmtN(l.total)}</strong></td>
                   <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} altaBoa /> : <span className="down">+{fmtN(l.total)}</span>}</td>
                 </tr>
@@ -142,6 +152,27 @@ function Lancamentos({ dados, recarregar, setErro }) {
           <tfoot><tr><td className="col-acoes" /><td className="col-conta">Total do filtro</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(tot(i))}</td>)}<td className="n">{fmtN(lista.reduce((a, l) => a + l.total, 0))}</td><td /></tr></tfoot>
         </table>
       </div>
+      <section className="cartao ic-secao">
+        <div className="cab"><div><h3 style={{ margin: 0 }}>Transferências intercompany</h3>
+          <p className="mudo">Recursos recebidos de outros projetos. Contam no total de 2027, sem calendário.</p></div>
+          <div className="ic-total"><span>Total no filtro</span><strong>{fmt(listaIc.reduce((a, l) => a + l.total, 0))}</strong></div></div>
+        {listaIc.length === 0 ? <p className="mudo">Nenhuma transferência intercompany neste filtro. Use "+ Transferência intercompany".</p> : (
+          <div className="rolagem"><table className="tab ic-tab">
+            <thead><tr><th>Ações</th><th>Projeto que recebe</th><th>Projeto cliente</th><th>Origem de recursos</th><th>Gestor do cliente</th><th>Ref.</th><th className="n">Valor</th></tr></thead>
+            <tbody>{listaIc.map((l) => (
+              <tr key={l.id}>
+                <td><div className="barra-icones"><BotaoIcone icone={<Lapis />} dica="Editar a transferência" onClick={() => abrir(l)} />
+                  <BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir a transferência" onClick={() => excluir(l)} /></div></td>
+                <td><strong>{l.orcamento}</strong><br /><span className="mudo">{l.projeto}</span></td>
+                <td>{l.cliente}</td>
+                <td><span className="tag">{l.origem_cliente}</span></td>
+                <td>{l.gestor_cliente}</td>
+                <td>{l.ano}</td>
+                <td className="n"><strong>{fmtN(l.total)}</strong></td>
+              </tr>))}</tbody>
+            <tfoot><tr><td colSpan={6}>Total</td><td className="n">{fmtN(listaIc.reduce((a, l) => a + l.total, 0))}</td></tr></tfoot>
+          </table></div>)}
+      </section>
       {form && <Formulario key={form.id ?? "novo"} inicial={form} dados={dados} onFechar={() => setForm(null)} onSalvar={salvar} />}
     </>
   );
