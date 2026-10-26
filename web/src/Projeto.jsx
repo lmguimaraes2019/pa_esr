@@ -53,14 +53,15 @@ function agrupar(linhas) {
 }
 
 /* ---------------------------------------------------------------- passo 1: o que aconteceu em 2026 */
-function Passado({ d, irPlano }) {
+function Passado({ d, irPlano, recarregar, setErro }) {
   const [meses, setMeses] = useState(false);
+  const restaurar = async (l) => { try { setErro(""); await api(`/linhas/${l.id}/restaurar`, { method: "POST" }); recarregar(); } catch (e) { setErro(e.message); } };
   const t = d.totais;
   const grupos = useMemo(() => agrupar(d.passado), [d]);
   const exec = t.realizado + t.empenhado;
   return (
     <>
-      <div className="nota">Esta é a fotografia de 2026: o que foi aprovado, o que já foi realizado e empenhado, e o que cada linha virou no plano de 2027. Nada aqui é editável.</div>
+      <div className="nota">Esta é a fotografia de 2026: o que foi aprovado, o que já foi realizado e empenhado, e o que cada linha virou no plano de 2027. Os valores de 2026 não são editáveis; o realizado e o empenhado vêm da importação da base do Protheus. Uma linha excluída do plano de 2027 aparece como "removida" e pode ser trazida de volta.</div>
       <div className="kpis">
         <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
         <Kpi rotulo="Realizado" valor={fmt(t.realizado)} tom="f26" />
@@ -82,7 +83,7 @@ function Passado({ d, irPlano }) {
                     <td className="n">{fmtN(l.aprovado)}</td><td className="n">{fmtN(l.realizado)}</td><td className="n">{fmtN(l.empenhado)}</td>
                     <td className="n">{fmtN(l.saldo)}</td><td className="n">{l.pct === null ? "-" : l.pct.toFixed(0) + "%"}</td>
                     <td className="n"><strong>{fmtN(l.plano_2027)}</strong></td>
-                    <td>{l.removida ? <span className="tag removida">removida</span>
+                    <td>{l.removida ? <><span className="tag removida">removida</span> <button className="link" onClick={() => restaurar(l)}>trazer de volta</button></>
                       : Math.abs(l.plano_2027 - l.aprovado) < 0.005 ? <span className="tag ok">mantida</span>
                       : <span className="tag ajustada">ajustada</span>}</td>
                     {meses && l.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}
@@ -110,7 +111,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   };
   const salvarMeses = (l, i, v) => { const meses = [...l.meses]; meses[i] = v; trocar(l, { meses }); };
   const excluir = async (l) => {
-    if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)})?`)) return;
+    if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)}) do orçamento de 2027? A linha de 2026 continua visível no passo "Entender 2026" e pode ser trazida de volta.`)) return;
     try { await api(`/linhas/${l.id}`, { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
   };
   const visiveis = d.linhas.filter((l) =>
@@ -156,7 +157,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                       <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">+{fmtN(l.total)}</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         {l.status === "ajustada" && <button className="link" title="Voltar aos valores aprovados em 2026" onClick={() => trocar(l, { meses: l.ref.meses })}>desfazer</button>}
-                        {l.fonte !== "viagens" && <button className="link" title="Excluir linha" onClick={() => excluir(l)}>✕</button>}
+                        {l.fonte !== "viagens" && <button className="link" title="Excluir esta linha do orçamento de 2027" onClick={() => excluir(l)}>excluir</button>}
                       </td>
                     </tr>
                     {l.ref && (
@@ -193,7 +194,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens }) {
       </div>
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Entender 2026"], ["plano", "Planejar 2027"]]} />
       {erro && <p className="erro" role="alert">{erro}</p>}
-      {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} />
+      {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} recarregar={carregar} setErro={setErro} />
         : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} />}
     </>
   );

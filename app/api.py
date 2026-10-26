@@ -6,7 +6,7 @@ import re
 import sqlite3
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -286,7 +286,7 @@ def _linha(r: sqlite3.Row) -> dict:
             alertas.append("zerada em 2027")
     return {"id": r["id"], "edt": r["edt"], "tarefa": r["tarefa"], "conta_codigo": r["conta_codigo"],
             "conta_desc": r["conta_desc"], "grupo": r["grupo"], "meses": meses, "total": total,
-            "obs": r["obs"], "editada": bool(r["editada"]), "fonte": r["fonte"], "status": status, "ref": ref,
+            "obs": r["obs"], "editada": bool(r["editada"]), "fonte": r["fonte"], "base_id": r["base_id"], "status": status, "ref": ref,
             "realizado": realizado, "empenhado": empenhado, "executado": executado, "alertas": alertas,
             "atualizado_por": r["atualizado_por"], "atualizado_em": r["atualizado_em"]}
 
@@ -450,6 +450,73 @@ def excluir_linha(linha_id: int, u: dict = Depends(usuario_liberado)):
         audit(c, u["login"], "excluiu linha", atual["orcamento"], linha_id,
               f"{atual['tarefa']} / {atual['conta_codigo']} / {_arred(sum(atual[m] for m in MESES))}")
     return {"ok": True}
+
+
+@router.post("/linhas/{base_id}/restaurar", status_code=201)
+def restaurar_linha(base_id: int, u: dict = Depends(usuario_liberado)):
+    """Traz de volta para 2027 uma linha aprovada em 2026 que foi excluída do plano."""
+    with tx() as c:
+        b = c.execute("SELECT * FROM linhas WHERE id=? AND ciclo=?", (base_id, config.CICLO_BASE)).fetchone()
+        if not b:
+            raise HTTPException(404, "Linha de 2026 não encontrada.")
+        exige_acesso(c, u, b["orcamento"])
+        if c.execute("SELECT 1 FROM linhas WHERE base_id=? AND ciclo=?", (base_id, config.CICLO_PLANO)).fetchone():
+            raise HTTPException(409, "Esta linha já está no plano de 2027.")
+        cur = c.execute(
+            f"INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, {', '.join(MESES)}, base_id, atualizado_por) "
+            f"VALUES (?,?,?,?,?,{', '.join('?' for _ in MESES)},?,?)",
+            (config.CICLO_PLANO, b["orcamento"], b["edt"], b["tarefa"], b["conta_codigo"], *[b[m] for m in MESES], base_id, u["login"]))
+        audit(c, u["login"], "restaurou linha de 2026", b["orcamento"], cur.lastrowid, f"{b['tarefa']} / {b['conta_codigo']}")
+    return {"ok": True, "id": cur.lastrowid}
+
+
+# ---------------------------------------------------------------- realizado e empenhado de 2026 (admin)
+
+@router.post("/execucao/importar")
+async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...), u: dict = Depends(exige_admin)):
+    """Substitui o realizado e o empenhado de 2026 pelos da planilha (base do Protheus). Não toca no aprovado nem no plano."""
+    import tempfile
+    from pathlib import Path
+    dados = await arquivo.read()
+    if len(dados) > 30 * 1024 * 1024:
+        raise HTTPException(413, "Arquivo grande demais (limite de 30 MB).")
+    if dados[:2] != b"PK":
+        raise HTTPException(422, "Envie a planilha em formato .xlsx.")
+    with tempfile.TemporaryDirectory() as tmp:
+        caminho = Path(tmp) / "protheus.xlsx"
+        caminho.write_bytes(dados)
+        try:
+            novos = importers.build_execucao(importers.load_protheus(caminho))
+        except Exception:
+            raise HTTPException(422, "Não encontrei a aba BASE ESR com as colunas do Protheus (Tipo de Lançamento, Valor, Mês...).")
+    with tx() as c:
+        projetos = {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
+        validos = [x for x in novos if x["orcamento"] in projetos]
+        ignorados = sorted({x["orcamento"] for x in novos if x["orcamento"] not in projetos})
+        antes = c.execute("SELECT COALESCE(SUM(realizado),0), COALESCE(SUM(empenhado),0), COUNT(*) FROM execucao").fetchone()
+        por_projeto = {}
+        for x in validos:
+            d = por_projeto.setdefault(x["orcamento"], {"realizado": 0.0, "empenhado": 0.0})
+            d["realizado"] += x["realizado"]; d["empenhado"] += x["empenhado"]
+        atual = {r["orcamento"]: (r["r"], r["e"]) for r in c.execute(
+            "SELECT orcamento, SUM(realizado) r, SUM(empenhado) e FROM execucao GROUP BY orcamento")}
+        diff = [{"orcamento": o, "realizado_antes": _arred(atual.get(o, (0, 0))[0]), "realizado_depois": _arred(v["realizado"]),
+                 "empenhado_antes": _arred(atual.get(o, (0, 0))[1]), "empenhado_depois": _arred(v["empenhado"])}
+                for o, v in sorted(por_projeto.items())]
+        resumo = {"simulacao": simular, "linhas": len(validos), "linhas_antes": antes[2],
+                  "realizado_antes": _arred(antes[0]), "empenhado_antes": _arred(antes[1]),
+                  "realizado_depois": _arred(sum(x["realizado"] for x in validos)),
+                  "empenhado_depois": _arred(sum(x["empenhado"] for x in validos)),
+                  "orcamentos_ignorados": ignorados, "projetos": diff}
+        if not validos:
+            raise HTTPException(422, "A planilha não trouxe realizado nem empenhado de orçamentos conhecidos.")
+        if not simular:
+            c.execute("DELETE FROM execucao")
+            c.executemany("INSERT OR REPLACE INTO execucao (orcamento, edt, tarefa, conta_codigo, realizado, empenhado) "
+                          "VALUES (:orcamento,:edt,:tarefa,:conta_codigo,:realizado,:empenhado)", validos)
+            audit(c, u["login"], "importou realizado e empenhado 2026",
+                  detalhe=f"{arquivo.filename}: realizado {resumo['realizado_depois']}, empenhado {resumo['empenhado_depois']}")
+    return resumo
 
 
 # ---------------------------------------------------------------- resumo

@@ -144,3 +144,25 @@ def test_editar_acessos_do_usuario(client):
     assert r.status_code == 200 and r.json()["gerentes"] == sorted([g1, g2]) and r.json()["nome"] == "Ed Novo"
     assert client.patch(f"/api/usuarios/{uid}", json={"gerentes": [], "projetos": []}).status_code == 422
     assert client.patch(f"/api/usuarios/{uid}", json={"gerentes": [g2]}).json()["gerentes"] == [g2]
+
+
+def test_restaurar_linha_e_importar_execucao(client):
+    entrar(client)
+    p = client.get("/api/projetos").json()[0]["orcamento"]
+    d = client.get(f"/api/projetos/{p}").json()
+    l = next(x for x in d["linhas"] if x["fonte"] != "viagens" and x["base_id"])
+    assert client.delete(f"/api/linhas/{l['id']}").status_code == 200
+    d2 = client.get(f"/api/projetos/{p}").json()
+    rem = [x for x in d2["passado"] if x["removida"]]
+    assert any(x["id"] == l["base_id"] for x in rem)
+    assert client.post(f"/api/linhas/{l['base_id']}/restaurar").status_code == 201
+    assert client.post(f"/api/linhas/{l['base_id']}/restaurar").status_code == 409
+    from conftest import F_PROTHEUS
+    with open(F_PROTHEUS, "rb") as f:
+        r = client.post("/api/execucao/importar?simular=true", files={"arquivo": ("p.xlsx", f)})
+    assert r.status_code == 200 and r.json()["simulacao"] and r.json()["linhas"] > 0
+    with open(F_PROTHEUS, "rb") as f:
+        r2 = client.post("/api/execucao/importar?simular=false", files={"arquivo": ("p.xlsx", f)})
+    assert r2.status_code == 200
+    assert r2.json()["realizado_depois"] == r.json()["realizado_depois"] == r.json()["realizado_antes"]
+    assert client.post("/api/execucao/importar", files={"arquivo": ("x.xlsx", b"nao e excel")}).status_code == 422

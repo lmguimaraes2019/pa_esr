@@ -45,7 +45,7 @@ export function Exportar({ irProjeto }) {
   if (!pre) return <p>Conferindo…</p>;
   return (
     <>
-      <h2>Exportar para o Template 2027</h2>
+      <h2>Exportar para o PMO da DSS (Template Planejamento Anual 2027)</h2>
       <div className="kpis"><div className="kpi"><span>Linhas</span><strong>{pre.linhas}</strong></div><div className="kpi"><span>Total</span><strong>{fmt(pre.total)}</strong></div></div>
       <section className="cartao">
         <h3>Conferência</h3>
@@ -138,4 +138,44 @@ export function Auditoria() {
   return (<><h2>Histórico de alterações</h2>
     <table className="tab"><thead><tr><th>Quando (UTC)</th><th>Responsável</th><th>Ação</th><th>Orçamento</th><th>Detalhe</th></tr></thead>
       <tbody>{l.map((a) => <tr key={a.id}><td>{a.em}</td><td>{a.usuario}</td><td>{a.acao}</td><td>{a.orcamento}</td><td>{a.detalhe}</td></tr>)}</tbody></table></>);
+}
+
+export function Realizado() {
+  const [arq, setArq] = useState(null);
+  const [r, setR] = useState(null);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const enviar = async (simular) => {
+    setErro(""); setMsg(""); if (!arq) return setErro("Escolha a planilha primeiro.");
+    if (!simular && !window.confirm("Substituir o realizado e o empenhado de 2026 pelos valores desta planilha?")) return;
+    setOcupado(true);
+    try {
+      const f = new FormData(); f.append("arquivo", arq);
+      const resp = await fetch(`/api/execucao/importar?simular=${simular}`, { method: "POST", body: f, credentials: "same-origin" });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(typeof j.detail === "string" ? j.detail : "Não foi possível ler a planilha.");
+      setR(j); if (!simular) { setMsg("Realizado e empenhado de 2026 atualizados."); }
+    } catch (e) { setErro(e.message); } finally { setOcupado(false); }
+  };
+  return (
+    <>
+      <h2>Realizado e empenhado de 2026</h2>
+      <div className="nota">Em 2026 o app só recebe o <strong>realizado</strong> e o <strong>empenhado</strong>, importados da base do Protheus (planilha com a aba BASE ESR). O aprovado de 2026 e o plano de 2027 não são alterados. Cada importação substitui os valores anteriores.</div>
+      {msg && <p className="ok">{msg}</p>}{erro && <p className="erro" role="alert">{erro}</p>}
+      <section className="cartao">
+        <label>Planilha do Protheus (.xlsx)<input type="file" accept=".xlsx" onChange={(e) => { setArq(e.target.files[0] || null); setR(null); }} /></label>
+        <div className="acoes"><button onClick={() => enviar(true)} disabled={!arq || ocupado}>Conferir antes de importar</button>
+          <button className="primario" onClick={() => enviar(false)} disabled={!arq || ocupado || !r || !r.simulacao}>Importar</button></div>
+        {!r?.simulacao && arq && !msg && <p className="mudo">Clique em "Conferir antes de importar" para ver o que vai mudar.</p>}
+      </section>
+      {r && (
+        <section className="cartao"><h3>{r.simulacao ? "O que vai mudar" : "Importado"}</h3>
+          <p>Realizado: <strong>{fmt(r.realizado_antes)}</strong> para <strong>{fmt(r.realizado_depois)}</strong> | Empenhado: <strong>{fmt(r.empenhado_antes)}</strong> para <strong>{fmt(r.empenhado_depois)}</strong> | {r.linhas} linhas</p>
+          {r.orcamentos_ignorados.length > 0 && <div className="nota aviso">Orçamentos da planilha que não existem no app e foram ignorados: {r.orcamentos_ignorados.join(", ")}.</div>}
+          <div className="rolagem"><table className="tab"><thead><tr><th>Orçamento</th><th className="n">Realizado antes</th><th className="n">Realizado depois</th><th className="n">Empenhado antes</th><th className="n">Empenhado depois</th></tr></thead>
+            <tbody>{r.projetos.map((p) => <tr key={p.orcamento}><td>{p.orcamento}</td><td className="n">{fmt(p.realizado_antes)}</td><td className="n"><strong>{fmt(p.realizado_depois)}</strong></td><td className="n">{fmt(p.empenhado_antes)}</td><td className="n"><strong>{fmt(p.empenhado_depois)}</strong></td></tr>)}</tbody></table></div>
+        </section>)}
+    </>
+  );
 }
