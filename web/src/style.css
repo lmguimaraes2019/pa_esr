@@ -120,3 +120,4 @@ button.icone.perigo{color:#B42318}
 button.icone.perigo:hover:not(:disabled){background:#B42318;color:#fff;border-color:#B42318}
 button.icone:disabled{opacity:.35;cursor:not-allowed}
 button.icone:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
+.acoes-linha{float:right;margin:0 0 4px 8px;white-space:nowrap}

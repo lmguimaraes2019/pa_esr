@@ -172,7 +172,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
           {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
       <div className="rolagem">
         <table className="tab grid">
-          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th><th>Ações</th></tr></thead>
+          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th><th /></tr></thead>
           <tbody>
             {grupos.length === 0 && <tr><td colSpan={16} className="mudo">Nenhuma linha neste filtro.</td></tr>}
             {grupos.map(([k, ls]) => (
@@ -182,6 +182,11 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                   <React.Fragment key={l.id}>
                     <tr className={l.status}>
                       <td title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
+                        <div className="acoes-linha">
+                        <button className="icone" title="Editar esta linha" aria-label="Editar linha" onClick={() => { setNova(false); setEditando(l); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }}><Lapis /></button>
+                        <button className="icone perigo" title={l.fonte === "viagens" ? "Linha do plano de viagens: altere o plano na aba Viagens" : "Excluir esta linha do orçamento de 2027"} aria-label="Excluir linha" disabled={l.fonte === "viagens"} onClick={() => excluir(l)}><Lixeira /></button>
+                        {l.status === "ajustada" && <button className="link" title="Voltar aos valores aprovados em 2026" onClick={() => trocar(l, { meses: l.ref.meses })}>desfazer</button>}
+                      </div>
                         <span className="mudo">{l.grupo}</span>
                         {l.status === "ajustada" && <span className="tag ajustada">ajustada</span>}
                         {l.status === "nova" && <span className="tag nova">nova</span>}
@@ -192,11 +197,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                       {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} travada={l.fonte === "viagens"} onSalvar={(n) => salvarMeses(l, i, n)} /></td>)}
                       <td className="n"><strong>{fmtN(l.total)}</strong></td>
                       <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">+{fmtN(l.total)}</span>}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        <button className="icone" title="Editar esta linha" aria-label="Editar linha" onClick={() => { setNova(false); setEditando(l); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }}><Lapis /></button>
-                        <button className="icone perigo" title={l.fonte === "viagens" ? "Linha do plano de viagens: altere o plano na aba Viagens" : "Excluir esta linha do orçamento de 2027"} aria-label="Excluir linha" disabled={l.fonte === "viagens"} onClick={() => excluir(l)}><Lixeira /></button>
-                        {l.status === "ajustada" && <button className="link" title="Voltar aos valores aprovados em 2026" onClick={() => trocar(l, { meses: l.ref.meses })}>desfazer</button>}
-                      </td>
+                      <td />
                     </tr>
                     {l.ref && (
                       <tr className="ref"><td>2026 aprovado · executado {fmt(l.executado)}</td>
