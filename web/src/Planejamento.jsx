@@ -66,7 +66,17 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
         <>
           <h4 className="sub">Acompanhamento por gerência</h4>
           <div className="rolagem"><table className="tab ger"><thead><tr><th>Gerência / responsáveis</th><th className="n">Projetos</th><th className="n">Plano 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Pendências</th><th>Situação</th></tr></thead>
-            <tbody>{plano.gerencias.map((g) => (
+            <tbody>
+              {plano.diretoria && (
+                <Fragment>
+                  <tr className="ger-linha dir"><td><strong>Diretoria Adjunta</strong></td><td className="n">{plano.diretoria.projetos}</td><td className="n">{fmtN(plano.diretoria.aprovado)}</td><td className="n">{fmtN(plano.diretoria.executado)}</td>
+                    <td className="n">{plano.diretoria.aprovado ? pct(plano.diretoria.executado, plano.diretoria.aprovado) : "-"}</td><td className="n">{fmtN(plano.diretoria.plano)}</td><td className="n">{plano.diretoria.pendencias || "-"}</td>
+                    <td><Estado tom={plano.diretoria.pendencias ? "pend" : "neutro"}>{plano.diretoria.pendencias ? "com pendências" : "em andamento"}</Estado></td></tr>
+                  {plano.diretoria.responsaveis.map((r) => (
+                    <tr key={r.nome} className="ger-pessoa n1"><td><span className="ger-nome">{r.nome}</span> <span className="mudo">projetos da diretoria</span></td><td className="n">{r.projetos}</td><td className="n">{fmtN(r.aprovado)}</td><td className="n">{fmtN(r.executado)}</td>
+                      <td className="n">{r.aprovado ? pct(r.executado, r.aprovado) : "-"}</td><td className="n">{fmtN(r.plano)}</td><td className="n">{r.pendencias || "-"}</td><td /></tr>))}
+                </Fragment>)}
+              {plano.gerencias.map((g) => (
               <Fragment key={g.gerencia || "_"}>
                 <tr className="ger-linha"><td><strong>{g.gerencia || "Sem gerência definida"}</strong></td><td className="n">{g.projetos}</td><td className="n">{fmtN(g.aprovado)}</td><td className="n">{fmtN(g.executado)}</td>
                   <td className="n">{g.aprovado ? pct(g.executado, g.aprovado) : "-"}</td><td className="n">{fmtN(g.plano)}</td><td className="n">{g.pendencias || "-"}</td>

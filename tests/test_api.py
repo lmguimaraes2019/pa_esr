@@ -408,3 +408,10 @@ def test_acompanhamento_por_gerencia(client):
     t = g["Gerência Teste"]
     assert t["pessoas"][0]["login"] == "coord.x" and t["projetos"] >= 0
     assert {"aprovado", "executado", "plano", "pendencias"} <= set(t)
+
+
+def test_diretoria_adjunta(client):
+    entrar(client)
+    d = client.get("/api/planejamento").json()["diretoria"]
+    assert d["projetos"] == sum(r["projetos"] for r in d["responsaveis"])
+    assert d["projetos"] > 0 and {"aprovado", "executado", "plano", "pendencias"} <= set(d)

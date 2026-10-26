@@ -122,6 +122,29 @@ def _executado(c: sqlite3.Connection, ids: set[str]) -> float:
     return _arred(c.execute(f"SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento IN ({marks})", sorted(ids)).fetchone()[0])
 
 
+DIRETORIA = ("leandro", "celia")      # projetos cadastrados com estes gerentes pertencem à Diretoria Adjunta
+
+
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", t or "") if unicodedata.category(ch) != "Mn").lower().strip()
+
+
+def _diretoria(c: sqlite3.Connection) -> dict:
+    """Projetos da Diretoria Adjunta (gerente Leandro ou Célia), acima de todas as gerências."""
+    por: dict[str, list[str]] = {}
+    for r in c.execute("SELECT orcamento, gerente FROM projetos ORDER BY orcamento"):
+        for chave in DIRETORIA:
+            if _sem_acento(r["gerente"]).startswith(chave):
+                por.setdefault(r["gerente"], []).append(r["orcamento"])
+    def agrega(ids: list[str]) -> dict:
+        res = list(resumir(c, ids).values())
+        return {"projetos": len(res), "aprovado": _arred(sum(p["despesas"]["aprovado"] for p in res)), "executado": _executado(c, set(ids)),
+                "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "pendencias": sum(p["pendencias"] for p in res)}
+    todos = sorted({o for ids in por.values() for o in ids})
+    return {**agrega(todos), "responsaveis": [{"nome": n, **agrega(ids)} for n, ids in sorted(por.items())]}
+
+
 def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
     """Acompanhamento do admin: gerências, com o gerente e os coordenadores abaixo.
     Os totais da gerência somam cada projeto uma vez, ainda que gerente e coordenador o acompanhem."""
@@ -161,6 +184,7 @@ def planejamento(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = De
     s["concluido"] = dict(conc) if conc else None
     if u["perfil"] == "admin":
         s["gerencias"] = _por_gerencia(c)
+        s["diretoria"] = _diretoria(c)
     return s
 
 
