@@ -158,3 +158,16 @@ button.icone:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
 .troca-origem .rotulo-nivel{margin-right:4px}
 .troca-origem strong{color:var(--azul)}
 .troca-origem .seta{color:var(--laranja);font-weight:800;margin:0 6px}
+
+.obrig{color:#B42318;font-weight:800;margin-left:2px}
+h4.sub{margin:16px 0 6px;color:var(--azul);font-size:.95rem}h4.sub .mudo{font-weight:400;font-size:.8rem}
+textarea{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--bd);border-radius:8px;resize:vertical}
+.resumo-custo{display:flex;flex-wrap:wrap;gap:8px 22px;background:var(--azul-claro);border-radius:8px;padding:12px 14px;margin:12px 0;font-size:.88rem;color:var(--cinza)}
+.resumo-custo strong{color:var(--azul);margin-left:4px}
+.pend-lista{display:flex;flex-direction:column;gap:2px;margin-top:4px;font-size:.74rem;color:#9A5B00}
+.pend-lista span::before{content:"• "}
+.faixa{background:var(--azul-claro);border-radius:8px;padding:12px 14px;margin:10px 0}
+.faixa-topo{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:.85rem;color:var(--cinza)}
+.faixa-topo strong{color:var(--azul)}
+.faixa input[type=range]{width:100%;accent-color:var(--laranja);margin:8px 0}
+details.cartao summary{cursor:pointer}

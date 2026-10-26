@@ -6,6 +6,8 @@ import Projetos from "./Projetos.jsx";
 import Projeto from "./Projeto.jsx";
 import Viagens from "./Viagens.jsx";
 import Receitas from "./Receitas.jsx";
+import Eventos from "./Eventos.jsx";
+import Headcount from "./Headcount.jsx";
 import { Premissas, Usuarios, Exportar, Auditoria, Realizado } from "./Admin.jsx";
 
 export default function App() {
@@ -22,7 +24,7 @@ export default function App() {
 
   const admin = user.perfil === "admin";
   const ADMIN = [["premissas", "Premissas"], ["realizado", "Realizado 2026"], ["exportar", "Exportar para o PMO"], ["usuarios", "Usuários"], ["auditoria", "Histórico"]];
-  const abas = [["resumo", "Início"], ["projetos", "Orçamento 2027"], ["receitas", "Receitas"], ["viagens", "Viagens"], ...(admin ? [["admin", "Administração"]] : [])];
+  const abas = [["resumo", "Início"], ["projetos", "Orçamento 2027"], ["receitas", "Receitas"], ["viagens", "Viagens"], ["eventos", "Eventos"], ["headcount", "Headcount"], ...(admin ? [["admin", "Administração"]] : [])];
   const emAdmin = ADMIN.some(([k]) => k === aba);
   const ir = (a, p = null) => { setAba(a); setProj(p); window.scrollTo(0, 0); };
 
@@ -43,6 +45,8 @@ export default function App() {
           ? <Projeto orcamento={proj} admin={admin} voltar={() => setProj(null)} irViagens={() => ir("viagens")} />
           : <Projetos abrir={setProj} />)}
         {aba === "receitas" && <Receitas admin={admin} irProjeto={(o) => ir("projetos", o)} />}
+        {aba === "eventos" && <Eventos irProjeto={(o) => ir("projetos", o)} />}
+        {aba === "headcount" && <Headcount admin={admin} irProjeto={(o) => ir("projetos", o)} />}
         {aba === "viagens" && <Viagens admin={admin} irProjeto={(o) => ir("projetos", o)} />}
         {admin && aba === "premissas" && <Premissas />}
         {admin && aba === "realizado" && <Realizado />}

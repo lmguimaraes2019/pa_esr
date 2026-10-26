@@ -1,0 +1,296 @@
+[
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "ASSISTENTE",
+  "grupo": "GRUPO 01",
+  "inicio": 3094.37,
+  "fim": 4641.55
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "ASSISTENTE",
+  "grupo": "GRUPO 02",
+  "inicio": 2472.43,
+  "fim": 3708.65
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "JUNIOR",
+  "grupo": "GRUPO 01",
+  "inicio": 4473.45,
+  "fim": 6710.17
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "JUNIOR",
+  "grupo": "GRUPO 02",
+  "inicio": 3719.01,
+  "fim": 5578.52
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "PLENO",
+  "grupo": "GRUPO 01",
+  "inicio": 6418.58,
+  "fim": 9627.88
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "PLENO",
+  "grupo": "GRUPO 02",
+  "inicio": 5293.69,
+  "fim": 7940.53
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "SENIOR",
+  "grupo": "GRUPO 01",
+  "inicio": 9210.1,
+  "fim": 13815.14
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "SENIOR",
+  "grupo": "GRUPO 02",
+  "inicio": 7534.47,
+  "fim": 11301.7
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "ESPECIALISTA I",
+  "grupo": "GRUPO 01",
+  "inicio": 13213.94,
+  "fim": 19820.91
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "ESPECIALISTA I",
+  "grupo": "GRUPO 02",
+  "inicio": 10723.48,
+  "fim": 16085.22
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "ESPECIALISTA II",
+  "grupo": "GRUPO 01",
+  "inicio": 19017.79,
+  "fim": 28526.69
+ },
+ {
+  "trajetoria": "GESTAO DO NEGOCIO",
+  "nivel": "ESPECIALISTA II",
+  "grupo": "GRUPO 02",
+  "inicio": 15241.92,
+  "fim": 22862.88
+ },
+ {
+  "trajetoria": "LIDERANCA",
+  "nivel": "GERENTE 01",
+  "grupo": "GRUPO 01",
+  "inicio": 15305.99,
+  "fim": 22958.99
+ },
+ {
+  "trajetoria": "LIDERANCA",
+  "nivel": "GERENTE 01",
+  "grupo": "GRUPO 02",
+  "inicio": 13160.76,
+  "fim": 19741.14
+ },
+ {
+  "trajetoria": "LIDERANCA",
+  "nivel": "GERENTE 02",
+  "grupo": "GRUPO 01",
+  "inicio": 22337.5,
+  "fim": 33506.26
+ },
+ {
+  "trajetoria": "LIDERANCA",
+  "nivel": "GERENTE 02",
+  "grupo": "GRUPO 02",
+  "inicio": 20354.51,
+  "fim": 30531.77
+ },
+ {
+  "trajetoria": "LIDERANCA",
+  "nivel": "GERENTE 03",
+  "grupo": "GRUPO 01",
+  "inicio": 32667.19,
+  "fim": 39853.98
+ },
+ {
+  "trajetoria": "LIDERANCA",
+  "nivel": "GERENTE 03",
+  "grupo": "GRUPO 02",
+  "inicio": 32667.19,
+  "fim": 39853.98
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "ASSISTENTE",
+  "grupo": "GRUPO 01",
+  "inicio": 3094.37,
+  "fim": 4641.55
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "ASSISTENTE",
+  "grupo": "GRUPO 02",
+  "inicio": 2472.43,
+  "fim": 3708.65
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "JUNIOR",
+  "grupo": "GRUPO 01",
+  "inicio": 5108.91,
+  "fim": 7663.36
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "JUNIOR",
+  "grupo": "GRUPO 02",
+  "inicio": 3302.58,
+  "fim": 4953.87
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "PLENO",
+  "grupo": "GRUPO 01",
+  "inicio": 7418.19,
+  "fim": 11127.29
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "PLENO",
+  "grupo": "GRUPO 02",
+  "inicio": 5001.65,
+  "fim": 7502.47
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "SENIOR",
+  "grupo": "GRUPO 01",
+  "inicio": 10773.05,
+  "fim": 16159.58
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "SENIOR",
+  "grupo": "GRUPO 02",
+  "inicio": 7574.13,
+  "fim": 11361.19
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "ESPECIALISTA I",
+  "grupo": "GRUPO 01",
+  "inicio": 15643.1,
+  "fim": 23464.65
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "ESPECIALISTA I",
+  "grupo": "GRUPO 02",
+  "inicio": 11469.81,
+  "fim": 17204.71
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "ESPECIALISTA II",
+  "grupo": "GRUPO 01",
+  "inicio": 22673.53,
+  "fim": 34010.3
+ },
+ {
+  "trajetoria": "RELACIONAMENTO",
+  "nivel": "ESPECIALISTA II",
+  "grupo": "GRUPO 02",
+  "inicio": 17377.12,
+  "fim": 26065.68
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "ASSISTENTE",
+  "grupo": "GRUPO 01",
+  "inicio": 3332.85,
+  "fim": 4999.27
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "ASSISTENTE",
+  "grupo": "GRUPO 02",
+  "inicio": 2537.48,
+  "fim": 3806.22
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "JUNIOR",
+  "grupo": "GRUPO 01",
+  "inicio": 4873.65,
+  "fim": 7310.48
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "JUNIOR",
+  "grupo": "GRUPO 02",
+  "inicio": 3684.76,
+  "fim": 5527.14
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "PLENO",
+  "grupo": "GRUPO 01",
+  "inicio": 7127.05,
+  "fim": 10690.58
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "PLENO",
+  "grupo": "GRUPO 02",
+  "inicio": 5350.47,
+  "fim": 8025.71
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "SENIOR",
+  "grupo": "GRUPO 01",
+  "inicio": 10420.62,
+  "fim": 15630.93
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "SENIOR",
+  "grupo": "GRUPO 02",
+  "inicio": 7768.82,
+  "fim": 11653.23
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "ESPECIALISTA I",
+  "grupo": "GRUPO 01",
+  "inicio": 15238.39,
+  "fim": 22857.59
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "ESPECIALISTA I",
+  "grupo": "GRUPO 02",
+  "inicio": 11281.42,
+  "fim": 16922.13
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "ESPECIALISTA II",
+  "grupo": "GRUPO 01",
+  "inicio": 22283.56,
+  "fim": 33425.34
+ },
+ {
+  "trajetoria": "TECNOLOGICA",
+  "nivel": "ESPECIALISTA II",
+  "grupo": "GRUPO 02",
+  "inicio": 16382.21,
+  "fim": 24573.32
+ }
+]

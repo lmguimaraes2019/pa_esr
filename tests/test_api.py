@@ -235,3 +235,44 @@ def test_origem_2027_nao_altera_2026(client):
     lista = {x["orcamento"]: x for x in client.get("/api/projetos").json()}
     assert lista[o]["origem"] == "Fomento" and lista[o]["origem_2026"] == "Associacao"
     client.patch(f"/api/projetos/{o}", json={"origem": "Associacao"})
+
+
+def test_headcount_formulas_da_planilha(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    assert len(h["tabela"]) == 42 and h["itens"] == []
+    orc = h["projetos"][0]["orcamento"]
+    # faixa PLENO GRUPO 01 da Gestão do Negócio: 6418,58 a 9627,88; posição 0 = início da faixa
+    r = client.post("/api/headcount", json={"orcamento": orc, "funcao": "Analista", "cargo": "Analista Pleno", "trajetoria": "GESTAO DO NEGOCIO",
+                                            "nivel": "PLENO", "grupo": "GRUPO 01", "posicao": 0, "mes_inicio": 7, "quantidade": 2,
+                                            "justificativa": "Demanda nova"})
+    assert r.status_code == 201
+    d = r.json()
+    assert d["custo"]["salario"] == 6418.58 and d["meses_2027"] == 6 and d["faltando"] == []
+    j = 6418.58
+    esperado = (j * 1.269044 + j * 0.09) + (22 * 35 + 299.77 + 1208.5158888888889 + j * 0.005811 + 100) \
+        + ((j / 30 * 10) / 12 + (j / 12 + (j / 30 * 10) / 12) / 3 + j / 12)
+    assert abs(d["custo"]["mensal"] - esperado) < 0.02 and abs(d["anualizado"] - esperado * 12 * 2) < 0.1
+    assert abs(d["custo_2027"] - esperado * 6 * 2) < 0.1
+    assert client.post("/api/headcount", json={"orcamento": orc, "trajetoria": "X", "nivel": "Y", "grupo": "Z"}).status_code == 422
+    assert client.delete(f"/api/headcount/{d['id']}").status_code == 200
+
+
+def test_eventos_calculam_viagem(client):
+    entrar(client)
+    e = client.get("/api/eventos").json()
+    assert e["tarifas"]
+    orc = e["projetos"][0]["orcamento"]
+    t = next(x for x in e["tarifas"] if x["tipo"] == "nac")
+    r = client.post("/api/eventos", json={"orcamento": orc, "nome": "Congresso X", "local": "Recife", "tipo": "nac", "mes": 5, "n_pessoas": 2,
+                                          "dias": 3, "inscricao": 1000, "origem": t["origem"], "destino": t["destino"], "pessoas": ["Ana"],
+                                          "justificativa": ""})
+    assert r.status_code == 201
+    d = r.json()
+    assert d["inscricao_total"] == 2000 and d["viagem"]["total"] > 0 and d["total"] == round(2000 + d["viagem"]["total"], 2)
+    assert "justificativa" in d["faltando"] and any("pessoas" in x for x in d["faltando"]) and not d["completo"]
+    r2 = client.put(f"/api/eventos/{d['id']}", json={**{k: d[k] for k in ("orcamento", "nome", "local", "tipo", "mes", "n_pessoas", "dias", "inscricao", "moeda", "origem", "destino")},
+                                                  "pessoas": ["Ana", "Bia"], "justificativa": "Divulgação"})
+    assert r2.json()["completo"] is True
+    assert client.get("/api/eventos").json()["totais"]["eventos"] == 1
+    assert client.delete(f"/api/eventos/{d['id']}").status_code == 200

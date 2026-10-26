@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("ORC_DATA_DIR", ROOT / "data"))
 DB_PATH = Path(os.environ.get("ORC_DB", DATA_DIR / "orcamento.db"))
+ASSETS_DIR = ROOT / "app" / "assets"
 TEMPLATE_PATH = Path(os.environ.get("ORC_TEMPLATE", ROOT / "app" / "assets" / "template_2027.xlsx"))
 WEB_DIST = Path(os.environ.get("ORC_WEB_DIST", ROOT / "web" / "dist"))
 

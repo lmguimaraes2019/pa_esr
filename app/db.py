@@ -83,6 +83,44 @@ CREATE TABLE IF NOT EXISTS receitas (
 );
 CREATE INDEX IF NOT EXISTS idx_receitas_ciclo_orc ON receitas (ciclo, orcamento);
 
+CREATE TABLE IF NOT EXISTS eventos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    orcamento TEXT NOT NULL REFERENCES projetos(orcamento),
+    nome TEXT NOT NULL DEFAULT '',
+    local TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT 'nac' CHECK (tipo IN ('nac','int')),
+    mes INTEGER NOT NULL DEFAULT 1,
+    n_pessoas INTEGER NOT NULL DEFAULT 1,
+    dias INTEGER NOT NULL DEFAULT 1,
+    pernoites INTEGER,
+    inscricao REAL,
+    moeda TEXT NOT NULL DEFAULT 'BRL' CHECK (moeda IN ('BRL','USD')),
+    origem TEXT NOT NULL DEFAULT '',
+    destino TEXT NOT NULL DEFAULT '',
+    pessoas TEXT NOT NULL DEFAULT '[]',
+    justificativa TEXT NOT NULL DEFAULT '',
+    atualizado_por TEXT NOT NULL DEFAULT '',
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS headcount (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    orcamento TEXT NOT NULL REFERENCES projetos(orcamento),
+    funcao TEXT NOT NULL DEFAULT '',
+    cargo TEXT NOT NULL DEFAULT '',
+    trajetoria TEXT NOT NULL,
+    nivel TEXT NOT NULL,
+    grupo TEXT NOT NULL,
+    posicao REAL NOT NULL DEFAULT 50,
+    mes_inicio INTEGER NOT NULL DEFAULT 1,
+    quantidade INTEGER NOT NULL DEFAULT 1,
+    justificativa TEXT NOT NULL DEFAULT '',
+    atualizado_por TEXT NOT NULL DEFAULT '',
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS hc_parametros (chave TEXT PRIMARY KEY, valor REAL NOT NULL);
+
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS execucao (
