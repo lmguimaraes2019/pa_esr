@@ -146,16 +146,16 @@ function DadosOrcamento({ d, admin, recarregar, setErro }) {
     <section className="cartao dados-orc">
       <h3>Dados do orçamento</h3>
       <div className="grade">
-        <label>Origem de recursos
+        <label>Origem de recursos em 2027
           <select value={origem} onChange={(e) => setOrigem(e.target.value)}>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
         {pode && <label>Nome do orçamento<input value={nome} onChange={(e) => setNome(e.target.value)} /></label>}
       </div>
       <div className="acoes">
-        <button className="primario" disabled={origem === p.origem} onClick={() => salvar({ origem }, `Origem alterada para ${origem}.`)}>Salvar origem</button>
+        <button className="primario" disabled={origem === p.origem} onClick={() => salvar({ origem }, `Origem de 2027 alterada para ${origem}. A de 2026 continua ${p.origem_2026}.`)}>Salvar origem</button>
         {pode && <button disabled={nome.trim() === p.descricao || nome.trim().length < 3} onClick={() => salvar({ descricao: nome }, "Nome atualizado.")}>Salvar nome</button>}
         {msg && <span className="ok">{msg}</span>}
       </div>
-      <p className="mudo">A origem define em qual coluna do Template do PMO e em qual grupo do resumo este orçamento aparece. A mudança vale para todas as linhas do orçamento e fica registrada no histórico.</p>
+      <p className="mudo">A mudança vale só para o plano de 2027: define a origem enviada no Template do PMO e o grupo do resumo e das receitas em 2027. {p.novo ? "" : <>Em 2026 este orçamento continua em <strong>{p.origem_2026}</strong>, e os valores aprovados e executados de 2026 não mudam. </>}A alteração fica registrada no histórico.</p>
     </section>
   );
 }
@@ -268,7 +268,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens }) {
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p></div>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>} · Projeto {p.n_projeto || "sem número"} · {p.origem}{!p.novo && p.origem !== p.origem_2026 && <span className="mudo"> (2026: {p.origem_2026})</span>} · {p.gerente}</p></div>
         {admin && !p.n_projeto && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
       </div>
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Entender 2026"], ["plano", "Planejar 2027"]]} />

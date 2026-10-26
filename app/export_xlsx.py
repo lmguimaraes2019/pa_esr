@@ -51,7 +51,7 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
     cols = ", ".join(f"l.{m}" for m in MESES)
     rows = conn.execute(
         f"SELECT l.id, l.orcamento, l.edt, l.tarefa, l.conta_codigo, {cols}, "
-        "p.n_projeto, p.descricao, p.origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
+        "p.n_projeto, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
         "FROM linhas l JOIN projetos p USING (orcamento) JOIN contas k ON k.codigo = l.conta_codigo "
         "WHERE l.ciclo = ? ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
 

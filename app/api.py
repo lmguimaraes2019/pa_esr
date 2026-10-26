@@ -15,6 +15,8 @@ from .db import MESES, NOMES_MESES, audit, connect, tx
 
 router = APIRouter(prefix="/api")
 SOMA_MESES = "+".join(MESES)
+# origem de recursos vigente em 2027 (a coluna "origem" guarda a de 2026 e nunca é alterada pelo plano)
+ORIGEM_27 = "COALESCE(NULLIF(p.origem_2027, ''), p.origem)"
 
 
 # ---------------------------------------------------------------- acesso
@@ -312,8 +314,9 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
             (SELECT COUNT(*) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS n_linhas,
             (SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=p.orcamento) AS realizado,
             (SELECT COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=p.orcamento) AS empenhado
-            FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, p.origem, p.descricao""", ids).fetchall()
-    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "origem", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
+            FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
+    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
+             "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
              "total_2027": _arred(r["t_plano"]), "realizado_2026": _arred(r["realizado"]),
              "empenhado_2026": _arred(r["empenhado"]),
@@ -339,8 +342,8 @@ def criar_projeto(dados: ProjetoNovo, u: dict = Depends(usuario_liberado)):
         n = 1 + max([int(r[0][4:]) for r in c.execute("SELECT orcamento FROM projetos WHERE orcamento LIKE 'N27-%'")
                      if r[0][4:].isdigit()] or [0])
         chave = f"N27-{n:03d}"
-        c.execute("INSERT INTO projetos (orcamento, n_projeto, descricao, origem, gerente, novo) VALUES (?,?,?,?,?,1)",
-                  (chave, "", dados.descricao.strip(), dados.origem, dados.gerente))
+        c.execute("INSERT INTO projetos (orcamento, n_projeto, descricao, origem, origem_2027, gerente, novo) VALUES (?,?,?,?,?,?,1)",
+                  (chave, "", dados.descricao.strip(), dados.origem, dados.origem, dados.gerente))
         if u["perfil"] != "admin":     # quem cria enxerga o que criou, mesmo sem acompanhar aquele gerente
             c.execute("INSERT OR IGNORE INTO user_projetos (user_id, orcamento) VALUES (?,?)", (u["id"], chave))
         audit(c, u["login"], "criou orçamento novo", chave, detalhe=f"{dados.descricao} | {dados.origem} | {dados.gerente}")
@@ -363,9 +366,13 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
                 raise HTTPException(422, "Gerente fora da lista do template.")
         if "descricao" in campos:
             campos["descricao"] = campos["descricao"].strip()
+        if "origem" in campos:      # a mudança vale só para 2027; a origem de 2026 fica como está (exceto em orçamento novo, que não tem 2026)
+            campos["origem_2027"] = campos.pop("origem")
+            if p["novo"]:
+                campos["origem"] = campos["origem_2027"]
         if campos:
             c.execute(f"UPDATE projetos SET {', '.join(k + '=?' for k in campos)} WHERE orcamento=?", (*campos.values(), orcamento))
-            antes = {k: p[k] for k in campos}
+            antes = {k: p[k] for k in campos if k in p.keys()}
             audit(c, u["login"], "editou projeto", orcamento, detalhe=f"{antes} para {campos}")
     return {"ok": True}
 
@@ -414,7 +421,8 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     casado_e = sum(x["empenhado"] for x in linhas)
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
-        "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "origem", "gerente", "diretoria")} | {"novo": bool(p["novo"])}
+        "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
+                   | {"novo": bool(p["novo"]), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
                    | {"original_2026": _arred(p["original_2026"])},
         "linhas": linhas, "passado": passado,
         "totais": {"plano": _arred(sum(x["total"] for x in linhas)),
@@ -613,8 +621,9 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     ids = sorted(permitidos(c, u))
     marks = ",".join("?" for _ in ids) or "''"
     por_origem = c.execute(
-        f"""SELECT p.origem, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN projetos p USING (orcamento)
-            WHERE l.orcamento IN ({marks}) GROUP BY p.origem, l.ciclo""", ids).fetchall()
+        f"""SELECT CASE WHEN l.ciclo = {config.CICLO_BASE} THEN p.origem ELSE {ORIGEM_27} END AS origem, l.ciclo, SUM({SOMA_MESES}) t
+            FROM linhas l JOIN projetos p USING (orcamento)
+            WHERE l.orcamento IN ({marks}) GROUP BY 1, l.ciclo""", ids).fetchall()
     por_grupo = c.execute(
         f"""SELECT k.grupo, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN contas k ON k.codigo=l.conta_codigo
             WHERE l.orcamento IN ({marks}) GROUP BY k.grupo, l.ciclo""", ids).fetchall()

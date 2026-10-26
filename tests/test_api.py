@@ -216,3 +216,22 @@ def test_orcamento_novo_e_mudanca_de_origem(client):
     assert client.patch(f"/api/projetos/{o}", json={"origem": "Xis"}).status_code == 422
     seg = client.get("/api/export/preflight").json()
     assert seg["bloqueado"] and any(o in (a["orcamento"] or "") for a in seg["avisos"])
+
+
+def test_origem_2027_nao_altera_2026(client):
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    p = next(x for x in ps if not x["novo"] and x["origem"] == "Associacao" and x["total_2026"] > 0)
+    o = p["orcamento"]
+    antes = {x["nome"]: x for x in client.get("/api/resumo").json()["por_origem"]}
+    assert client.patch(f"/api/projetos/{o}", json={"origem": "Fomento"}).status_code == 200
+    d = client.get(f"/api/projetos/{o}").json()["projeto"]
+    assert d["origem"] == "Fomento" and d["origem_2026"] == "Associacao"
+    depois = {x["nome"]: x for x in client.get("/api/resumo").json()["por_origem"]}
+    assert depois["Associacao"]["base"] == antes["Associacao"]["base"]          # 2026 intacto
+    assert depois["Fomento"]["base"] == antes["Fomento"]["base"]
+    assert round(depois["Associacao"]["plano"], 2) == round(antes["Associacao"]["plano"] - p["total_2027"], 2)
+    assert round(depois["Fomento"]["plano"], 2) == round(antes["Fomento"]["plano"] + p["total_2027"], 2)
+    lista = {x["orcamento"]: x for x in client.get("/api/projetos").json()}
+    assert lista[o]["origem"] == "Fomento" and lista[o]["origem_2026"] == "Associacao"
+    client.patch(f"/api/projetos/{o}", json={"origem": "Associacao"})

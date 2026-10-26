@@ -51,7 +51,7 @@ export default function Projetos({ abrir }) {
           <tr key={p.orcamento} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
             <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
             <td>{p.descricao} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
-            <td>{p.origem}</td><td>{p.gerente}</td>
+            <td>{p.origem}{p.origem !== p.origem_2026 && !p.novo && <><br /><span className="mudo">2026: {p.origem_2026}</span></>}</td><td>{p.gerente}</td>
             <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
             <td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td>
           </tr>))}</tbody>

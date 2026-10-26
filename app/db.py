@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS projetos (
     gerente TEXT NOT NULL,
     diretoria TEXT NOT NULL DEFAULT 'ESR',
     original_2026 REAL NOT NULL DEFAULT 0,
-    novo INTEGER NOT NULL DEFAULT 0
+    novo INTEGER NOT NULL DEFAULT 0,
+    origem_2027 TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS user_gerentes (
@@ -192,6 +193,8 @@ def init_db() -> None:
                       "SELECT id, gerente FROM users WHERE gerente IS NOT NULL AND gerente <> ''")
         if "novo" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamentos criados no app
             c.execute("ALTER TABLE projetos ADD COLUMN novo INTEGER NOT NULL DEFAULT 0")
+        if "origem_2027" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:   # migração: origem de recursos só do plano 2027
+            c.execute("ALTER TABLE projetos ADD COLUMN origem_2027 TEXT NOT NULL DEFAULT ''")
         cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}
         if "fonte" not in cols:      # migração: origem da linha ('manual' ou 'viagens')
             c.execute("ALTER TABLE linhas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'manual'")

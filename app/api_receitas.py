@@ -55,7 +55,7 @@ def _linha(r: sqlite3.Row, ref: sqlite3.Row | None) -> dict:
     return out
 
 
-_SQL = f"""SELECT r.*, p.descricao AS projeto, p.origem, p.gerente FROM receitas r JOIN projetos p USING (orcamento)
+_SQL = f"""SELECT r.*, p.descricao AS projeto, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente FROM receitas r JOIN projetos p USING (orcamento)
            WHERE r.ciclo = ?"""
 
 
@@ -63,7 +63,7 @@ _SQL = f"""SELECT r.*, p.descricao AS projeto, p.origem, p.gerente FROM receitas
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     ids = sorted(permitidos(c, u))
     marks = ",".join("?" for _ in ids) or "''"
-    rows = c.execute(_SQL + f" AND r.orcamento IN ({marks}) ORDER BY p.origem, r.orcamento, r.fonte, r.id",
+    rows = c.execute(_SQL + f" AND r.orcamento IN ({marks}) ORDER BY origem, r.orcamento, r.fonte, r.id",
                      (config.CICLO_PLANO, *ids)).fetchall()
     refs = {r["id"]: r for r in c.execute("SELECT * FROM receitas WHERE ciclo=?", (config.CICLO_BASE,))}
     linhas = [_linha(r, refs.get(r["base_id"])) for r in rows]
@@ -81,7 +81,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         f"SELECT {', '.join(f'COALESCE(SUM({m}),0) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks})",
         (config.CICLO_PLANO, *ids)).fetchone()
     projetos = {r["orcamento"]: r for r in c.execute(
-        f"SELECT orcamento, descricao, origem, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
+        f"SELECT orcamento, descricao, COALESCE(NULLIF(origem_2027, ''), origem) AS origem, origem AS origem_2026, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
 
     rec_proj: dict[str, float] = {}
     ref_proj: dict[str, float] = {}
@@ -100,10 +100,13 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         por_projeto.append({"orcamento": o, "projeto": p["descricao"], "origem": p["origem"], "gerente": p["gerente"],
                             "receita": _arred(rec), "receita_2026": _arred(ref), "despesa": desp,
                             "despesa_2026": despesa_base.get(o, 0.0), "resultado": _arred(rec - desp)})
-        d = por_origem.setdefault(p["origem"], {"origem": p["origem"], "receita": 0.0, "receita_2026": 0.0, "despesa": 0.0,
-                                                "despesa_2026": 0.0, "projetos": 0})
-        d["receita"] += rec; d["receita_2026"] += ref; d["despesa"] += desp; d["despesa_2026"] += despesa_base.get(o, 0.0)
-        d["projetos"] += 1
+        # 2027 entra na origem vigente em 2027; os valores de 2026 ficam na origem que o projeto tinha em 2026
+        d27 = por_origem.setdefault(p["origem"], {"origem": p["origem"], "receita": 0.0, "receita_2026": 0.0, "despesa": 0.0,
+                                                  "despesa_2026": 0.0, "projetos": 0})
+        d26 = por_origem.setdefault(p["origem_2026"], {"origem": p["origem_2026"], "receita": 0.0, "receita_2026": 0.0, "despesa": 0.0,
+                                                       "despesa_2026": 0.0, "projetos": 0})
+        d27["receita"] += rec; d27["despesa"] += desp; d27["projetos"] += 1
+        d26["receita_2026"] += ref; d26["despesa_2026"] += despesa_base.get(o, 0.0)
     for d in por_origem.values():
         for k in ("receita", "receita_2026", "despesa", "despesa_2026"):
             d[k] = _arred(d[k])
