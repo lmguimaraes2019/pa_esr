@@ -78,6 +78,10 @@ function Passado({ d, irPlano, recarregar, setErro }) {
   const t = d.totais;
   const grupos = useMemo(() => agrupar(d.passado), [d]);
   const exec = t.realizado + t.empenhado;
+  const restaurarGrupo = async (edt, tarefa) => {
+    try { setErro(""); await api(`/projetos/${d.projeto.orcamento}/linhas/restaurar?` + new URLSearchParams(tarefa === undefined ? { edt } : { edt, tarefa }), { method: "POST" }); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  const faltam = (edt, tarefa) => d.passado.filter((x) => x.removida && x.edt === edt && (tarefa === undefined || x.tarefa === tarefa)).length;
   return (
     <>
       <div className="nota">Esta é a fotografia de 2026: o que foi aprovado, o que já foi realizado e empenhado, e o que cada linha virou no plano de 2027. Os valores de 2026 não são editáveis; o realizado e o empenhado vêm da importação da base do Protheus. Uma linha excluída do plano de 2027 aparece como "removida" e pode ser trazida de volta.</div>
@@ -93,9 +97,13 @@ function Passado({ d, irPlano, recarregar, setErro }) {
           <thead><tr><th>Conta</th><th className="n">Aprovado</th><th className="n">Realizado</th><th className="n">Empenhado</th><th className="n">Saldo</th><th className="n">% exec.</th><th className="n">Em 2027</th><th>Situação</th>
             {meses && MESES.map((m) => <th key={m} className="n">{m}</th>)}</tr></thead>
           <tbody>
-            {grupos.map(([k, ls]) => (
+            {grupos.map(([k, ls], gi) => (
               <React.Fragment key={k}>
-                <tr className="grupo" style={{ background: "var(--azul-claro)" }}><td colSpan={8 + (meses ? 12 : 0)} style={{ fontWeight: 800, color: "var(--azul)" }}>{k}</td></tr>
+                {(gi === 0 || grupos[gi - 1][1][0].edt !== ls[0].edt) && (
+                  <tr className="meta"><td colSpan={8 + (meses ? 12 : 0)}><span className="rotulo-nivel">Meta/EDT</span> {ls[0].edt}
+                    {faltam(ls[0].edt) > 0 && <button className="link" onClick={() => restaurarGrupo(ls[0].edt)}>trazer de volta a Meta/EDT ({faltam(ls[0].edt)} linha(s) removida(s))</button>}</td></tr>)}
+                <tr className="grupo" style={{ background: "var(--azul-claro)" }}><td colSpan={8 + (meses ? 12 : 0)} style={{ fontWeight: 800, color: "var(--azul)" }}><span className="rotulo-nivel">Ação/Tarefa</span> {ls[0].tarefa}
+                  {faltam(ls[0].edt, ls[0].tarefa) > 0 && <button className="link" onClick={() => restaurarGrupo(ls[0].edt, ls[0].tarefa)}>trazer de volta a ação ({faltam(ls[0].edt, ls[0].tarefa)} linha(s) removida(s))</button>}</td></tr>
                 {ls.map((l) => (
                   <tr key={l.id}>
                     <td><span className="mudo">{l.grupo}</span><br />{l.conta_desc}</td>
@@ -134,6 +142,12 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
     if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)}) do orçamento de 2027? A linha de 2026 continua visível no passo "Entender 2026" e pode ser trazida de volta.`)) return;
     try { await api(`/linhas/${l.id}`, { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
   };
+  const excluirGrupo = async (edt, tarefa) => {
+    const alvo = d.linhas.filter((l) => l.edt === edt && (tarefa === undefined || l.tarefa === tarefa));
+    const nome = tarefa === undefined ? `a Meta/EDT "${edt}" inteira (todas as ações)` : `a ação "${edt} | ${tarefa}"`;
+    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${alvo.length} linha(s), ${fmt(alvo.reduce((a, l) => a + l.total, 0))}.\nAs linhas de 2026 continuam em "Entender 2026" e podem ser trazidas de volta.`)) return;
+    try { setErro(""); await api(`/projetos/${d.projeto.orcamento}/linhas?` + new URLSearchParams(tarefa === undefined ? { edt } : { edt, tarefa }), { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
+  };
   const visiveis = d.linhas.filter((l) =>
     filtro === "todas" ? true : filtro === "ajustes" ? ["ajustada", "nova"].includes(l.status)
     : filtro === "alerta" ? l.alertas.length > 0 : l.status === filtro);
@@ -156,15 +170,19 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
           {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
         <button className="destaque" onClick={() => { setEditando(null); setNova(true); setTimeout(() => document.getElementById("form-nova")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>+ Nova linha</button>
       </div>
-      <p className="legenda-icones"><span><Lapis /> editar a linha inteira</span><span className="perigo"><Lixeira /> excluir de 2027</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
+      <p className="legenda-icones"><span><Lapis /> editar a linha inteira</span><span className="perigo"><Lixeira /> excluir de 2027 (na linha, na ação ou na Meta/EDT inteira)</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
       <div className="rolagem">
         <table className="tab grid">
           <thead><tr><th className="col-acoes">Ações</th><th className="col-conta">Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th></tr></thead>
           <tbody>
             {grupos.length === 0 && <tr><td colSpan={16} className="mudo">Nenhuma linha neste filtro.</td></tr>}
-            {grupos.map(([k, ls]) => (
+            {grupos.map(([k, ls], gi) => (
               <React.Fragment key={k}>
-                <tr className="grupo"><td className="col-acoes" /><td className="col-conta" colSpan={15}>{k}</td></tr>
+                {(gi === 0 || grupos[gi - 1][1][0].edt !== ls[0].edt) && (
+                  <tr className="meta"><td className="col-acoes"><div className="barra-icones"><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir toda a Meta/EDT (todas as ações)" onClick={() => excluirGrupo(ls[0].edt)} /></div></td>
+                    <td className="col-conta" colSpan={15}><span className="rotulo-nivel">Meta/EDT</span> {ls[0].edt}</td></tr>)}
+                <tr className="grupo"><td className="col-acoes"><div className="barra-icones"><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta Ação/Tarefa" onClick={() => excluirGrupo(ls[0].edt, ls[0].tarefa)} /></div></td>
+                  <td className="col-conta" colSpan={15}><span className="rotulo-nivel">Ação/Tarefa</span> {ls[0].tarefa}</td></tr>
                 {ls.map((l) => (
                   <React.Fragment key={l.id}>
                     <tr className={l.status}>

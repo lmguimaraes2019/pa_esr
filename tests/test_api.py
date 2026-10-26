@@ -182,3 +182,16 @@ def test_receitas(client):
     t = client.get("/api/receitas").json()["totais"]
     assert t["receita"] == 6000000 + 2000
     assert client.delete(f"/api/receitas/{rid}").status_code == 200
+
+
+def test_excluir_e_restaurar_grupo(client):
+    entrar(client)
+    p = client.get("/api/projetos").json()[0]["orcamento"]
+    d = client.get(f"/api/projetos/{p}").json()
+    l = next(x for x in d["linhas"] if x["fonte"] != "viagens")
+    n = sum(1 for x in d["linhas"] if x["edt"] == l["edt"])
+    r = client.delete(f"/api/projetos/{p}/linhas", params={"edt": l["edt"]})
+    assert r.status_code == 200 and r.json()["linhas"] == n
+    assert client.delete(f"/api/projetos/{p}/linhas", params={"edt": l["edt"]}).status_code == 404
+    assert client.post(f"/api/projetos/{p}/linhas/restaurar", params={"edt": l["edt"]}).json()["linhas"] == n
+    assert client.post(f"/api/projetos/{p}/linhas/restaurar", params={"edt": l["edt"]}).json()["linhas"] == 0

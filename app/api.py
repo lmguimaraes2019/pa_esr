@@ -452,6 +452,47 @@ def excluir_linha(linha_id: int, u: dict = Depends(usuario_liberado)):
     return {"ok": True}
 
 
+@router.delete("/projetos/{orcamento}/linhas")
+def excluir_grupo(orcamento: str, edt: str, tarefa: str | None = None, u: dict = Depends(usuario_liberado)):
+    """Exclui do plano de 2027 todas as linhas de uma Meta/EDT (ou só de uma Ação/Tarefa dela)."""
+    with tx() as c:
+        exige_acesso(c, u, orcamento)
+        filtro, args = "ciclo=? AND orcamento=? AND edt=?", [config.CICLO_PLANO, orcamento, edt]
+        if tarefa is not None:
+            filtro += " AND tarefa=?"; args.append(tarefa)
+        alvo = c.execute(f"SELECT * FROM linhas WHERE {filtro}", args).fetchall()
+        if not alvo:
+            raise HTTPException(404, "Nenhuma linha encontrada nesse grupo.")
+        if any(r["fonte"] == "viagens" for r in alvo):
+            raise HTTPException(409, "O grupo tem linhas do plano de viagens. Altere o plano na aba Viagens ou exclua as outras linhas uma a uma.")
+        total = _arred(sum(sum(r[m] for m in MESES) for r in alvo))
+        c.execute(f"DELETE FROM linhas WHERE {filtro}", args)
+        audit(c, u["login"], "excluiu grupo de linhas", orcamento, None,
+              f"{edt}{' / ' + tarefa if tarefa is not None else ''}: {len(alvo)} linhas, {total}")
+    return {"ok": True, "linhas": len(alvo), "total": total}
+
+
+@router.post("/projetos/{orcamento}/linhas/restaurar")
+def restaurar_grupo(orcamento: str, edt: str, tarefa: str | None = None, u: dict = Depends(usuario_liberado)):
+    """Traz de volta ao plano de 2027 as linhas de 2026 de uma Meta/EDT (ou Ação/Tarefa) que foram excluídas."""
+    with tx() as c:
+        exige_acesso(c, u, orcamento)
+        filtro, args = "b.ciclo=? AND b.orcamento=? AND b.edt=?", [config.CICLO_BASE, orcamento, edt]
+        if tarefa is not None:
+            filtro += " AND b.tarefa=?"; args.append(tarefa)
+        faltam = c.execute(f"SELECT b.* FROM linhas b WHERE {filtro} AND NOT EXISTS "
+                           f"(SELECT 1 FROM linhas p WHERE p.base_id=b.id AND p.ciclo=?)", (*args, config.CICLO_PLANO)).fetchall()
+        for b in faltam:
+            c.execute(
+                f"INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, {', '.join(MESES)}, base_id, atualizado_por) "
+                f"VALUES (?,?,?,?,?,{', '.join('?' for _ in MESES)},?,?)",
+                (config.CICLO_PLANO, b["orcamento"], b["edt"], b["tarefa"], b["conta_codigo"], *[b[m] for m in MESES], b["id"], u["login"]))
+        if faltam:
+            audit(c, u["login"], "restaurou grupo de 2026", orcamento, None,
+                  f"{edt}{' / ' + tarefa if tarefa is not None else ''}: {len(faltam)} linhas")
+    return {"ok": True, "linhas": len(faltam)}
+
+
 @router.post("/linhas/{base_id}/restaurar", status_code=201)
 def restaurar_linha(base_id: int, u: dict = Depends(usuario_liberado)):
     """Traz de volta para 2027 uma linha aprovada em 2026 que foi excluída do plano."""

@@ -145,3 +145,11 @@ button.icone:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
 .subnav button:hover{color:var(--azul);background:none}
 .subnav button.on{color:var(--azul);border-bottom-color:var(--laranja)}
 .res-neg{color:#B42318}.res-pos{color:var(--ok)}.kpi.rneg strong{color:#B42318}.kpi.rpos strong{color:var(--ok)}
+
+.rotulo-nivel{display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;margin-right:8px;border-radius:999px;background:#fff;color:var(--cinza);border:1px solid var(--bd);vertical-align:1px}
+.tab tr.meta td{background:var(--azul);color:#fff;font-weight:800;border-bottom:0}
+.tab tr.meta .rotulo-nivel{background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.35)}
+.tab tr.meta button.link{color:var(--laranja);margin-left:12px}
+.grid tr.meta .col-acoes,.grid tr.meta .col-conta{background:var(--azul);color:#fff}
+.grid tr.meta button.icone{background:#fff}
+.tab tr.grupo button.link{margin-left:12px;font-weight:600}
