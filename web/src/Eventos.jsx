@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
-import { Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { TarefaOrc, Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
@@ -31,7 +31,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
     try {
       await onSalvar({ orcamento: f.orcamento, nome: f.nome, local: f.local, tipo: f.tipo, mes: Number(f.mes), n_pessoas: n, dias: Number(f.dias),
         pernoites: f.pernoites === "" ? null : Number(f.pernoites), inscricao: f.inscricao === "" ? null : insc, moeda: f.moeda,
-        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa });
+        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "" });
       onFechar();
     } catch (x) { setErro(x.message); }
   };
@@ -40,31 +40,32 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       <h3>{f.id ? "Editar evento" : "Novo evento 2027"}</h3>
       <p className="mudo">Campos com <Obrig /> são necessários para o evento ser considerado completo. Você pode salvar agora e completar depois.</p>
       <div className="grade">
-        <label>Projeto que custeia <Obrig /><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
+        <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "" }))} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
-        <label>Nome do evento <Obrig /><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
-        <label>Local (cidade e país) <Obrig /><input value={f.local} onChange={(e) => set("local", e.target.value)} placeholder="ex.: Recife, Brasil" /></label>
-        <label>Abrangência <Obrig /><select value={f.tipo} onChange={(e) => setF((x) => ({ ...x, tipo: e.target.value, origem: "", destino: "" }))}>
+        <TarefaOrc dados={dados} orcamento={f.orcamento} edt={f.edt} tarefa={f.tarefa} onChange={(a, b) => setF((x) => ({ ...x, edt: a, tarefa: b }))} />
+        <label><span>Nome do evento <Obrig /></span><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
+        <label><span>Local (cidade e país) <Obrig /></span><input value={f.local} onChange={(e) => set("local", e.target.value)} placeholder="ex.: Recife, Brasil" /></label>
+        <label><span>Abrangência <Obrig /></span><select value={f.tipo} onChange={(e) => setF((x) => ({ ...x, tipo: e.target.value, origem: "", destino: "" }))}>
           <option value="nac">Nacional</option><option value="int">Internacional</option></select></label>
         <label>Mês do evento<select value={f.mes} onChange={(e) => set("mes", e.target.value)}>{MESES_N.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></label>
-        <label>Quantas pessoas participam <Obrig /><input type="number" min="1" max="200" value={f.n_pessoas} onChange={(e) => set("n_pessoas", e.target.value)} required /></label>
-        <label>Quantos dias <Obrig /><input type="number" min="1" max="60" value={f.dias} onChange={(e) => set("dias", e.target.value)} required /></label>
+        <label><span>Quantas pessoas participam <Obrig /></span><input type="number" min="1" max="200" value={f.n_pessoas} onChange={(e) => set("n_pessoas", e.target.value)} required /></label>
+        <label><span>Quantos dias <Obrig /></span><input type="number" min="1" max="60" value={f.dias} onChange={(e) => set("dias", e.target.value)} required /></label>
         <label>Pernoites (opcional)<input type="number" min="0" value={f.pernoites} placeholder={`padrão ${Math.max(Number(f.dias) - 1, 0)}`} onChange={(e) => set("pernoites", e.target.value)} /></label>
       </div>
       <h4 className="sub">Custo de inscrição</h4>
       <div className="grade">
-        <label>Valor por pessoa <Obrig /><input value={f.inscricao} inputMode="decimal" onChange={(e) => set("inscricao", e.target.value)} placeholder="0 se for gratuito" /></label>
+        <label><span>Valor por pessoa <Obrig /></span><input value={f.inscricao} inputMode="decimal" onChange={(e) => set("inscricao", e.target.value)} placeholder="0 se for gratuito" /></label>
         <label>Moeda<select value={f.moeda} onChange={(e) => set("moeda", e.target.value)}><option value="BRL">Real (R$)</option><option value="USD">Dólar (US$, câmbio {fmtN(dados.dolar)})</option></select></label>
       </div>
       <h4 className="sub">Viagem <span className="mudo">calculada com as tarifas da aba Viagens</span></h4>
       <div className="grade">
-        <label>Origem <Obrig /><select value={f.origem} onChange={(e) => setF((x) => ({ ...x, origem: e.target.value, destino: "" }))}><option value="">Selecione…</option>{origens.map((o) => <option key={o}>{o}</option>)}</select></label>
-        <label>Destino <Obrig /><select value={f.destino} onChange={(e) => set("destino", e.target.value)}><option value="">Selecione…</option>{destinos.map((o) => <option key={o}>{o}</option>)}</select></label>
+        <label><span>Origem <Obrig /></span><select value={f.origem} onChange={(e) => setF((x) => ({ ...x, origem: e.target.value, destino: "" }))}><option value="">Selecione…</option>{origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+        <label><span>Destino <Obrig /></span><select value={f.destino} onChange={(e) => set("destino", e.target.value)}><option value="">Selecione…</option>{destinos.map((o) => <option key={o}>{o}</option>)}</select></label>
       </div>
       <h4 className="sub">Quem participa <Obrig /></h4>
       <div className="grade">{pessoas.map((nome, i) => (
         <label key={i}>Pessoa {i + 1}<input value={nome} onChange={(e) => setF((x) => { const p = [...pessoas]; p[i] = e.target.value; return { ...x, pessoas: p }; })} /></label>))}</div>
-      <label>Justificativa <Obrig /><textarea rows={3} value={f.justificativa} onChange={(e) => set("justificativa", e.target.value)} placeholder="Por que a ESR deve participar? Qual o resultado esperado?" /></label>
+      <label><span>Justificativa <Obrig /></span><textarea rows={3} value={f.justificativa} onChange={(e) => set("justificativa", e.target.value)} placeholder="Por que a ESR deve participar? Qual o resultado esperado?" /></label>
       <div className="resumo-custo">
         <span>Inscrições <strong>{fmt(inscBrl)}</strong></span><span>Viagem <strong>{tarifa ? fmt(viagem) : "defina origem e destino"}</strong></span>
         <span>Total do evento <strong>{fmt(inscBrl + viagem)}</strong></span>
@@ -85,7 +86,7 @@ export default function Eventos({ irProjeto }) {
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "" };
+  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "" };
   const lista = dados.itens.filter((e) => (proj === "todos" || e.orcamento === proj) && (!soPend || !e.completo));
   const abrir = (e) => { setForm(e); setTimeout(() => document.getElementById("form-evento")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/eventos/${form.id}`, { method: "PUT", body: b }); else await api("/eventos", { method: "POST", body: b }); carregar(); };
@@ -125,7 +126,7 @@ export default function Eventos({ irProjeto }) {
               <td>{MESES_N[e.mes - 1].slice(0, 3)}</td>
               <td><strong>{e.nome || <span className="up">sem nome</span>}</strong> <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span><br /><span className="mudo">{e.local || "local não informado"}</span>
                 {e.justificativa && <><br /><span className="mudo" title={e.justificativa}>{e.justificativa.length > 90 ? e.justificativa.slice(0, 90) + "…" : e.justificativa}</span></>}</td>
-              <td><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button><br /><span className="mudo">{e.projeto}</span></td>
+              <td><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button><br /><span className="mudo">{e.projeto}</span>{e.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {e.tarefa}</span></>}</td>
               <td className="n">{e.n_pessoas}<br /><span className="mudo" style={{ fontSize: ".75rem" }}>{e.pessoas.join(", ")}</span></td>
               <td className="n">{e.dias}</td>
               <td className="n">{fmtN(e.inscricao_total)}{e.moeda === "USD" && <><br /><span className="mudo">US$ {fmtN(e.inscricao)} por pessoa</span></>}</td>

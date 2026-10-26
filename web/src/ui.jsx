@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { fmt, fmtN, lerNumero } from "./api.js";
 
 export function Kpi({ rotulo, valor, sub, tom }) {
@@ -50,4 +50,21 @@ export const Desfazer = () => svg(<><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0
 /** Botão de ícone com dica (title) e rótulo acessível. tom: "perigo" deixa vermelho. */
 export function BotaoIcone({ icone, dica, tom, onClick, desligado }) {
   return <button type="button" className={"icone" + (tom ? " " + tom : "")} title={dica} aria-label={dica} disabled={desligado} onClick={onClick}>{icone}</button>;
+}
+
+/** Escolha da tarefa do orçamento que recebe o valor (Eventos e Headcount). Sugere sozinha quando só uma combina. */
+export function TarefaOrc({ dados, orcamento, edt, tarefa, onChange }) {
+  const info = dados.tarefas?.[orcamento];
+  const lista = info?.lista || [];
+  useEffect(() => { if (orcamento && !edt && !tarefa && info?.sugestao) onChange(info.sugestao.edt, info.sugestao.tarefa); }, [orcamento]); // eslint-disable-line
+  const valor = edt || tarefa ? JSON.stringify([edt, tarefa]) : "";
+  return (
+    <label><span>Tarefa do orçamento que recebe o valor <span className="obrig" title="Informação obrigatória">*</span></span>
+      <select value={valor} disabled={!orcamento} onChange={(e) => { const [a, b] = e.target.value ? JSON.parse(e.target.value) : ["", ""]; onChange(a, b); }}>
+        <option value="">{orcamento ? "Selecione…" : "Escolha o projeto primeiro"}</option>
+        {lista.map((t) => <option key={t.edt + t.tarefa} value={JSON.stringify([t.edt, t.tarefa])}>{t.edt} | {t.tarefa}</option>)}
+      </select>
+      <small className="mudo">O valor entra no orçamento 2027 do projeto, nesta tarefa, como linha bloqueada.</small>
+    </label>
+  );
 }

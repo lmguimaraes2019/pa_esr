@@ -230,6 +230,8 @@ def gravar_premissas(dados: PremissasIn, u: dict = Depends(exige_admin)):
         for chave, valor in enviados.items():
             c.execute("UPDATE premissas SET valor=? WHERE chave=?", (valor, chave))
         audit(c, u["login"], "alterou premissas", detalhe=str(enviados))
+        from . import sync
+        sync.sincronizar_todos(c, u["login"])      # câmbio e reajuste de pessoal mudam eventos e headcount
     return {"ok": True}
 
 
@@ -245,7 +247,7 @@ def aplicar_premissas(dados: AplicarIn, u: dict = Depends(exige_admin)):
         sql = (f"SELECT l.id, l.orcamento, l.editada, k.grupo, {', '.join('l.' + m for m in MESES)}, "
                f"{', '.join('b.' + m + ' AS b_' + m for m in MESES)} "
                "FROM linhas l JOIN linhas b ON b.id = l.base_id JOIN contas k ON k.codigo = l.conta_codigo "
-               "WHERE l.ciclo = ? AND l.fonte <> 'viagens'")
+               "WHERE l.ciclo = ? AND l.fonte NOT IN ('viagens','eventos','headcount')")
         antes = depois = 0.0
         afetadas = ignoradas_editadas = 0
         for r in c.execute(sql, (config.CICLO_PLANO,)).fetchall():
@@ -278,8 +280,8 @@ def _linha(r: sqlite3.Row) -> dict:
         ref = {"meses": rm, "total": _arred(sum(rm))}
     realizado, empenhado = _arred(r["realizado"] or 0), _arred(r["empenhado"] or 0)
     executado = _arred(realizado + empenhado)
-    if r["fonte"] == "viagens":
-        status = "viagens"
+    if r["fonte"] in ("viagens", "eventos", "headcount"):
+        status = "viagens"      # linhas bloqueadas, que vêm de outra página
     elif ref is None:
         status = "nova"
     elif meses == ref["meses"]:
@@ -465,6 +467,9 @@ def _linha_do_usuario(c: sqlite3.Connection, u: dict, linha_id: int) -> sqlite3.
 def _trava_viagens(linha: sqlite3.Row, altera_valor: bool) -> None:
     if linha["fonte"] == "viagens" and altera_valor:
         raise HTTPException(409, "Esta linha vem do plano de viagens. Altere o plano na aba Viagens e aplique de novo ao orçamento.")
+    if linha["fonte"] in ("eventos", "headcount") and altera_valor:
+        pag = "Eventos" if linha["fonte"] == "eventos" else "Headcount"
+        raise HTTPException(409, f"Esta linha vem da página {pag}. Altere lá e o orçamento acompanha.")
 
 
 @router.put("/linhas/{linha_id}")
@@ -517,8 +522,8 @@ def excluir_grupo(orcamento: str, edt: str, tarefa: str | None = None, u: dict =
         alvo = c.execute(f"SELECT * FROM linhas WHERE {filtro}", args).fetchall()
         if not alvo:
             raise HTTPException(404, "Nenhuma linha encontrada nesse grupo.")
-        if any(r["fonte"] == "viagens" for r in alvo):
-            raise HTTPException(409, "O grupo tem linhas do plano de viagens. Altere o plano na aba Viagens ou exclua as outras linhas uma a uma.")
+        if any(r["fonte"] in ("viagens", "eventos", "headcount") for r in alvo):
+            raise HTTPException(409, "O grupo tem linhas que vêm de Viagens, Eventos ou Headcount. Altere nessas páginas ou exclua as outras linhas uma a uma.")
         total = _arred(sum(sum(r[m] for m in MESES) for r in alvo))
         c.execute(f"DELETE FROM linhas WHERE {filtro}", args)
         audit(c, u["login"], "excluiu grupo de linhas", orcamento, None,
@@ -658,7 +663,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
             f"SELECT l.fonte, l.base_id, {', '.join('l.' + m for m in MESES)}, {', '.join('b.' + m + ' AS b_' + m for m in MESES)} "
             f"FROM linhas l LEFT JOIN linhas b ON b.id = l.base_id WHERE l.ciclo=? AND l.orcamento IN ({marks})",
             (config.CICLO_PLANO, *ids)):
-        if r["fonte"] == "viagens":
+        if r["fonte"] in ("viagens", "eventos", "headcount"):
             status["viagens"] += 1
         elif r["base_id"] is None:
             status["nova"] += 1

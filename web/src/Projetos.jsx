@@ -37,7 +37,7 @@ export default function Projetos({ abrir }) {
   const soma = (k) => ps.reduce((a, p) => a + p[k], 0);
   return (
     <>
-      <div className="cab"><div><h2>Orçamento 2027 por projeto</h2>
+      <div className="cab"><div><h2>Despesas do plano 2027 por projeto</h2>
         <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027.</p></div>
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}

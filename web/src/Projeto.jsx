@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ResumoProjeto } from "./Planejamento.jsx";
 import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
 import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer } from "./ui.jsx";
 
 function EditarLinha({ l, contas, onSalvar, onFechar }) {
-  const trava = l.fonte === "viagens";
+  const trava = l.fonte !== "manual";
+  const ORIGEM_TRAVA = { viagens: "do plano de viagens", eventos: "da página Eventos", headcount: "da página Headcount" };
   const [f, setF] = useState({ edt: l.edt, tarefa: l.tarefa, conta_codigo: l.conta_codigo, obs: l.obs || "" });
   const [meses, setMeses] = useState(l.meses.map((v) => (v ? String(v).replace(".", ",") : "")));
   const [erro, setErro] = useState("");
@@ -17,7 +19,7 @@ function EditarLinha({ l, contas, onSalvar, onFechar }) {
   return (
     <form className="cartao" id="form-linha" onSubmit={salvar}>
       <h3>Editar linha: {l.tarefa} | {l.conta_desc}</h3>
-      {trava && <div className="nota aviso">Esta linha vem do plano de viagens. Só a observação pode ser alterada aqui; os valores mudam na aba Viagens.</div>}
+      {trava && <div className="nota aviso">Esta linha vem {ORIGEM_TRAVA[l.fonte]}. Só a observação pode ser alterada aqui; os valores mudam lá.</div>}
       <div className="grade">
         <label>Meta/EDT<input value={f.edt} disabled={trava} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
         <label>Ação/Tarefa<input value={f.tarefa} disabled={trava} onChange={(e) => setF({ ...f, tarefa: e.target.value })} required /></label>
@@ -127,7 +129,7 @@ function Passado({ d, irPlano, recarregar, setErro }) {
 }
 
 /* ---------------------------------------------------------------- passo 2: o que muda em 2027 */
-const FILTROS = [["todas", "Todas"], ["ajustes", "Ajustadas e novas"], ["mantida", "Mantidas de 2026"], ["viagens", "Do plano de viagens"], ["alerta", "Com alerta"]];
+const FILTROS = [["todas", "Todas"], ["ajustes", "Ajustadas e novas"], ["mantida", "Mantidas de 2026"], ["viagens", "Vindas de Viagens, Eventos e Headcount"], ["alerta", "Com alerta"]];
 
 function DadosOrcamento({ d, admin, recarregar, setErro }) {
   const p = d.projeto;
@@ -170,13 +172,13 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   };
   const salvarMeses = (l, i, v) => { const meses = [...l.meses]; meses[i] = v; trocar(l, { meses }); };
   const excluir = async (l) => {
-    if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)}) do orçamento de 2027? A linha de 2026 continua visível no passo "Entender 2026" e pode ser trazida de volta.`)) return;
+    if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)}) do orçamento de 2027? A linha de 2026 continua visível no passo "Passado 2026" e pode ser trazida de volta.`)) return;
     try { await api(`/linhas/${l.id}`, { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
   };
   const excluirGrupo = async (edt, tarefa) => {
     const alvo = d.linhas.filter((l) => l.edt === edt && (tarefa === undefined || l.tarefa === tarefa));
     const nome = tarefa === undefined ? `a Meta/EDT "${edt}" inteira (todas as ações)` : `a ação "${edt} | ${tarefa}"`;
-    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${alvo.length} linha(s), ${fmt(alvo.reduce((a, l) => a + l.total, 0))}.\nAs linhas de 2026 continuam em "Entender 2026" e podem ser trazidas de volta.`)) return;
+    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${alvo.length} linha(s), ${fmt(alvo.reduce((a, l) => a + l.total, 0))}.\nAs linhas de 2026 continuam em "Passado 2026" e podem ser trazidas de volta.`)) return;
     try { setErro(""); await api(`/projetos/${d.projeto.orcamento}/linhas?` + new URLSearchParams(tarefa === undefined ? { edt } : { edt, tarefa }), { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
   };
   const visiveis = d.linhas.filter((l) =>
@@ -195,7 +197,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
       </div>
       {t.alertas > 0 && <div className="nota aviso"><strong>{t.alertas} linha(s) pedem atenção.</strong> Em 2026 o executado ficou acima do aprovado ou abaixo de metade dele. Use o filtro "Com alerta" para revisar.</div>}
       {t.removidas > 0 && <div className="nota aviso">{t.removidas} linha(s) de 2026 não existem mais no plano de 2027 (veja no passo 1, situação "removida").</div>}
-      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Cada alteração fica registrada com o seu usuário. Linhas do plano de viagens são alteradas na aba <button className="link" onClick={irViagens}>Viagens</button>.</p>
+      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Cada alteração fica registrada com o seu usuário. Linhas de Viagens, Eventos e Headcount são alteradas nas etapas próprias do plano (menu acima), por exemplo em <button className="link" onClick={irViagens}>Viagens</button>.</p>
       <div className="barra-ferramentas">
       <div className="filtros">{FILTROS.map(([k, n]) => (
         <button key={k} className={filtro === k ? "on" : ""} onClick={() => setFiltro(k)}>
@@ -221,7 +223,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                       <td className="col-acoes">
                         <div className="barra-icones">
                           <BotaoIcone icone={<Lapis />} dica="Editar a linha inteira" onClick={() => { setNova(false); setEditando(l); setTimeout(() => document.getElementById("form-linha")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
-                          <BotaoIcone icone={<Lixeira />} tom="perigo" desligado={l.fonte === "viagens"} dica={l.fonte === "viagens" ? "Linha do plano de viagens: altere o plano na aba Viagens" : "Excluir esta linha de 2027"} onClick={() => excluir(l)} />
+                          <BotaoIcone icone={<Lixeira />} tom="perigo" desligado={l.fonte !== "manual"} dica={l.fonte !== "manual" ? "Linha bloqueada: vem de outra página (Viagens, Eventos ou Headcount)" : "Excluir esta linha de 2027"} onClick={() => excluir(l)} />
                           <BotaoIcone icone={<Desfazer />} desligado={l.status !== "ajustada"} dica={l.status === "ajustada" ? "Voltar aos valores aprovados em 2026" : "Sem alterações para desfazer"} onClick={() => trocar(l, { meses: l.ref.meses })} />
                         </div>
                       </td>
@@ -229,11 +231,11 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
                         <span className="mudo">{l.grupo}</span>
                         {l.status === "ajustada" && <span className="tag ajustada">ajustada</span>}
                         {l.status === "nova" && <span className="tag nova">nova</span>}
-                        {l.status === "viagens" && <span className="tag viagens">plano de viagens</span>}
+                        {l.status === "viagens" && <span className="tag viagens">{{ viagens: "plano de viagens", eventos: "eventos", headcount: "headcount" }[l.fonte]}</span>}
                         <br />{l.conta_desc}
                         {l.alertas.map((a) => <span key={a} className="alerta">⚠ {a}</span>)}
                       </td>
-                      {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} travada={l.fonte === "viagens"} onSalvar={(n) => salvarMeses(l, i, n)} /></td>)}
+                      {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} travada={l.fonte !== "manual"} onSalvar={(n) => salvarMeses(l, i, n)} /></td>)}
                       <td className="n"><strong>{fmtN(l.total)}</strong></td>
                       <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">+{fmtN(l.total)}</span>}</td>
                       <td />
@@ -254,7 +256,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   );
 }
 
-export default function Projeto({ orcamento, admin, voltar, irViagens }) {
+export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }) {
   const [d, setD] = useState(null);
   const [contas, setContas] = useState([]);
   const [erro, setErro] = useState("");
@@ -272,9 +274,10 @@ export default function Projeto({ orcamento, admin, voltar, irViagens }) {
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
         {admin && !p.n_projeto && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
       </div>
-      <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Entender 2026"], ["plano", "Planejar 2027"]]} />
+      <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["resumo", "Resumo e pendências"]]} />
       {erro && <p className="erro" role="alert">{erro}</p>}
       {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} recarregar={carregar} setErro={setErro} />
+        : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={irEtapa} />
         : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} />}
     </>
   );

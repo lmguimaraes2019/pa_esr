@@ -88,6 +88,9 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         if lin["diretoria"] not in listas["diretorias"]:
             res.avisos.append(Aviso("erro", f"Diretoria '{lin['diretoria']}' não está na lista do template."))
             break
+    for r in conn.execute("SELECT u.login, u.nome FROM users u WHERE u.ativo=1 AND u.perfil<>'admin' AND u.login NOT IN (SELECT login FROM conclusoes) "
+                          "AND (EXISTS (SELECT 1 FROM user_projetos p WHERE p.user_id=u.id) OR EXISTS (SELECT 1 FROM user_gerentes g WHERE g.user_id=u.id))"):
+        res.avisos.append(Aviso("aviso", f"{r['nome']} ainda não marcou o planejamento como concluído."))
     if zeradas:
         res.avisos.append(Aviso("aviso", f"{zeradas} linha(s) com total zero não serão exportadas."))
     todos = {r["orcamento"] for r in conn.execute("SELECT orcamento FROM projetos")}

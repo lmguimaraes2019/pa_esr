@@ -214,7 +214,7 @@ def aplicar_ao_orcamento(c: sqlite3.Connection, usuario: str, simular: bool = Tr
     for (o, edt, tarefa) in sorted(tarefas):
         linhas = c.execute(
             f"SELECT l.*, ({soma}) AS tot, (SELECT COALESCE(SUM({soma}),0) FROM linhas b WHERE b.id = l.base_id) AS ref "
-            "FROM linhas l WHERE l.ciclo=? AND l.orcamento=? AND l.edt=? AND l.tarefa=? AND l.conta_codigo IN (%s)"
+            "FROM linhas l WHERE l.ciclo=? AND l.orcamento=? AND l.edt=? AND l.tarefa=? AND l.fonte NOT IN ('eventos','headcount') AND l.conta_codigo IN (%s)"
             % ",".join("?" for _ in CONTAS_VIAGEM), (config.CICLO_PLANO, o, edt, tarefa, *sorted(CONTAS_VIAGEM))).fetchall()
         por_conta = {r["conta_codigo"]: r for r in linhas}
         contas = sorted(set(por_conta) | {k[3] for k in plano if k[:3] == (o, edt, tarefa)})

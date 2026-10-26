@@ -66,7 +66,7 @@ function Lancamentos({ dados, recarregar, setErro }) {
   const tot = (i) => lista.reduce((a, l) => a + l.meses[i], 0);
   return (
     <>
-      <div className="nota">Lance aqui a receita prevista de cada projeto, mês a mês, por fonte. O resultado de cada projeto e de cada origem de recurso é a receita menos a despesa planejada em "Orçamento 2027". A linha cinza mostra a previsão de 2026, quando existe.</div>
+      <div className="nota">Lance aqui a receita prevista de cada projeto, mês a mês, por fonte. O resultado de cada projeto e de cada origem de recurso é a receita menos a despesa planejada em "Despesas". A linha cinza mostra a previsão de 2026, quando existe.</div>
       <div className="barra-ferramentas">
         <div className="filtros">
           <select style={{ width: 200 }} value={origem} onChange={(e) => { setOrigem(e.target.value); setProj("todos"); }}>

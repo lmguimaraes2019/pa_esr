@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS eventos (
     destino TEXT NOT NULL DEFAULT '',
     pessoas TEXT NOT NULL DEFAULT '[]',
     justificativa TEXT NOT NULL DEFAULT '',
+    edt TEXT NOT NULL DEFAULT '',
+    tarefa TEXT NOT NULL DEFAULT '',
     atualizado_por TEXT NOT NULL DEFAULT '',
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -115,11 +117,19 @@ CREATE TABLE IF NOT EXISTS headcount (
     mes_inicio INTEGER NOT NULL DEFAULT 1,
     quantidade INTEGER NOT NULL DEFAULT 1,
     justificativa TEXT NOT NULL DEFAULT '',
+    edt TEXT NOT NULL DEFAULT '',
+    tarefa TEXT NOT NULL DEFAULT '',
     atualizado_por TEXT NOT NULL DEFAULT '',
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS hc_parametros (chave TEXT PRIMARY KEY, valor REAL NOT NULL);
+
+CREATE TABLE IF NOT EXISTS conclusoes (
+    login TEXT PRIMARY KEY,
+    concluido_em TEXT NOT NULL DEFAULT (datetime('now')),
+    obs TEXT NOT NULL DEFAULT ''
+);
 
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
 
@@ -236,6 +246,11 @@ def init_db() -> None:
         cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}
         if "fonte" not in cols:      # migração: origem da linha ('manual' ou 'viagens')
             c.execute("ALTER TABLE linhas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'manual'")
+        for tabela in ("eventos", "headcount"):      # migração: tarefa do orçamento que recebe o valor
+            tc = {r[1] for r in c.execute(f"PRAGMA table_info({tabela})")}
+            for col in ("edt", "tarefa"):
+                if col not in tc:
+                    c.execute(f"ALTER TABLE {tabela} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         semear_receitas(c)
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",

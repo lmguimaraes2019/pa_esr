@@ -64,5 +64,7 @@ def custo_mensal(salario: float, p: dict[str, float]) -> dict[str, float]:
     provisoes = abono + ferias + decimo                                  # X
     total = beneficios + encargos + provisoes                            # Y
     return {"salario": round(j, 2), "inss": round(inss, 2), "fgts": round(fgts, 2), "pis": round(pis, 2),
+            "vr": round(vr, 2), "vt": round(p["vt"], 2), "plano_saude": round(p["plano_saude"], 2), "seguro_vida": round(seguro, 2),
+            "internet": round(p["internet"], 2), "provisao_ferias": round(abono + ferias, 2), "provisao_13": round(decimo, 2),
             "salario_encargos": round(encargos, 2), "beneficios": round(beneficios, 2), "provisoes": round(provisoes, 2),
             "mensal": round(total, 2), "anual": round(total * 12, 2)}

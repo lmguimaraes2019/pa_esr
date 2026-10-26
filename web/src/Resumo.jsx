@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt, mi } from "./api.js";
 import { Kpi, Delta, pct, Selo } from "./ui.jsx";
+import { MeuPlanejamento } from "./Planejamento.jsx";
 
 function Quadro({ itens, rotulo }) {
   const max = Math.max(1, ...itens.map((i) => Math.max(i.plano, i.base)));
@@ -23,7 +24,7 @@ function Quadro({ itens, rotulo }) {
   );
 }
 
-export default function Resumo({ irProjetos, irViagens }) {
+export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   const [r, setR] = useState(null);
   const [erro, setErro] = useState("");
   useEffect(() => { api("/resumo").then(setR).catch((e) => setErro(e.message)); }, []);
@@ -34,7 +35,9 @@ export default function Resumo({ irProjetos, irViagens }) {
   const delta = r.total_plano - r.total_base;
   return (
     <>
-      <h2>Planejamento anual</h2>
+      <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
+      <MeuPlanejamento plano={plano} recarregar={recarregarPlano} admin={admin} ir={ir} />
+      <h3 className="secao">Visão financeira</h3>
       <div className="duas">
         <section className="lado passado">
           <h3><Selo ano={2026} /> O que foi aprovado e executado</h3>
@@ -53,11 +56,10 @@ export default function Resumo({ irProjetos, irViagens }) {
             <Kpi rotulo="Plano 2027" valor={mi(r.total_plano)} />
             <Kpi rotulo="Diferença para 2026" valor={fmt(delta)} sub={r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado" : ""} />
             <Kpi rotulo="Linhas ajustadas" valor={s.ajustada + s.nova} sub={`${s.mantida} mantidas de 2026`} />
-            <Kpi rotulo="Vindas do plano de viagens" valor={s.viagens} />
+            <Kpi rotulo="Vindas de viagens, eventos e headcount" valor={s.viagens} />
           </div>
         </section>
       </div>
-      <div className="acoes"><button className="primario" onClick={irProjetos}>Ajustar o orçamento por projeto</button><button className="destaque" onClick={irViagens}>Planejar viagens</button></div>
       <section className="cartao"><h3>Por origem de recurso</h3><Quadro itens={r.por_origem} rotulo="Origem" /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>

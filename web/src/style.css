@@ -171,3 +171,30 @@ textarea{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--bd);bor
 .faixa-topo strong{color:var(--azul)}
 .faixa input[type=range]{width:100%;accent-color:var(--laranja);margin:8px 0}
 details.cartao summary{cursor:pointer}
+
+/* etapas do plano 2027 */
+.subnav.etapas{background:var(--azul-claro);padding:0 24px}
+.subnav.etapas button{display:flex;align-items:center;gap:8px}
+.subnav.etapas .n{width:22px;height:22px;border-radius:50%;background:var(--cinza-claro);color:#fff;display:grid;place-items:center;font-size:.75rem}
+.subnav.etapas button.on .n{background:var(--laranja);color:var(--azul)}
+.pend-badge{background:#B42318;color:#fff;border-radius:999px;font-size:.7rem;padding:1px 7px;font-weight:800}
+.meu-plano .cab{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.progresso{min-width:200px;background:var(--cinza-claro);height:10px;border-radius:99px;position:relative;margin-top:8px}
+.progresso span{display:block;height:100%;background:var(--laranja);border-radius:99px}
+.progresso small{position:absolute;top:14px;right:0;color:var(--mudo);font-size:.75rem;white-space:nowrap}
+.etapas-lista{list-style:none;margin:22px 0 10px;padding:0;display:grid;gap:8px}
+.etapa-card{display:grid;grid-template-columns:34px 1fr auto auto;gap:14px;align-items:center;border:1px solid var(--bd);border-left:5px solid var(--cinza-claro);border-radius:10px;padding:10px 14px;background:#fff}
+.etapa-card.ok{border-left-color:#1E8E3E}.etapa-card.pend{border-left-color:#B42318;background:#FFF8F6}.etapa-card.neutro{border-left-color:var(--laranja)}
+.etapa-n{width:28px;height:28px;border-radius:50%;background:var(--azul);color:#fff;display:grid;place-items:center;font-weight:800;font-size:.85rem}
+.etapa-corpo{display:flex;flex-direction:column;gap:2px}
+.etapa-valor{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.estado{font-size:.72rem;font-weight:800;padding:2px 9px;border-radius:99px;background:var(--cinza-claro);color:#fff;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+.estado.ok{background:#1E8E3E}.estado.pend{background:#B42318}.estado.neutro{background:#9A5B00}
+.concluir{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--bd)}
+.concluir>div{flex:1;min-width:260px}
+.obs-conc{display:block;width:100%;margin-top:8px}
+h3.secao{margin:26px 0 10px;color:var(--azul)}
+.resumo-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:14px}
+.resumo-card{display:flex;flex-direction:column;gap:6px;border:1px solid var(--bd);border-radius:10px;padding:14px;background:#fff;align-items:flex-start}
+.resumo-card.pend{border-color:#B42318;background:#FFF8F6}.resumo-card b{font-size:1.15rem;color:var(--azul)}
+@media (max-width:760px){.etapa-card{grid-template-columns:30px 1fr}.etapa-valor{align-items:flex-start}}

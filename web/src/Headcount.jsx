@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
-import { Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { TarefaOrc, Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const Obrig = () => <span className="obrig" title="Informação obrigatória">*</span>;
@@ -33,26 +33,27 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
   const salvar = async (e) => {
     e.preventDefault(); setErro("");
     try { await onSalvar({ orcamento: f.orcamento, funcao: f.funcao, cargo: f.cargo, trajetoria: f.trajetoria, nivel: f.nivel, grupo: f.grupo,
-      posicao: Number(f.posicao), mes_inicio: Number(f.mes_inicio), quantidade: q, justificativa: f.justificativa }); onFechar(); } catch (x) { setErro(x.message); }
+      posicao: Number(f.posicao), mes_inicio: Number(f.mes_inicio), quantidade: q, justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "" }); onFechar(); } catch (x) { setErro(x.message); }
   };
   return (
     <form className="cartao" id="form-hc" onSubmit={salvar}>
       <h3>{f.id ? "Editar posição" : "Nova posição de headcount 2027"}</h3>
       <p className="mudo">Campos com <Obrig /> são necessários para a posição ser considerada completa.</p>
       <div className="grade">
-        <label>Projeto que vai custear <Obrig /><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
+        <label><span>Projeto que vai custear <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "" }))} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
-        <label>Função <Obrig /><input value={f.funcao} onChange={(e) => set("funcao", e.target.value)} placeholder="ex.: Coordenador de turmas" /></label>
-        <label>Cargo <Obrig /><input value={f.cargo} onChange={(e) => set("cargo", e.target.value)} placeholder="ex.: Analista de Desenvolvimento Pleno" /></label>
+        <TarefaOrc dados={dados} orcamento={f.orcamento} edt={f.edt} tarefa={f.tarefa} onChange={(a, b) => setF((x) => ({ ...x, edt: a, tarefa: b }))} />
+        <label><span>Função <Obrig /></span><input value={f.funcao} onChange={(e) => set("funcao", e.target.value)} placeholder="ex.: Coordenador de turmas" /></label>
+        <label><span>Cargo <Obrig /></span><input value={f.cargo} onChange={(e) => set("cargo", e.target.value)} placeholder="ex.: Analista de Desenvolvimento Pleno" /></label>
         <label>Quantidade de posições<input type="number" min="1" max="100" value={f.quantidade} onChange={(e) => set("quantidade", e.target.value)} /></label>
       </div>
       <h4 className="sub">Trajetória e faixa salarial <span className="mudo">Tabela Salarial 2025</span></h4>
       <div className="grade">
-        <label>Trajetória <Obrig /><select value={f.trajetoria} onChange={(e) => setF((x) => ({ ...x, trajetoria: e.target.value, nivel: "", grupo: "" }))} required>
+        <label><span>Trajetória <Obrig /></span><select value={f.trajetoria} onChange={(e) => setF((x) => ({ ...x, trajetoria: e.target.value, nivel: "", grupo: "" }))} required>
           <option value="">Selecione…</option>{trajs.map((t) => <option key={t} value={t}>{bonito(t)}</option>)}</select></label>
-        <label>Nível <Obrig /><select value={f.nivel} disabled={!f.trajetoria} onChange={(e) => setF((x) => ({ ...x, nivel: e.target.value, grupo: "" }))} required>
+        <label><span>Nível <Obrig /></span><select value={f.nivel} disabled={!f.trajetoria} onChange={(e) => setF((x) => ({ ...x, nivel: e.target.value, grupo: "" }))} required>
           <option value="">Selecione…</option>{niveis.map((t) => <option key={t} value={t}>{bonito(t)}</option>)}</select></label>
-        <label>Grupo <Obrig /><select value={f.grupo} disabled={!f.nivel} onChange={(e) => set("grupo", e.target.value)} required>
+        <label><span>Grupo <Obrig /></span><select value={f.grupo} disabled={!f.nivel} onChange={(e) => set("grupo", e.target.value)} required>
           <option value="">Selecione…</option>{grupos.map((t) => <option key={t} value={t}>{bonito(t)}</option>)}</select></label>
         <label>Mês de início em 2027<select value={f.mes_inicio} onChange={(e) => set("mes_inicio", e.target.value)}>{MESES_N.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></label>
       </div>
@@ -63,7 +64,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
           <div className="faixa-topo"><span>Posição na faixa: <strong>{f.posicao}%</strong> {Number(f.posicao) === 50 && "(ponto médio)"}</span>
             <span>Salário {dados.reajuste ? `com reajuste de ${fmtN(dados.reajuste)}%` : ""}: <strong>{fmt(sal)}</strong></span></div>
         </div>)}
-      <label>Justificativa <Obrig /><textarea rows={3} value={f.justificativa} onChange={(e) => set("justificativa", e.target.value)} placeholder="Por que a posição é necessária? Qual entrega ou meta depende dela?" /></label>
+      <label><span>Justificativa <Obrig /></span><textarea rows={3} value={f.justificativa} onChange={(e) => set("justificativa", e.target.value)} placeholder="Por que a posição é necessária? Qual entrega ou meta depende dela?" /></label>
       {c && (
         <div className="resumo-custo">
           <span>Salário e encargos <strong>{fmt(c.encargos)}</strong></span><span>Benefícios <strong>{fmt(c.beneficios)}</strong></span><span>Provisões (férias e 13º) <strong>{fmt(c.provisoes)}</strong></span>
@@ -107,7 +108,7 @@ export default function Headcount({ admin, irProjeto }) {
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", funcao: "", cargo: "", trajetoria: "", nivel: "", grupo: "", posicao: 50, mes_inicio: 1, quantidade: 1, justificativa: "" };
+  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", funcao: "", cargo: "", trajetoria: "", nivel: "", grupo: "", posicao: 50, mes_inicio: 1, quantidade: 1, justificativa: "", edt: "", tarefa: "" };
   const lista = dados.itens.filter((d) => proj === "todos" || d.orcamento === proj);
   const abrir = (d) => { setForm(d); setTimeout(() => document.getElementById("form-hc")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/headcount/${form.id}`, { method: "PUT", body: b }); else await api("/headcount", { method: "POST", body: b }); carregar(); };
@@ -142,7 +143,7 @@ export default function Headcount({ admin, irProjeto }) {
               <td><strong>{d.funcao || <span className="up">sem função</span>}</strong><br /><span className="mudo">{d.cargo || "cargo não informado"}</span>
                 {d.justificativa && <><br /><span className="mudo" title={d.justificativa} style={{ fontSize: ".78rem" }}>{d.justificativa.length > 80 ? d.justificativa.slice(0, 80) + "…" : d.justificativa}</span></>}</td>
               <td>{bonito(d.trajetoria)}<br /><span className="mudo">{bonito(d.nivel)} | {bonito(d.grupo)} | {d.posicao}% da faixa</span></td>
-              <td><button className="link" onClick={() => irProjeto(d.orcamento)}>{d.orcamento}</button><br /><span className="mudo">{d.projeto}</span></td>
+              <td><button className="link" onClick={() => irProjeto(d.orcamento)}>{d.orcamento}</button><br /><span className="mudo">{d.projeto}</span>{d.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {d.tarefa}</span></>}</td>
               <td className="n">{d.quantidade}</td><td>{MESES_N[d.mes_inicio - 1].slice(0, 3)}</td>
               <td className="n">{fmtN(d.custo.salario)}</td><td className="n">{fmtN(d.custo.mensal)}</td>
               <td className="n"><strong>{fmtN(d.anualizado)}</strong></td><td className="n"><strong>{fmtN(d.custo_2027)}</strong></td>

@@ -242,10 +242,11 @@ def test_headcount_formulas_da_planilha(client):
     h = client.get("/api/headcount").json()
     assert len(h["tabela"]) == 42 and h["itens"] == []
     orc = h["projetos"][0]["orcamento"]
+    tf = h["tarefas"][orc]["lista"][0]
     # faixa PLENO GRUPO 01 da Gestão do Negócio: 6418,58 a 9627,88; posição 0 = início da faixa
     r = client.post("/api/headcount", json={"orcamento": orc, "funcao": "Analista", "cargo": "Analista Pleno", "trajetoria": "GESTAO DO NEGOCIO",
                                             "nivel": "PLENO", "grupo": "GRUPO 01", "posicao": 0, "mes_inicio": 7, "quantidade": 2,
-                                            "justificativa": "Demanda nova"})
+                                            "justificativa": "Demanda nova", "edt": tf["edt"], "tarefa": tf["tarefa"]})
     assert r.status_code == 201
     d = r.json()
     assert d["custo"]["salario"] == 6418.58 and d["meses_2027"] == 6 and d["faltando"] == []
@@ -254,8 +255,15 @@ def test_headcount_formulas_da_planilha(client):
         + ((j / 30 * 10) / 12 + (j / 12 + (j / 30 * 10) / 12) / 3 + j / 12)
     assert abs(d["custo"]["mensal"] - esperado) < 0.02 and abs(d["anualizado"] - esperado * 12 * 2) < 0.1
     assert abs(d["custo_2027"] - esperado * 6 * 2) < 0.1
+    # o orçamento do projeto acompanha: linhas bloqueadas com o mesmo total
+    p = client.get(f"/api/projetos/{orc}").json()
+    bloq = [x for x in p["linhas"] if x["fonte"] == "headcount"]
+    assert bloq and abs(sum(x["total"] for x in bloq) - d["custo_2027"]) < 0.5
+    assert client.put(f"/api/linhas/{bloq[0]['id']}", json={"meses": [1] * 12}).status_code == 409
+    assert client.delete(f"/api/linhas/{bloq[0]['id']}").status_code == 409
     assert client.post("/api/headcount", json={"orcamento": orc, "trajetoria": "X", "nivel": "Y", "grupo": "Z"}).status_code == 422
     assert client.delete(f"/api/headcount/{d['id']}").status_code == 200
+    assert not [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["fonte"] == "headcount"]
 
 
 def test_eventos_calculam_viagem(client):
@@ -263,16 +271,43 @@ def test_eventos_calculam_viagem(client):
     e = client.get("/api/eventos").json()
     assert e["tarifas"]
     orc = e["projetos"][0]["orcamento"]
+    tf = e["tarefas"][orc]["lista"][0]
     t = next(x for x in e["tarifas"] if x["tipo"] == "nac")
     r = client.post("/api/eventos", json={"orcamento": orc, "nome": "Congresso X", "local": "Recife", "tipo": "nac", "mes": 5, "n_pessoas": 2,
                                           "dias": 3, "inscricao": 1000, "origem": t["origem"], "destino": t["destino"], "pessoas": ["Ana"],
-                                          "justificativa": ""})
+                                          "justificativa": "", "edt": tf["edt"], "tarefa": tf["tarefa"]})
     assert r.status_code == 201
     d = r.json()
     assert d["inscricao_total"] == 2000 and d["viagem"]["total"] > 0 and d["total"] == round(2000 + d["viagem"]["total"], 2)
     assert "justificativa" in d["faltando"] and any("pessoas" in x for x in d["faltando"]) and not d["completo"]
-    r2 = client.put(f"/api/eventos/{d['id']}", json={**{k: d[k] for k in ("orcamento", "nome", "local", "tipo", "mes", "n_pessoas", "dias", "inscricao", "moeda", "origem", "destino")},
+    r2 = client.put(f"/api/eventos/{d['id']}", json={**{k: d[k] for k in ("orcamento", "nome", "local", "tipo", "mes", "n_pessoas", "dias", "inscricao", "moeda", "origem", "destino", "edt", "tarefa")},
                                                   "pessoas": ["Ana", "Bia"], "justificativa": "Divulgação"})
     assert r2.json()["completo"] is True
+    p = client.get(f"/api/projetos/{orc}").json()
+    bloq = [x for x in p["linhas"] if x["fonte"] == "eventos"]
+    assert abs(sum(x["total"] for x in bloq) - d["total"]) < 0.05 and any(x["conta_codigo"] == "51040104" for x in bloq)
     assert client.get("/api/eventos").json()["totais"]["eventos"] == 1
     assert client.delete(f"/api/eventos/{d['id']}").status_code == 200
+
+
+def test_planejamento_resumo_e_conclusao(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    orc = h["projetos"][0]["orcamento"]
+    client.post("/api/headcount", json={"orcamento": orc, "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO", "grupo": "GRUPO 01"})
+    pl = client.get("/api/planejamento").json()
+    assert pl["etapas"]["headcount"]["pendentes"] == 1 and pl["pendencias"] >= 1 and pl["concluido"] is None
+    assert any(u for u in pl["usuarios"]) or pl["usuarios"] == []
+    pr = client.get(f"/api/planejamento/projeto/{orc}").json()
+    assert pr["headcount"]["n"] == 1 and pr["pendencias"] >= 1
+    assert client.post("/api/planejamento/concluir", json={"concluido": True}).status_code == 409
+    for x in client.get("/api/headcount").json()["itens"]:
+        client.delete(f"/api/headcount/{x['id']}")
+    for v in client.get("/api/viagens").json()["viagens"]:      # a carga de viagens traz itens ainda sem tarefa
+        if not v["orcamento"] or not v["edt"] or not v["tem_tarifa"]:
+            client.delete(f"/api/viagens/{v['id']}")
+    assert client.get("/api/planejamento").json()["pendencias"] == 0
+    assert client.post("/api/planejamento/concluir", json={"concluido": True, "obs": "ok"}).status_code == 200
+    assert client.get("/api/planejamento").json()["concluido"]["obs"] == "ok"
+    assert client.post("/api/planejamento/concluir", json={"concluido": False}).status_code == 200
+    assert client.get("/api/planejamento").json()["concluido"] is None

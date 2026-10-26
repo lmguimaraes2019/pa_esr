@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from . import config, viagens as vg
+from . import config, sync, viagens as vg
 from .api import _arred, _conn, exige_admin, permitidos, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
 
@@ -208,6 +208,7 @@ def gravar_tarifa(tid: int, d: TarifaIn, u: dict = Depends(exige_admin)):
         c.execute("UPDATE viagem_tarifas SET passagem=?, hospedagem=?, bagagem=?, aux_transporte=?, ajuda_custo=?, seguro=? WHERE id=?",
                   (*[round(getattr(d, k), 2) for k in vg.CAMPOS_TARIFA], tid))
         audit(c, u["login"], "alterou tarifa", detalhe=f"id {tid}: {d.model_dump()}")
+        sync.sincronizar_todos(c, u["login"])
     return {"ok": True}
 
 
@@ -222,6 +223,7 @@ def reajustar(d: ReajusteIn, u: dict = Depends(exige_admin)):
             sets = ", ".join(f"{k}=ROUND(ref_{k}*?,2)" for k in vg.CAMPOS_TARIFA)
             c.execute(f"UPDATE viagem_tarifas SET {sets} {filtro}", (*[f] * len(vg.CAMPOS_TARIFA), *args))
             audit(c, u["login"], "reajustou tarifas de viagens", detalhe=f"{d.percentual}% sobre 2026 ({d.tipo or 'todas'})")
+            sync.sincronizar_todos(c, u["login"])
     return {"tarifas_afetadas": n, "simulacao": d.simular}
 
 
