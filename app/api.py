@@ -50,8 +50,8 @@ def exige_admin(u: dict = Depends(usuario_liberado)) -> dict:
 def permitidos(c: sqlite3.Connection, u: dict) -> set[str]:
     if u["perfil"] == "admin":
         return {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
-    rows = c.execute("SELECT orcamento FROM projetos WHERE gerente=? UNION "
-                     "SELECT orcamento FROM user_projetos WHERE user_id=?", (u["gerente"], u["id"]))
+    rows = c.execute("SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?) "
+                     "UNION SELECT orcamento FROM user_projetos WHERE user_id=?", (u["id"], u["id"]))
     return {r[0] for r in rows}
 
 
@@ -140,12 +140,15 @@ class UsuarioIn(BaseModel):
     nome: str = Field(min_length=2, max_length=100)
     perfil: str = Field(pattern="^(admin|gestor)$")
     gerente: str | None = Field(default=None, max_length=100)
+    gerentes: list[str] | None = Field(default=None, max_length=30)
+    projetos: list[str] | None = Field(default=None, max_length=100)
 
 
 class UsuarioPatch(BaseModel):
     nome: str | None = Field(default=None, min_length=2, max_length=100)
     perfil: str | None = Field(default=None, pattern="^(admin|gestor)$")
-    gerente: str | None = Field(default=None, max_length=100)
+    gerentes: list[str] | None = Field(default=None, max_length=30)
+    projetos: list[str] | None = Field(default=None, max_length=100)
     ativo: bool | None = None
 
 
@@ -511,31 +514,53 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
 
 # ---------------------------------------------------------------- usuários (admin)
 
-def _usuario_row(r: sqlite3.Row) -> dict:
-    return {"id": r["id"], "login": r["login"], "nome": r["nome"], "perfil": r["perfil"], "gerente": r["gerente"],
-            "ativo": bool(r["ativo"]), "trocar_senha": bool(r["trocar_senha"])}
+def _usuario_row(r: sqlite3.Row, c: sqlite3.Connection | None = None) -> dict:
+    out = {"id": r["id"], "login": r["login"], "nome": r["nome"], "perfil": r["perfil"], "gerente": r["gerente"],
+           "ativo": bool(r["ativo"]), "trocar_senha": bool(r["trocar_senha"]), "gerentes": [], "projetos": []}
+    if c is not None:
+        out["gerentes"] = [x[0] for x in c.execute("SELECT gerente FROM user_gerentes WHERE user_id=? ORDER BY gerente", (r["id"],))]
+        out["projetos"] = [x[0] for x in c.execute("SELECT orcamento FROM user_projetos WHERE user_id=? ORDER BY orcamento", (r["id"],))]
+        out["gerente"] = ", ".join(out["gerentes"])
+    return out
 
 
 @router.get("/usuarios")
 def listar_usuarios(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
     gerentes = [r[0] for r in c.execute("SELECT DISTINCT gerente FROM projetos ORDER BY gerente")]
-    return {"usuarios": [_usuario_row(r) for r in c.execute("SELECT * FROM users ORDER BY perfil, nome")],
-            "gerentes": gerentes}
+    projetos = [{"orcamento": r["orcamento"], "descricao": r["descricao"], "gerente": r["gerente"]}
+                for r in c.execute("SELECT orcamento, descricao, gerente FROM projetos ORDER BY orcamento")]
+    return {"usuarios": [_usuario_row(r, c) for r in c.execute("SELECT * FROM users ORDER BY perfil, nome")],
+            "gerentes": gerentes, "projetos": projetos}
+
+
+def _grava_acessos(c: sqlite3.Connection, uid: int, gerentes: list[str] | None, projetos: list[str] | None) -> None:
+    if gerentes is not None:
+        gerentes = sorted({g.strip() for g in gerentes if g.strip()})
+        c.execute("DELETE FROM user_gerentes WHERE user_id=?", (uid,))
+        c.executemany("INSERT INTO user_gerentes (user_id, gerente) VALUES (?,?)", [(uid, g) for g in gerentes])
+        c.execute("UPDATE users SET gerente=? WHERE id=?", (gerentes[0] if gerentes else None, uid))
+    if projetos is not None:
+        existentes = {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
+        c.execute("DELETE FROM user_projetos WHERE user_id=?", (uid,))
+        c.executemany("INSERT INTO user_projetos (user_id, orcamento) VALUES (?,?)",
+                      [(uid, o) for o in sorted(set(projetos) & existentes)])
 
 
 @router.post("/usuarios", status_code=201)
 def criar_usuario(dados: UsuarioIn, u: dict = Depends(exige_admin)):
-    if dados.perfil == "gestor" and not dados.gerente:
-        raise HTTPException(422, "Informe o gerente de projetos que este gestor representa.")
+    gerentes = dados.gerentes if dados.gerentes is not None else ([dados.gerente] if dados.gerente else [])
+    if dados.perfil == "gestor" and not (gerentes or dados.projetos):
+        raise HTTPException(422, "Informe ao menos um gerente de projetos ou um projeto que este gestor acompanha.")
     temp = security.senha_temporaria()
     with tx() as c:
         if c.execute("SELECT 1 FROM users WHERE login=?", (dados.login,)).fetchone():
             raise HTTPException(409, "Já existe um usuário com esse login.")
-        cur = c.execute("INSERT INTO users (login, nome, senha_hash, perfil, gerente, trocar_senha) VALUES (?,?,?,?,?,1)",
-                        (dados.login, dados.nome, security.hash_password(temp), dados.perfil, dados.gerente))
+        cur = c.execute("INSERT INTO users (login, nome, senha_hash, perfil, trocar_senha) VALUES (?,?,?,?,1)",
+                        (dados.login, dados.nome, security.hash_password(temp), dados.perfil))
+        _grava_acessos(c, cur.lastrowid, gerentes, dados.projetos or [])
         audit(c, u["login"], "criou usuário", detalhe=f"{dados.login} ({dados.perfil})")
         row = c.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
-    return {**_usuario_row(row), "senha_temporaria": temp}
+        return {**_usuario_row(row, c), "senha_temporaria": temp}
 
 
 @router.patch("/usuarios/{uid}")
@@ -547,13 +572,20 @@ def editar_usuario(uid: int, dados: UsuarioPatch, u: dict = Depends(exige_admin)
         if uid == u["id"] and (dados.ativo is False or dados.perfil == "gestor"):
             raise HTTPException(400, "Você não pode desativar nem rebaixar o próprio acesso.")
         campos = dados.model_dump(exclude_none=True)
+        gerentes, projetos = campos.pop("gerentes", None), campos.pop("projetos", None)
         if "ativo" in campos:
             campos["ativo"] = int(campos["ativo"])
         if campos:
             c.execute(f"UPDATE users SET {', '.join(k + '=?' for k in campos)} WHERE id=?", (*campos.values(), uid))
-            audit(c, u["login"], "editou usuário", detalhe=f"{alvo['login']}: {campos}")
-        row = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-    return _usuario_row(row)
+        _grava_acessos(c, uid, gerentes, projetos)
+        perfil = campos.get("perfil", alvo["perfil"])
+        if perfil == "gestor":
+            tem = c.execute("SELECT (SELECT COUNT(*) FROM user_gerentes WHERE user_id=?) + "
+                            "(SELECT COUNT(*) FROM user_projetos WHERE user_id=?)", (uid, uid)).fetchone()[0]
+            if not tem:
+                raise HTTPException(422, "Um gestor precisa acompanhar ao menos um gerente ou projeto.")
+        audit(c, u["login"], "editou usuário", detalhe=f"{alvo['login']}: {dados.model_dump(exclude_none=True)}")
+        return _usuario_row(c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(), c)
 
 
 @router.post("/usuarios/{uid}/reset-senha")

@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS projetos (
     original_2026 REAL NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS user_gerentes (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    gerente TEXT NOT NULL,
+    PRIMARY KEY (user_id, gerente)
+);
+
 CREATE TABLE IF NOT EXISTS user_projetos (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     orcamento TEXT NOT NULL REFERENCES projetos(orcamento) ON DELETE CASCADE,
@@ -162,7 +168,11 @@ def tx():
 
 def init_db() -> None:
     with tx() as c:
+        nova = not c.execute("SELECT 1 FROM sqlite_master WHERE name='user_gerentes'").fetchone()
         c.executescript(SCHEMA)
+        if nova:      # migração: o gerente único de cada usuário vira a primeira entrada da lista
+            c.execute("INSERT OR IGNORE INTO user_gerentes (user_id, gerente) "
+                      "SELECT id, gerente FROM users WHERE gerente IS NOT NULL AND gerente <> ''")
         cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}
         if "fonte" not in cols:      # migração: origem da linha ('manual' ou 'viagens')
             c.execute("ALTER TABLE linhas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'manual'")

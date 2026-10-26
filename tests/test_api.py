@@ -131,3 +131,16 @@ def test_usuarios_admin_e_csrf(client):
     assert client.patch(f"/api/usuarios/{me['id']}", json={"ativo": False}).status_code == 400
     r = client.post("/api/logout", headers={"origin": "https://malicioso.example"})
     assert r.status_code == 403
+
+
+def test_editar_acessos_do_usuario(client):
+    entrar(client)
+    dados = client.get("/api/usuarios").json()
+    g1, g2 = dados["gerentes"][0], dados["gerentes"][1]
+    r = client.post("/api/usuarios", json={"login": "ed.teste", "nome": "Ed Teste", "perfil": "gestor", "gerentes": [g1]})
+    assert r.status_code == 201 and r.json()["gerentes"] == [g1]
+    uid = r.json()["id"]
+    r = client.patch(f"/api/usuarios/{uid}", json={"gerentes": [g1, g2], "projetos": [dados["projetos"][0]["orcamento"]], "nome": "Ed Novo"})
+    assert r.status_code == 200 and r.json()["gerentes"] == sorted([g1, g2]) and r.json()["nome"] == "Ed Novo"
+    assert client.patch(f"/api/usuarios/{uid}", json={"gerentes": [], "projetos": []}).status_code == 422
+    assert client.patch(f"/api/usuarios/{uid}", json={"gerentes": [g2]}).json()["gerentes"] == [g2]

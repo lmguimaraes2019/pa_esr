@@ -62,17 +62,41 @@ export function Exportar({ irProjeto }) {
   );
 }
 
+function Acessos({ d, valor, onChange }) {
+  const alt = (lista, item) => (lista.includes(item) ? lista.filter((x) => x !== item) : [...lista, item]);
+  return (
+    <>
+      <fieldset className="cartao" style={{ margin: "8px 0" }}><legend>Gerentes de projetos que acompanha (vê todos os projetos de cada um)</legend>
+        <div className="filtros" style={{ margin: 0 }}>{d.gerentes.map((g) => (
+          <button type="button" key={g} className={valor.gerentes.includes(g) ? "on" : ""} onClick={() => onChange({ ...valor, gerentes: alt(valor.gerentes, g) })}>{g}</button>))}</div></fieldset>
+      <fieldset className="cartao" style={{ margin: "8px 0" }}><legend>Projetos avulsos (além dos gerentes acima)</legend>
+        <div style={{ maxHeight: 180, overflow: "auto" }}>{d.projetos.map((p) => (
+          <label key={p.orcamento} style={{ display: "flex", gap: 8, alignItems: "center", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>
+            <input type="checkbox" style={{ width: "auto" }} checked={valor.projetos.includes(p.orcamento)} onChange={() => onChange({ ...valor, projetos: alt(valor.projetos, p.orcamento) })} />
+            {p.orcamento} | {p.descricao} <span className="mudo">({p.gerente})</span></label>))}</div></fieldset>
+    </>
+  );
+}
+
 export function Usuarios() {
+  const vazio = { login: "", nome: "", perfil: "gestor", gerentes: [], projetos: [] };
   const [d, setD] = useState(null);
-  const [novo, setNovo] = useState({ login: "", nome: "", perfil: "gestor", gerente: "" });
+  const [novo, setNovo] = useState(vazio);
+  const [ed, setEd] = useState(null);
   const [temp, setTemp] = useState(null);
   const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
   const carregar = () => api("/usuarios").then(setD);
   useEffect(() => { carregar(); }, []);
   if (!d) return <p>Carregando…</p>;
   const criar = async (e) => {
-    e.preventDefault(); setErro("");
-    try { const r = await api("/usuarios", { method: "POST", body: { ...novo, gerente: novo.gerente || null } }); setTemp({ login: r.login, senha: r.senha_temporaria }); setNovo({ login: "", nome: "", perfil: "gestor", gerente: "" }); carregar(); }
+    e.preventDefault(); setErro(""); setMsg("");
+    try { const r = await api("/usuarios", { method: "POST", body: novo }); setTemp({ login: r.login, senha: r.senha_temporaria }); setNovo(vazio); carregar(); }
+    catch (x) { setErro(x.message); }
+  };
+  const salvar = async (e) => {
+    e.preventDefault(); setErro(""); setMsg("");
+    try { await api(`/usuarios/${ed.id}`, { method: "PATCH", body: { nome: ed.nome, perfil: ed.perfil, gerentes: ed.gerentes, projetos: ed.projetos } }); setMsg(`Usuário ${ed.login} atualizado.`); setEd(null); carregar(); }
     catch (x) { setErro(x.message); }
   };
   const reset = async (u) => { if (window.confirm(`Gerar nova senha provisória para ${u.nome}?`)) setTemp({ login: u.login, senha: (await api(`/usuarios/${u.id}/reset-senha`, { method: "POST" })).senha_temporaria }); };
@@ -80,19 +104,29 @@ export function Usuarios() {
   return (
     <>
       <h2>Usuários</h2>
-      {temp && <div className="cartao pend"><strong>Senha provisória de {temp.login}</strong><p><code>{temp.senha}</code></p><p className="mudo">Anote agora: ela não será exibida de novo. Será exigida a troca no primeiro acesso.</p><button onClick={() => setTemp(null)}>Entendi</button></div>}
-      {erro && <p className="erro">{erro}</p>}
-      <table className="tab"><thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Gerente de projetos</th><th>Situação</th><th /></tr></thead>
-        <tbody>{d.usuarios.map((u) => (<tr key={u.id}><td>{u.login}</td><td>{u.nome}</td><td>{u.perfil}</td><td>{u.gerente}</td><td>{u.ativo ? (u.trocar_senha ? "aguardando 1º acesso" : "ativo") : "desativado"}</td>
-          <td className="acoes"><button className="link" onClick={() => reset(u)}>Nova senha</button><button className="link" onClick={() => alternar(u)}>{u.ativo ? "Desativar" : "Reativar"}</button></td></tr>))}</tbody></table>
+      {temp && <div className="cartao pend"><strong>Senha provisória de {temp.login}</strong><p><code>{temp.senha}</code></p><p className="mudo">Anote agora: ela não será exibida de novo. Será exigida a troca no primeiro acesso.</p><button onClick={() => setTemp(null)}>Já anotei</button></div>}
+      {msg && <p className="ok">{msg}</p>}{erro && <p className="erro" role="alert">{erro}</p>}
+      <div className="rolagem"><table className="tab"><thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Acompanha</th><th>Situação</th><th /></tr></thead>
+        <tbody>{d.usuarios.map((u) => (<tr key={u.id}><td>{u.login}</td><td>{u.nome}</td><td>{u.perfil === "admin" ? "administrador (todos)" : "gestor"}</td>
+          <td>{u.perfil === "admin" ? <span className="mudo">todos os projetos</span> : <>{u.gerentes.join(", ") || <span className="mudo">nenhum gerente</span>}{u.projetos.length > 0 && <><br /><span className="mudo">+ projetos {u.projetos.join(", ")}</span></>}</>}</td>
+          <td>{u.ativo ? (u.trocar_senha ? "aguardando 1º acesso" : "ativo") : "desativado"}</td>
+          <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => { setErro(""); setMsg(""); setEd({ id: u.id, login: u.login, nome: u.nome, perfil: u.perfil, gerentes: u.gerentes, projetos: u.projetos }); }}>Editar</button> <button className="link" onClick={() => reset(u)}>Nova senha</button> <button className="link" onClick={() => alternar(u)}>{u.ativo ? "Desativar" : "Reativar"}</button></td></tr>))}</tbody></table></div>
+      {ed && (
+        <form className="cartao" onSubmit={salvar}><h3>Editar {ed.login}</h3>
+          <div className="grade">
+            <label>Nome<input value={ed.nome} onChange={(e) => setEd({ ...ed, nome: e.target.value })} required /></label>
+            <label>Perfil<select value={ed.perfil} onChange={(e) => setEd({ ...ed, perfil: e.target.value })}><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label>
+          </div>
+          {ed.perfil === "gestor" ? <Acessos d={d} valor={ed} onChange={setEd} /> : <p className="mudo">O administrador vê e edita todos os projetos.</p>}
+          <div className="acoes"><button className="primario">Salvar</button><button type="button" onClick={() => setEd(null)}>Cancelar</button></div></form>)}
       <form className="cartao" onSubmit={criar}><h3>Novo usuário</h3>
         <div className="grade">
           <label>Login<input value={novo.login} onChange={(e) => setNovo({ ...novo, login: e.target.value.toLowerCase() })} required pattern="[a-z0-9._-]{3,30}" /></label>
           <label>Nome<input value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} required /></label>
           <label>Perfil<select value={novo.perfil} onChange={(e) => setNovo({ ...novo, perfil: e.target.value })}><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label>
-          <label>Gerente de projetos<input list="gerentes" value={novo.gerente} onChange={(e) => setNovo({ ...novo, gerente: e.target.value })} /></label>
-          <datalist id="gerentes">{d.gerentes.map((g) => <option key={g} value={g} />)}</datalist>
-        </div><button className="primario">Criar</button></form>
+        </div>
+        {novo.perfil === "gestor" && <Acessos d={d} valor={novo} onChange={setNovo} />}
+        <button className="primario">Criar</button></form>
     </>
   );
 }

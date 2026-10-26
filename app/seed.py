@@ -36,7 +36,7 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
         if c.execute("SELECT COUNT(*) FROM projetos").fetchone()[0]:
             if not reset:
                 raise SystemExit("O banco já tem dados. Use --reset para recarregar (apaga linhas e usuários).")
-            for t in ("auditoria", "user_projetos", "linhas", "execucao", "projetos", "contas", "users"):
+            for t in ("auditoria", "user_gerentes", "user_projetos", "linhas", "execucao", "projetos", "contas", "users"):
                 c.execute(f"DELETE FROM {t}")
 
         c.executemany("INSERT INTO contas (codigo, descricao, grupo) VALUES (?,?,?)", contas)
@@ -67,10 +67,12 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
                   (admin_login, admin_nome, hash_password(senha_admin), "admin", admin_gerente,
                    0 if (admin_senha or os.environ.get("ORC_ADMIN_PASSWORD")) else 1))
         credenciais.append((admin_login, senha_admin, "admin"))
+        c.execute("INSERT INTO user_gerentes (user_id, gerente) SELECT id, gerente FROM users WHERE login=?", (admin_login,))
         for gerente in sorted({p["gerente"] for p in projetos} - {admin_gerente}):
             login, senha = importers.login_de(gerente), senha_temporaria()
             c.execute("INSERT INTO users (login, nome, senha_hash, perfil, gerente, trocar_senha) VALUES (?,?,?,?,?,1)",
                       (login, gerente, hash_password(senha), "gestor", gerente))
+            c.execute("INSERT INTO user_gerentes (user_id, gerente) SELECT id, gerente FROM users WHERE login=?", (login,))
             credenciais.append((login, senha, "gestor"))
         audit(c, "carga inicial", "seed", detalhe=f"{len(projetos)} projetos, {len(base)} linhas base")
 
