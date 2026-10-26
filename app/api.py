@@ -154,6 +154,8 @@ class UsuarioIn(BaseModel):
     gerente: str | None = Field(default=None, max_length=100)
     gerentes: list[str] | None = Field(default=None, max_length=30)
     projetos: list[str] | None = Field(default=None, max_length=100)
+    gerencia: str | None = Field(default=None, max_length=100)
+    cargo: str | None = Field(default=None, pattern="^(gerente|coordenador|)$")
 
 
 class UsuarioPatch(BaseModel):
@@ -162,6 +164,8 @@ class UsuarioPatch(BaseModel):
     gerentes: list[str] | None = Field(default=None, max_length=30)
     projetos: list[str] | None = Field(default=None, max_length=100)
     ativo: bool | None = None
+    gerencia: str | None = Field(default=None, max_length=100)
+    cargo: str | None = Field(default=None, pattern="^(gerente|coordenador|)$")
 
 
 # ---------------------------------------------------------------- sessão
@@ -707,7 +711,8 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
 
 def _usuario_row(r: sqlite3.Row, c: sqlite3.Connection | None = None) -> dict:
     out = {"id": r["id"], "login": r["login"], "nome": r["nome"], "perfil": r["perfil"], "gerente": r["gerente"],
-           "ativo": bool(r["ativo"]), "trocar_senha": bool(r["trocar_senha"]), "gerentes": [], "projetos": []}
+           "ativo": bool(r["ativo"]), "trocar_senha": bool(r["trocar_senha"]), "gerentes": [], "projetos": [],
+           "gerencia": r["gerencia"], "cargo": r["cargo"]}
     if c is not None:
         out["gerentes"] = [x[0] for x in c.execute("SELECT gerente FROM user_gerentes WHERE user_id=? ORDER BY gerente", (r["id"],))]
         out["projetos"] = [x[0] for x in c.execute("SELECT orcamento FROM user_projetos WHERE user_id=? ORDER BY orcamento", (r["id"],))]
@@ -746,8 +751,9 @@ def criar_usuario(dados: UsuarioIn, u: dict = Depends(exige_admin)):
     with tx() as c:
         if c.execute("SELECT 1 FROM users WHERE login=?", (dados.login,)).fetchone():
             raise HTTPException(409, "Já existe um usuário com esse login.")
-        cur = c.execute("INSERT INTO users (login, nome, senha_hash, perfil, trocar_senha) VALUES (?,?,?,?,1)",
-                        (dados.login, dados.nome, security.hash_password(temp), dados.perfil))
+        cur = c.execute("INSERT INTO users (login, nome, senha_hash, perfil, trocar_senha, gerencia, cargo) VALUES (?,?,?,?,1,?,?)",
+                        (dados.login, dados.nome, security.hash_password(temp), dados.perfil,
+                         (dados.gerencia or "").strip(), dados.cargo or ""))
         _grava_acessos(c, cur.lastrowid, gerentes, dados.projetos or [])
         audit(c, u["login"], "criou usuário", detalhe=f"{dados.login} ({dados.perfil})")
         row = c.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
@@ -766,6 +772,8 @@ def editar_usuario(uid: int, dados: UsuarioPatch, u: dict = Depends(exige_admin)
         gerentes, projetos = campos.pop("gerentes", None), campos.pop("projetos", None)
         if "ativo" in campos:
             campos["ativo"] = int(campos["ativo"])
+        if "gerencia" in campos:
+            campos["gerencia"] = campos["gerencia"].strip()
         if campos:
             c.execute(f"UPDATE users SET {', '.join(k + '=?' for k in campos)} WHERE id=?", (*campos.values(), uid))
         _grava_acessos(c, uid, gerentes, projetos)

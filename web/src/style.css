@@ -241,3 +241,10 @@ td.total-cel{display:table-cell;text-align:right}td.total-cel small{display:bloc
 .param-res .total dd{font-weight:800}.param-res .total{border-top:1px solid var(--bd);padding-top:4px}
 @media (max-width:1100px){.param-grupos{grid-template-columns:1fr}}
 .com-sufixo input{flex:1;min-width:0}.com-sufixo em{min-width:30px;color:var(--mudo);font-size:.8rem}
+
+/* acompanhamento por gerência */
+.tab.ger .ger-linha td { background: var(--fundo-2, #eef2f7); border-top: 2px solid #c9d3e0; }
+.tab.ger .ger-pessoa td { font-size: .92em; }
+.tab.ger .ger-pessoa.n1 .ger-nome { padding-left: 1.2rem; }
+.tab.ger .ger-pessoa.n2 .ger-nome { padding-left: 2.8rem; }
+.tab.ger .ger-pessoa.n2 .ger-nome::before { content: "\2514\00a0"; color: #8a97a8; }

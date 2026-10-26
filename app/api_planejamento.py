@@ -115,20 +115,52 @@ def _situacao(c: sqlite3.Connection, u: dict) -> dict:
     return {"projetos": projetos, "etapas": etapas, "pendencias": pend}
 
 
+def _executado(c: sqlite3.Connection, ids: set[str]) -> float:
+    if not ids:
+        return 0.0
+    marks = ",".join("?" for _ in ids)
+    return _arred(c.execute(f"SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento IN ({marks})", sorted(ids)).fetchone()[0])
+
+
+def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
+    """Acompanhamento do admin: gerências, com o gerente e os coordenadores abaixo.
+    Os totais da gerência somam cada projeto uma vez, ainda que gerente e coordenador o acompanhem."""
+    grupos: dict[str, list[dict]] = {}
+    for r in c.execute("SELECT * FROM users WHERE ativo=1 AND perfil<>'admin' ORDER BY nome").fetchall():
+        grupos.setdefault((r["gerencia"] or "").strip(), []).append(dict(r))
+    out = []
+    for nome, membros in sorted(grupos.items(), key=lambda kv: (kv[0] == "", kv[0].lower())):
+        ids: set[str] = set()
+        pessoas, pend, todos_concluidos, conc_em = [], 0, True, None
+        for m in membros:
+            ids |= set(permitidos(c, m))
+            su = _situacao(c, m)
+            cu = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (m["login"],)).fetchone()
+            pend += su["pendencias"]
+            todos_concluidos = todos_concluidos and bool(cu)
+            if cu and (conc_em is None or cu["concluido_em"] > conc_em):
+                conc_em = cu["concluido_em"]
+            pessoas.append({"login": m["login"], "nome": m["nome"], "cargo": m["cargo"], "projetos": len(su["projetos"]),
+                            "plano": su["etapas"]["despesas"]["plano"], "pendencias": su["pendencias"],
+                            "concluido_em": cu["concluido_em"] if cu else None, "obs": cu["obs"] if cu else ""})
+        res = list(resumir(c, sorted(ids)).values())
+        aprovado = _arred(sum(p["despesas"]["aprovado"] for p in res))
+        executado = _executado(c, ids)
+        pessoas.sort(key=lambda p: ({"gerente": 0, "coordenador": 1}.get(p["cargo"], 2), p["nome"].lower()))
+        out.append({"gerencia": nome, "projetos": len(res), "aprovado": aprovado, "executado": executado,
+                    "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "pendencias": pend,
+                    "concluido": todos_concluidos and bool(membros), "concluido_em": conc_em if todos_concluidos else None,
+                    "pessoas": pessoas})
+    return out
+
+
 @router.get("")
 def planejamento(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     s = _situacao(c, u)
     conc = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (u["login"],)).fetchone()
     s["concluido"] = dict(conc) if conc else None
     if u["perfil"] == "admin":
-        usuarios = []
-        for r in c.execute("SELECT * FROM users WHERE ativo=1 AND perfil<>'admin' ORDER BY nome").fetchall():
-            su = _situacao(c, dict(r))
-            cu = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (r["login"],)).fetchone()
-            usuarios.append({"login": r["login"], "nome": r["nome"], "projetos": len(su["projetos"]), "pendencias": su["pendencias"],
-                             "concluido_em": cu["concluido_em"] if cu else None, "obs": cu["obs"] if cu else "",
-                             "plano": su["etapas"]["despesas"]["plano"]})
-        s["usuarios"] = usuarios
+        s["gerencias"] = _por_gerencia(c)
     return s
 
 

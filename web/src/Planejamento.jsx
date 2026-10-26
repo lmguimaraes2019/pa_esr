@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 import { api, fmt, fmtN } from "./api.js";
+import { pct } from "./ui.jsx";
 
 const quando = (s) => (s ? new Date(s.replace(" ", "T") + "Z").toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "");
 
@@ -61,14 +62,22 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
         )}
         {erro && <p className="erro" role="alert">{erro}</p>}
       </div>
-      {admin && plano.usuarios && (
+      {admin && plano.gerencias && (
         <>
-          <h4 className="sub">Acompanhamento por usuário</h4>
-          <div className="rolagem"><table className="tab"><thead><tr><th>Usuário</th><th className="n">Projetos</th><th className="n">Plano 2027</th><th className="n">Pendências</th><th>Situação</th></tr></thead>
-            <tbody>{plano.usuarios.map((u) => (
-              <tr key={u.login}><td>{u.nome}</td><td className="n">{u.projetos}</td><td className="n">{fmtN(u.plano)}</td><td className="n">{u.pendencias || "-"}</td>
-                <td>{u.concluido_em ? <><Estado tom="ok">concluído</Estado> <span className="mudo">{quando(u.concluido_em)}{u.obs && ` | ${u.obs}`}</span></> : <Estado tom={u.pendencias ? "pend" : "neutro"}>{u.pendencias ? "com pendências" : "em andamento"}</Estado>}</td></tr>))}
-              {!plano.usuarios.length && <tr><td colSpan={5} className="mudo">Nenhum gestor cadastrado.</td></tr>}</tbody></table></div>
+          <h4 className="sub">Acompanhamento por gerência</h4>
+          <div className="rolagem"><table className="tab ger"><thead><tr><th>Gerência / responsáveis</th><th className="n">Projetos</th><th className="n">Plano 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Pendências</th><th>Situação</th></tr></thead>
+            <tbody>{plano.gerencias.map((g) => (
+              <Fragment key={g.gerencia || "_"}>
+                <tr className="ger-linha"><td><strong>{g.gerencia || "Sem gerência definida"}</strong></td><td className="n">{g.projetos}</td><td className="n">{fmtN(g.aprovado)}</td><td className="n">{fmtN(g.executado)}</td>
+                  <td className="n">{g.aprovado ? pct(g.executado, g.aprovado) : "-"}</td><td className="n">{fmtN(g.plano)}</td><td className="n">{g.pendencias || "-"}</td>
+                  <td>{g.concluido ? <><Estado tom="ok">concluída</Estado> <span className="mudo">{quando(g.concluido_em)}</span></> : <Estado tom={g.pendencias ? "pend" : "neutro"}>{g.pendencias ? "com pendências" : "em andamento"}</Estado>}</td></tr>
+                {g.pessoas.map((p) => (
+                  <tr key={p.login} className={"ger-pessoa " + (p.cargo === "coordenador" ? "n2" : "n1")}>
+                    <td><span className="ger-nome">{p.nome}</span> <span className="mudo">{p.cargo || "sem cargo"}</span></td>
+                    <td className="n">{p.projetos}</td><td colSpan={2} /><td /><td className="n">{fmtN(p.plano)}</td><td className="n">{p.pendencias || "-"}</td>
+                    <td>{p.concluido_em ? <><Estado tom="ok">concluído</Estado> <span className="mudo">{quando(p.concluido_em)}{p.obs && ` | ${p.obs}`}</span></> : <Estado tom={p.pendencias ? "pend" : "neutro"}>{p.pendencias ? "com pendências" : "em andamento"}</Estado>}</td></tr>))}
+              </Fragment>))}
+              {!plano.gerencias.length && <tr><td colSpan={8} className="mudo">Nenhum gestor cadastrado.</td></tr>}</tbody></table></div>
         </>
       )}
     </section>

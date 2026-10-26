@@ -297,7 +297,7 @@ def test_planejamento_resumo_e_conclusao(client):
     client.post("/api/headcount", json={"orcamento": orc, "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO", "grupo": "GRUPO 01"})
     pl = client.get("/api/planejamento").json()
     assert pl["etapas"]["headcount"]["pendentes"] == 1 and pl["pendencias"] >= 1 and pl["concluido"] is None
-    assert any(u for u in pl["usuarios"]) or pl["usuarios"] == []
+    assert isinstance(pl["gerencias"], list)
     pr = client.get(f"/api/planejamento/projeto/{orc}").json()
     assert pr["headcount"]["n"] == 1 and pr["pendencias"] >= 1
     assert client.post("/api/planejamento/concluir", json={"concluido": True}).status_code == 409
@@ -394,3 +394,17 @@ def test_headcount_em_projeto_de_outro_gestor(client):
     assert client.get("/api/headcount/parametros").status_code == 403
     assert client.put(f"/api/headcount/{hid}", json={**corpo, "quantidade": 2}).status_code == 200
     assert client.delete(f"/api/headcount/{hid}").status_code == 200
+
+
+def test_acompanhamento_por_gerencia(client):
+    entrar(client)
+    r = client.post("/api/usuarios", json={"login": "coord.x", "nome": "Coord X", "perfil": "gestor", "gerencia": "Gerência Teste",
+                                           "cargo": "coordenador", "gerentes": [client.get("/api/usuarios").json()["gerentes"][0]]})
+    assert r.status_code == 201, r.text
+    assert r.json()["gerencia"] == "Gerência Teste" and r.json()["cargo"] == "coordenador"
+    p = client.get("/api/planejamento").json()
+    g = {x["gerencia"]: x for x in p["gerencias"]}
+    assert "Gerência Teste" in g
+    t = g["Gerência Teste"]
+    assert t["pessoas"][0]["login"] == "coord.x" and t["projetos"] >= 0
+    assert {"aprovado", "executado", "plano", "pendencias"} <= set(t)

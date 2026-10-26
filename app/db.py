@@ -268,6 +268,10 @@ def init_db() -> None:
         if "criado_por" not in {r[1] for r in c.execute("PRAGMA table_info(headcount)")}:      # migração: quem lançou a posição
             c.execute("ALTER TABLE headcount ADD COLUMN criado_por TEXT NOT NULL DEFAULT ''")
             c.execute("UPDATE headcount SET criado_por = atualizado_por")
+        uc = {r[1] for r in c.execute("PRAGMA table_info(users)")}      # migração: gerência e cargo do usuário
+        for col in ("gerencia", "cargo"):
+            if col not in uc:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         semear_receitas(c)
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",

@@ -146,7 +146,7 @@ function Acessos({ d, valor, onChange }) {
 }
 
 export function Usuarios() {
-  const vazio = { login: "", nome: "", perfil: "gestor", gerentes: [], projetos: [] };
+  const vazio = { login: "", nome: "", perfil: "gestor", gerencia: "", cargo: "", gerentes: [], projetos: [] };
   const [d, setD] = useState(null);
   const [novo, setNovo] = useState(vazio);
   const [ed, setEd] = useState(null);
@@ -163,7 +163,7 @@ export function Usuarios() {
   };
   const salvar = async (e) => {
     e.preventDefault(); setErro(""); setMsg("");
-    try { await api(`/usuarios/${ed.id}`, { method: "PATCH", body: { nome: ed.nome, perfil: ed.perfil, gerentes: ed.gerentes, projetos: ed.projetos } }); setMsg(`Usuário ${ed.login} atualizado.`); setEd(null); carregar(); }
+    try { await api(`/usuarios/${ed.id}`, { method: "PATCH", body: { nome: ed.nome, perfil: ed.perfil, gerencia: ed.gerencia, cargo: ed.cargo, gerentes: ed.gerentes, projetos: ed.projetos } }); setMsg(`Usuário ${ed.login} atualizado.`); setEd(null); carregar(); }
     catch (x) { setErro(x.message); }
   };
   const reset = async (u) => { if (window.confirm(`Gerar nova senha provisória para ${u.nome}?`)) setTemp({ login: u.login, senha: (await api(`/usuarios/${u.id}/reset-senha`, { method: "POST" })).senha_temporaria }); };
@@ -173,16 +173,18 @@ export function Usuarios() {
       <h2>Usuários</h2>
       {temp && <div className="cartao pend"><strong>Senha provisória de {temp.login}</strong><p><code>{temp.senha}</code></p><p className="mudo">Anote agora: ela não será exibida de novo. Será exigida a troca no primeiro acesso.</p><button onClick={() => setTemp(null)}>Já anotei</button></div>}
       {msg && <p className="ok">{msg}</p>}{erro && <p className="erro" role="alert">{erro}</p>}
-      <div className="rolagem"><table className="tab"><thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Acompanha</th><th>Situação</th><th /></tr></thead>
-        <tbody>{d.usuarios.map((u) => (<tr key={u.id}><td>{u.login}</td><td>{u.nome}</td><td>{u.perfil === "admin" ? "administrador (todos)" : "gestor"}</td>
+      <div className="rolagem"><table className="tab"><thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Gerência</th><th>Acompanha</th><th>Situação</th><th /></tr></thead>
+        <tbody>{d.usuarios.map((u) => (<tr key={u.id}><td>{u.login}</td><td>{u.nome}</td><td>{u.perfil === "admin" ? "administrador (todos)" : "gestor"}</td><td>{u.perfil === "admin" ? "" : <>{u.gerencia || <span className="mudo">sem gerência</span>}{u.cargo && <span className="mudo"> | {u.cargo}</span>}</>}</td>
           <td>{u.perfil === "admin" ? <span className="mudo">todos os projetos</span> : <>{u.gerentes.join(", ") || <span className="mudo">nenhum gerente</span>}{u.projetos.length > 0 && <><br /><span className="mudo">+ projetos {u.projetos.join(", ")}</span></>}</>}</td>
           <td>{u.ativo ? (u.trocar_senha ? "aguardando 1º acesso" : "ativo") : "desativado"}</td>
-          <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => { setErro(""); setMsg(""); setEd({ id: u.id, login: u.login, nome: u.nome, perfil: u.perfil, gerentes: u.gerentes, projetos: u.projetos }); }}>Editar</button> <button className="link" onClick={() => reset(u)}>Nova senha</button> <button className="link" onClick={() => alternar(u)}>{u.ativo ? "Desativar" : "Reativar"}</button></td></tr>))}</tbody></table></div>
+          <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => { setErro(""); setMsg(""); setEd({ id: u.id, login: u.login, nome: u.nome, perfil: u.perfil, gerencia: u.gerencia, cargo: u.cargo, gerentes: u.gerentes, projetos: u.projetos }); }}>Editar</button> <button className="link" onClick={() => reset(u)}>Nova senha</button> <button className="link" onClick={() => alternar(u)}>{u.ativo ? "Desativar" : "Reativar"}</button></td></tr>))}</tbody></table></div>
       {ed && (
         <form className="cartao" onSubmit={salvar}><h3>Editar {ed.login}</h3>
           <div className="grade">
             <label>Nome<input value={ed.nome} onChange={(e) => setEd({ ...ed, nome: e.target.value })} required /></label>
             <label>Perfil<select value={ed.perfil} onChange={(e) => setEd({ ...ed, perfil: e.target.value })}><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label>
+          {ed.perfil === "gestor" && <><label>Gerência<input value={ed.gerencia} onChange={(e) => setEd({ ...ed, gerencia: e.target.value })} placeholder="Ex.: Gerência de Tecnologia" /></label>
+            <label>Cargo<select value={ed.cargo} onChange={(e) => setEd({ ...ed, cargo: e.target.value })}><option value="">Não informado</option><option value="gerente">Gerente</option><option value="coordenador">Coordenador</option></select></label></>}
           </div>
           {ed.perfil === "gestor" ? <Acessos d={d} valor={ed} onChange={setEd} /> : <p className="mudo">O administrador vê e edita todos os projetos.</p>}
           <div className="acoes"><button className="primario">Salvar</button><button type="button" onClick={() => setEd(null)}>Cancelar</button></div></form>)}
@@ -191,6 +193,8 @@ export function Usuarios() {
           <label>Login<input value={novo.login} onChange={(e) => setNovo({ ...novo, login: e.target.value.toLowerCase() })} required pattern="[a-z0-9._-]{3,30}" /></label>
           <label>Nome<input value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} required /></label>
           <label>Perfil<select value={novo.perfil} onChange={(e) => setNovo({ ...novo, perfil: e.target.value })}><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label>
+          {novo.perfil === "gestor" && <><label>Gerência<input value={novo.gerencia} onChange={(e) => setNovo({ ...novo, gerencia: e.target.value })} placeholder="Ex.: Gerência de Tecnologia" /></label>
+            <label>Cargo<select value={novo.cargo} onChange={(e) => setNovo({ ...novo, cargo: e.target.value })}><option value="">Não informado</option><option value="gerente">Gerente</option><option value="coordenador">Coordenador</option></select></label></>}
         </div>
         {novo.perfil === "gestor" && <Acessos d={d} valor={novo} onChange={setNovo} />}
         <button className="primario">Criar</button></form>
