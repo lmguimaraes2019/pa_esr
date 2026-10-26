@@ -153,3 +153,8 @@ button.icone:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
 .grid tr.meta .col-acoes,.grid tr.meta .col-conta{background:var(--azul);color:#fff}
 .grid tr.meta button.icone{background:#fff}
 .tab tr.grupo button.link{margin-left:12px;font-weight:600}
+
+.troca-origem{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:8px 0 0;font-size:.9rem;color:var(--cinza)}
+.troca-origem .rotulo-nivel{margin-right:4px}
+.troca-origem strong{color:var(--azul)}
+.troca-origem .seta{color:var(--laranja);font-weight:800;margin:0 6px}
