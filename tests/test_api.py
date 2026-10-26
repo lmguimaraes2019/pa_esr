@@ -374,3 +374,23 @@ def test_editar_tipo_e_excluir_orcamento(client):
     # orçamento que existia em 2026 não pode ser excluído
     existente = next(p["orcamento"] for p in client.get("/api/projetos").json() if not p["novo"])
     assert client.delete(f"/api/projetos/{existente}").status_code == 409
+
+
+def test_headcount_em_projeto_de_outro_gestor(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    assert all("meu" in p for p in h["projetos"]) and len(h["projetos"]) >= 5
+    assert client.get("/api/headcount/parametros").json()["parametros"]
+    gestor_liberado(client, "luciana")
+    h = client.get("/api/headcount").json()
+    alheio = next(p for p in h["projetos"] if not p["meu"])
+    tf = h["tarefas"][alheio["orcamento"]]["lista"][0]
+    corpo = {"orcamento": alheio["orcamento"], "funcao": "Analista", "cargo": "Pleno", "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO",
+             "grupo": "GRUPO 01", "justificativa": "x", "edt": tf["edt"], "tarefa": tf["tarefa"]}
+    r = client.post("/api/headcount", json=corpo)
+    assert r.status_code == 201, r.text
+    hid = r.json()["id"]
+    assert [i for i in client.get("/api/headcount").json()["itens"] if i["id"] == hid]       # quem lançou enxerga
+    assert client.get("/api/headcount/parametros").status_code == 403
+    assert client.put(f"/api/headcount/{hid}", json={**corpo, "quantidade": 2}).status_code == 200
+    assert client.delete(f"/api/headcount/{hid}").status_code == 200

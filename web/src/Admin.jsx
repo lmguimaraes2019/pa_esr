@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt, lerNumero } from "./api.js";
 import { TrocarSenha } from "./Login.jsx";
+import { custoMensal } from "./pessoal.js";
 
 export function Premissas() {
   const [p, setP] = useState(null);
@@ -33,8 +34,74 @@ export function Premissas() {
         {sim && <div className="sim"><p>Afeta <strong>{sim.linhas_afetadas}</strong> linhas ({sim.linhas_editadas_preservadas} editadas à mão preservadas). Total vai de <strong>{fmt(sim.total_antes)}</strong> para <strong>{fmt(sim.total_depois)}</strong>.</p>
           <button className="primario" onClick={aplicar}>Aplicar ao 2027</button></div>}
       </section>
+      <ParametrosPessoal reajuste={lerNumero(v.reajuste_pessoal) || 0} />
       <section className="cartao"><h3>Minha senha</h3><TrocarSenha /></section>
     </>
+  );
+}
+
+const GRUPOS_PESSOAL = [
+  { titulo: "Encargos sobre o salário", nota: "Além de INSS patronal de 20% e terceiros de 4,5%, que são fixos.", campos: [
+    ["rat", "RAT ajustado", "%"], ["fgts", "FGTS", "%"], ["pis", "PIS", "%"]] },
+  { titulo: "Benefícios", nota: "Valores mensais por pessoa.", campos: [
+    ["vr_dia", "VR/VA por dia", "R$"], ["vr_dias", "Dias de VR/VA no mês", "dias"], ["vr_extra", "Complemento fixo do VR/VA", "R$"],
+    ["vt", "Vale-transporte", "R$"], ["plano_saude", "Plano de saúde e odontológico (média)", "R$"],
+    ["seguro_vida", "Seguro de vida", "% sal."], ["internet", "Ajuda de custo de internet", "R$"]] },
+];
+
+function ParametrosPessoal({ reajuste }) {
+  const [d, setD] = useState(null);
+  const [v, setV] = useState({});
+  const [exemplo, setExemplo] = useState("5.891,66");
+  const [msg, setMsg] = useState("");
+  const [erro, setErro] = useState("");
+  const carregar = () => api("/headcount/parametros").then((r) => { setD(r); setV(Object.fromEntries(r.parametros.map((p) => [p.chave, String(p.valor).replace(".", ",")]))); });
+  useEffect(() => { carregar(); }, []);
+  if (!d) return null;
+  const num = (k) => lerNumero(v[k]);
+  const par = Object.fromEntries(d.parametros.map((p) => [p.chave, num(p.chave)]));
+  const invalido = d.parametros.some((p) => Number.isNaN(par[p.chave]) || par[p.chave] < 0);
+  const sal = lerNumero(exemplo);
+  const c = !invalido && sal > 0 ? custoMensal(sal * (1 + reajuste / 100), par) : null;
+  const alterado = d.parametros.some((p) => Math.abs((par[p.chave] ?? 0) - p.valor) > 1e-9);
+  const salvar = async () => {
+    setErro(""); setMsg("");
+    try { await api("/headcount/parametros/valores", { method: "PUT", body: { valores: par } }); setMsg("Parâmetros salvos. As linhas de headcount nos orçamentos foram recalculadas."); carregar(); } catch (e) { setErro(e.message); }
+  };
+  const padrao = () => setV(Object.fromEntries(d.parametros.map((p) => [p.chave, String(p.padrao).replace(".", ",")])));
+  return (
+    <section className="cartao param-pessoal">
+      <h3>Custo de pessoal (Headcount)</h3>
+      <p className="mudo">Parâmetros das fórmulas da planilha CUSTO_PESSOAL, aba Agosto_26. O custo mensal soma salário, encargos, benefícios e provisões de férias (com abono de 10 dias, mais 1/3) e 13º. O reajuste de pessoal acima já é aplicado sobre o salário da Tabela Salarial 2025.</p>
+      <div className="param-grupos">
+        {GRUPOS_PESSOAL.map((g) => (
+          <fieldset key={g.titulo}>
+            <legend>{g.titulo}</legend>
+            <p className="mudo">{g.nota}</p>
+            <div className="param-campos">
+              {g.campos.map(([k, rot, suf]) => (
+                <label key={k}>{rot}<span className="com-sufixo"><input value={v[k] ?? ""} inputMode="decimal" onChange={(e) => setV({ ...v, [k]: e.target.value })} /><em>{suf}</em></span></label>))}
+            </div>
+          </fieldset>))}
+        <fieldset className="param-conf">
+          <legend>Conferência</legend>
+          <p className="mudo">Informe um salário da tabela para ver o custo com os parâmetros acima.</p>
+          <label>Salário de exemplo<span className="com-sufixo"><input value={exemplo} inputMode="decimal" onChange={(e) => setExemplo(e.target.value)} /><em>R$</em></span></label>
+          {c ? (
+            <dl className="param-res">
+              <div><dt>Salário e encargos</dt><dd>{fmt(c.encargos)}</dd></div>
+              <div><dt>Benefícios</dt><dd>{fmt(c.beneficios)}</dd></div>
+              <div><dt>Provisões</dt><dd>{fmt(c.provisoes)}</dd></div>
+              <div className="total"><dt>Custo mensal</dt><dd>{fmt(c.mensal)}</dd></div>
+              <div className="total"><dt>Anualizado</dt><dd>{fmt(c.anual)}</dd></div>
+            </dl>) : <p className="erro">Confira os valores informados.</p>}
+          {reajuste > 0 && <p className="mudo">Considera o reajuste de {String(reajuste).replace(".", ",")}% sobre o salário.</p>}
+        </fieldset>
+      </div>
+      {erro && <p className="erro" role="alert">{erro}</p>}{msg && <p className="ok">{msg}</p>}
+      <div className="acoes"><button className="primario" onClick={salvar} disabled={!alterado || invalido}>Salvar parâmetros</button>
+        <button onClick={padrao}>Restaurar valores da planilha</button></div>
+    </section>
   );
 }
 

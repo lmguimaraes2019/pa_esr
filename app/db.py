@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS headcount (
     justificativa TEXT NOT NULL DEFAULT '',
     edt TEXT NOT NULL DEFAULT '',
     tarefa TEXT NOT NULL DEFAULT '',
+    criado_por TEXT NOT NULL DEFAULT '',
     atualizado_por TEXT NOT NULL DEFAULT '',
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -264,6 +265,9 @@ def init_db() -> None:
                          ("origem_cliente", "TEXT NOT NULL DEFAULT ''"), ("gestor_cliente", "TEXT NOT NULL DEFAULT ''")):
             if col not in rc:
                 c.execute(f"ALTER TABLE receitas ADD COLUMN {col} {ddl}")
+        if "criado_por" not in {r[1] for r in c.execute("PRAGMA table_info(headcount)")}:      # migração: quem lançou a posição
+            c.execute("ALTER TABLE headcount ADD COLUMN criado_por TEXT NOT NULL DEFAULT ''")
+            c.execute("UPDATE headcount SET criado_por = atualizado_por")
         semear_receitas(c)
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",

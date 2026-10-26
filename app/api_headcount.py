@@ -33,6 +33,18 @@ class ParamIn(BaseModel):
     valores: dict[str, float]
 
 
+def _pode(c: sqlite3.Connection, u: dict, r: sqlite3.Row) -> bool:
+    """Quem lançou a posição ou quem acompanha o projeto que a custeia."""
+    return u["perfil"] == "admin" or r["criado_por"] == u["login"] or r["orcamento"] in permitidos(c, u)
+
+
+def _projeto_custeio(c: sqlite3.Connection, orcamento: str) -> None:
+    """Qualquer projeto de despesa da casa pode custear o headcount, mesmo o de outro gestor."""
+    p = c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
+    if not p or p["tipo"] != "despesa":
+        raise HTTPException(404, "Projeto não encontrado.")
+
+
 def _reajuste(c: sqlite3.Connection) -> float:
     r = c.execute("SELECT valor FROM premissas WHERE chave='reajuste_pessoal'").fetchone()
     return float(r[0]) if r else 0.0
@@ -56,13 +68,14 @@ def _calc(r: sqlite3.Row, par: dict, reaj: float) -> dict:
 
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = sorted(permitidos(c, u))
-    marks = ",".join("?" for _ in ids) or "''"
+    meus = permitidos(c, u)
     par, reaj = pessoal.parametros(c), _reajuste(c)
     projetos = {r["orcamento"]: r for r in c.execute(
-        f"SELECT orcamento, descricao, origem, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
+        "SELECT orcamento, descricao, origem, gerente, tipo FROM projetos ORDER BY orcamento")}
     itens = []
-    for r in c.execute(f"SELECT * FROM headcount WHERE orcamento IN ({marks}) ORDER BY orcamento, id", ids):
+    for r in c.execute("SELECT * FROM headcount ORDER BY orcamento, id"):
+        if not (u["perfil"] == "admin" or r["orcamento"] in meus or r["criado_por"] == u["login"]):
+            continue
         d = _calc(r, par, reaj)
         d["projeto"] = projetos[r["orcamento"]]["descricao"]
         itens.append(d)
@@ -79,8 +92,9 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
                    "custo_2027": _arred(sum(d["custo_2027"] for d in itens)), "incompletos": sum(1 for d in itens if d["faltando"])},
         "tabela": pessoal.tabela_salarial(), "reajuste": reaj,
         "parametros": [{"chave": k, "valor": par[k], "descricao": v[1], "padrao": v[0]} for k, v in pessoal.PARAMETROS.items()],
-        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"]} for o, p in projetos.items()],
-        "tarefas": tarefas_dos_projetos(c, "headcount", list(projetos)),
+        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "meu": o in meus}
+                     for o, p in projetos.items() if p["tipo"] == "despesa"],
+        "tarefas": tarefas_dos_projetos(c, "headcount", [o for o, p in projetos.items() if p["tipo"] == "despesa"]),
     }
 
 
@@ -100,12 +114,12 @@ def _uma(c: sqlite3.Connection, hid: int) -> dict:
 def criar(d: HcIn, u: dict = Depends(usuario_liberado)):
     _valida(d)
     with tx() as c:
-        exige_acesso(c, u, d.orcamento)
+        _projeto_custeio(c, d.orcamento)
         _valida(d, c)
         cur = c.execute("INSERT INTO headcount (orcamento, funcao, cargo, trajetoria, nivel, grupo, posicao, mes_inicio, quantidade, "
-                        "justificativa, edt, tarefa, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "justificativa, edt, tarefa, criado_por, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (d.orcamento, d.funcao.strip(), d.cargo.strip(), d.trajetoria, d.nivel, d.grupo, d.posicao, d.mes_inicio,
-                         d.quantidade, d.justificativa.strip(), d.edt, d.tarefa, u["login"]))
+                         d.quantidade, d.justificativa.strip(), d.edt, d.tarefa, u["login"], u["login"]))
         audit(c, u["login"], "incluiu headcount", d.orcamento, detalhe=f"{d.funcao or d.cargo} {d.trajetoria}/{d.nivel}/{d.grupo} x{d.quantidade}")
         sync.sincronizar(c, d.orcamento, u["login"])
         return _uma(c, cur.lastrowid)
@@ -118,7 +132,9 @@ def editar(hid: int, d: HcIn, u: dict = Depends(usuario_liberado)):
         atual = c.execute("SELECT * FROM headcount WHERE id=?", (hid,)).fetchone()
         if not atual:
             raise HTTPException(404, "Posição não encontrada.")
-        exige_acesso(c, u, atual["orcamento"]); exige_acesso(c, u, d.orcamento)
+        if not _pode(c, u, atual):
+            raise HTTPException(404, "Posição não encontrada.")
+        _projeto_custeio(c, d.orcamento)
         _valida(d, c)
         c.execute("UPDATE headcount SET orcamento=?, funcao=?, cargo=?, trajetoria=?, nivel=?, grupo=?, posicao=?, mes_inicio=?, quantidade=?, "
                   "justificativa=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
@@ -136,11 +152,18 @@ def excluir(hid: int, u: dict = Depends(usuario_liberado)):
         atual = c.execute("SELECT * FROM headcount WHERE id=?", (hid,)).fetchone()
         if not atual:
             raise HTTPException(404, "Posição não encontrada.")
-        exige_acesso(c, u, atual["orcamento"])
+        if not _pode(c, u, atual):
+            raise HTTPException(404, "Posição não encontrada.")
         c.execute("DELETE FROM headcount WHERE id=?", (hid,))
         audit(c, u["login"], "excluiu headcount", atual["orcamento"], detalhe=f"id {hid}: {atual['funcao'] or atual['cargo']}")
         sync.sincronizar(c, atual["orcamento"], u["login"])
     return {"ok": True}
+
+
+@router.get("/parametros")
+def ler_parametros(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    par = pessoal.parametros(c)
+    return {"reajuste": _reajuste(c), "parametros": [{"chave": k, "valor": par[k], "descricao": v[1], "padrao": v[0]} for k, v in pessoal.PARAMETROS.items()]}
 
 
 @router.put("/parametros/valores")

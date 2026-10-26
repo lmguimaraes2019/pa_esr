@@ -1,20 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
+import { custoMensal } from "./pessoal.js";
 import { TarefaOrc, Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const Obrig = () => <span className="obrig" title="Informação obrigatória">*</span>;
 const bonito = (s) => s.toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
-
-// mesmas fórmulas da planilha CUSTO_PESSOAL (colunas K a Y) e de app/pessoal.py
-function custoMensal(j, p) {
-  const encargos = j + (j * (24.5 + p.rat)) / 100 + (j * p.fgts) / 100 + (j * p.pis) / 100;
-  const beneficios = p.vr_dia * p.vr_dias + p.vr_extra + p.vt + p.plano_saude + (j * p.seguro_vida) / 100 + p.internet;
-  const abono = (j / 30 * 10) / 12;
-  const provisoes = abono + (j / 12 + abono) / 3 + j / 12;
-  const mensal = encargos + beneficios + provisoes;
-  return { encargos, beneficios, provisoes, mensal, anual: mensal * 12 };
-}
 
 function Formulario({ inicial, dados, onSalvar, onFechar }) {
   const [f, setF] = useState(inicial);
@@ -41,7 +32,9 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       <p className="mudo">Campos com <Obrig /> são necessários para a posição ser considerada completa.</p>
       <div className="grade">
         <label><span>Projeto que vai custear <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "" }))} required>
-          <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
+          <option value="">Selecione…</option><optgroup label="Meus projetos">{dados.projetos.filter((p) => p.meu).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</optgroup>
+          <optgroup label="Projetos de outros gestores">{dados.projetos.filter((p) => !p.meu).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao} ({p.gerente})</option>)}</optgroup></select>
+          <small className="mudo">Pode ser qualquer projeto da casa, inclusive de outro gestor.</small></label>
         <TarefaOrc dados={dados} orcamento={f.orcamento} edt={f.edt} tarefa={f.tarefa} onChange={(a, b) => setF((x) => ({ ...x, edt: a, tarefa: b }))} />
         <label><span>Função <Obrig /></span><input value={f.funcao} onChange={(e) => set("funcao", e.target.value)} placeholder="ex.: Coordenador de turmas" /></label>
         <label><span>Cargo <Obrig /></span><input value={f.cargo} onChange={(e) => set("cargo", e.target.value)} placeholder="ex.: Analista de Desenvolvimento Pleno" /></label>
@@ -76,29 +69,6 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
   );
 }
 
-function Parametros({ dados, admin, recarregar }) {
-  const [v, setV] = useState({});
-  const [msg, setMsg] = useState("");
-  const [erro, setErro] = useState("");
-  const val = (p) => v[p.chave] ?? String(p.valor).replace(".", ",");
-  const salvar = async () => {
-    setErro(""); setMsg("");
-    const valores = {};
-    for (const p of dados.parametros) { const n = lerNumero(val(p)); if (Number.isNaN(n) || n < 0) return setErro(`Valor inválido em "${p.descricao}".`); valores[p.chave] = n; }
-    try { await api("/headcount/parametros/valores", { method: "PUT", body: { valores } }); setMsg("Parâmetros salvos."); setV({}); recarregar(); } catch (e) { setErro(e.message); }
-  };
-  return (
-    <details className="cartao">
-      <summary><strong>Parâmetros do cálculo</strong> <span className="mudo">fórmulas da planilha CUSTO_PESSOAL, aba Agosto_26</span></summary>
-      <p className="mudo">Custo mensal = salário + encargos (INSS 20% + terceiros 4,5% + RAT, FGTS, PIS) + benefícios (VR/VA, VT, plano de saúde, seguro de vida, internet) + provisões (1/3 de férias com abono de 10 dias e 13º). O anualizado é o custo mensal vezes 12. Salários da Tabela Salarial 2025{dados.reajuste ? `, com reajuste de ${fmtN(dados.reajuste)}% (premissa de pessoal)` : ""}.</p>
-      <div className="grade">{dados.parametros.map((p) => (
-        <label key={p.chave}>{p.descricao}<input value={val(p)} disabled={!admin} inputMode="decimal" onChange={(e) => setV({ ...v, [p.chave]: e.target.value })} /></label>))}</div>
-      {msg && <p className="ok">{msg}</p>}{erro && <p className="erro">{erro}</p>}
-      {admin ? <div className="acoes"><button className="primario" onClick={salvar} disabled={!Object.keys(v).length}>Salvar parâmetros</button></div> : <p className="mudo">Apenas o administrador altera os parâmetros.</p>}
-    </details>
-  );
-}
-
 export default function Headcount({ admin, irProjeto }) {
   const [dados, setDados] = useState(null);
   const [form, setForm] = useState(null);
@@ -125,7 +95,7 @@ export default function Headcount({ admin, irProjeto }) {
         <Kpi rotulo="Custo anualizado" valor={fmt(t.anualizado)} tom="f27" sub="12 meses" />
         <Kpi rotulo="Custo em 2027" valor={fmt(t.custo_2027)} tom="f27" sub="a partir do mês de início" />
       </div>
-      <Parametros dados={dados} admin={admin} recarregar={carregar} />
+      <p className="mudo">O custo usa as fórmulas da planilha de custo de pessoal e as faixas da Tabela Salarial 2025{dados.reajuste ? `, com reajuste de ${fmtN(dados.reajuste)}%` : ""}. {admin ? "Os parâmetros ficam em Administração, Premissas." : "Os parâmetros são mantidos pelo administrador."}</p>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="barra-ferramentas">
         <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
@@ -143,7 +113,7 @@ export default function Headcount({ admin, irProjeto }) {
               <td><strong>{d.funcao || <span className="up">sem função</span>}</strong><br /><span className="mudo">{d.cargo || "cargo não informado"}</span>
                 {d.justificativa && <><br /><span className="mudo" title={d.justificativa} style={{ fontSize: ".78rem" }}>{d.justificativa.length > 80 ? d.justificativa.slice(0, 80) + "…" : d.justificativa}</span></>}</td>
               <td>{bonito(d.trajetoria)}<br /><span className="mudo">{bonito(d.nivel)} | {bonito(d.grupo)} | {d.posicao}% da faixa</span></td>
-              <td><button className="link" onClick={() => irProjeto(d.orcamento)}>{d.orcamento}</button><br /><span className="mudo">{d.projeto}</span>{d.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {d.tarefa}</span></>}</td>
+              <td><button className="link" onClick={() => irProjeto(d.orcamento)}>{d.orcamento}</button><br /><span className="mudo">{d.projeto}</span>{!(dados.projetos.find((p) => p.orcamento === d.orcamento)?.meu) && <><br /><span className="tag aviso">projeto de {dados.projetos.find((p) => p.orcamento === d.orcamento)?.gerente}</span></>}{d.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {d.tarefa}</span></>}</td>
               <td className="n">{d.quantidade}</td><td>{MESES_N[d.mes_inicio - 1].slice(0, 3)}</td>
               <td className="n">{fmtN(d.custo.salario)}</td><td className="n">{fmtN(d.custo.mensal)}</td>
               <td className="n"><strong>{fmtN(d.anualizado)}</strong></td><td className="n"><strong>{fmtN(d.custo_2027)}</strong></td>

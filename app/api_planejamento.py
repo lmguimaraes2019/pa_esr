@@ -102,6 +102,15 @@ def _etapas(projetos: list[dict]) -> dict:
 def _situacao(c: sqlite3.Connection, u: dict) -> dict:
     projetos = list(resumir(c, list(permitidos(c, u))).values())
     etapas = _etapas(projetos)
+    # headcount que o usuário lançou em projeto de outro gestor também é pendência dele
+    ids = permitidos(c, u)
+    par, reaj = pessoal.parametros(c), _reajuste(c)
+    for r in c.execute("SELECT * FROM headcount WHERE criado_por=?", (u["login"],)).fetchall():
+        if r["orcamento"] in ids:
+            continue
+        d = _calc_hc(r, par, reaj)
+        x = etapas["headcount"]
+        x["n"] += r["quantidade"]; x["total"] = _arred(x["total"] + d["custo_2027"]); x["pendentes"] += 1 if d["faltando"] else 0
     pend = etapas["viagens"]["pendentes"] + etapas["eventos"]["pendentes"] + etapas["headcount"]["pendentes"]
     return {"projetos": projetos, "etapas": etapas, "pendencias": pend}
 
