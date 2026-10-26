@@ -131,18 +131,24 @@ function Passado({ d, irPlano, recarregar, setErro }) {
 /* ---------------------------------------------------------------- passo 2: o que muda em 2027 */
 const FILTROS = [["todas", "Todas"], ["ajustes", "Ajustadas e novas"], ["mantida", "Mantidas de 2026"], ["viagens", "Vindas de Viagens, Eventos e Headcount"], ["alerta", "Com alerta"]];
 
-function DadosOrcamento({ d, admin, recarregar, setErro }) {
+function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
   const p = d.projeto;
   const [listas, setListas] = useState(null);
   const [origem, setOrigem] = useState(p.origem);
   const [nome, setNome] = useState(p.descricao);
+  const [tipo, setTipo] = useState(p.tipo);
   const [msg, setMsg] = useState("");
   useEffect(() => { api("/listas").then(setListas).catch(() => {}); }, []);
-  useEffect(() => { setOrigem(p.origem); setNome(p.descricao); }, [p.origem, p.descricao]);
+  useEffect(() => { setOrigem(p.origem); setNome(p.descricao); setTipo(p.tipo); }, [p.origem, p.descricao, p.tipo]);
   if (!listas) return null;
   const pode = admin || p.novo;
   const salvar = async (corpo, texto) => {
     try { setErro(""); setMsg(""); await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: corpo }); setMsg(texto); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  const excluir = async () => {
+    const n = d.linhas.length;
+    if (!window.confirm(`Excluir o orçamento "${p.descricao}"?\nSerão apagados as ${n} linha(s) de 2027 e também as receitas, viagens, eventos e posições de headcount lançados nele. Não há como desfazer.`)) return;
+    try { setErro(""); await api(`/projetos/${p.orcamento}`, { method: "DELETE" }); voltar(); } catch (e) { setErro(e.message); }
   };
   return (
     <section className="cartao dados-orc">
@@ -151,18 +157,22 @@ function DadosOrcamento({ d, admin, recarregar, setErro }) {
         <label>Origem de recursos em 2027
           <select value={origem} onChange={(e) => setOrigem(e.target.value)}>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
         {pode && <label>Nome do orçamento<input value={nome} onChange={(e) => setNome(e.target.value)} /></label>}
+        {pode && <label>Tipo de orçamento<select value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>}
       </div>
       <div className="acoes">
         <button className="primario" disabled={origem === p.origem} onClick={() => salvar({ origem }, `Origem de 2027 alterada para ${origem}. A de 2026 continua ${p.origem_2026}.`)}>Salvar origem</button>
         {pode && <button disabled={nome.trim() === p.descricao || nome.trim().length < 3} onClick={() => salvar({ descricao: nome }, "Nome atualizado.")}>Salvar nome</button>}
+        {pode && <button disabled={tipo === p.tipo} onClick={() => salvar({ tipo }, tipo === "receita" ? "Agora é um orçamento de receita: o total entra como resultado positivo." : "Agora é um orçamento de despesa.")}>Salvar tipo</button>}
+        {p.novo && <button className="perigo-btn" onClick={excluir}>Excluir orçamento</button>}
         {msg && <span className="ok">{msg}</span>}
       </div>
+      {!p.novo && admin && <p className="mudo">Este orçamento existe em 2026 e por isso não pode ser excluído. Para tirá-lo do plano de 2027, exclua as linhas dele.</p>}
       <p className="mudo">A mudança vale só para o plano de 2027: define a origem enviada no Template do PMO e o grupo do resumo e das receitas em 2027. {p.novo ? "" : <>Em 2026 este orçamento continua em <strong>{p.origem_2026}</strong>, e os valores aprovados e executados de 2026 não mudam. </>}A alteração fica registrada no histórico.</p>
     </section>
   );
 }
 
-function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
+function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   const [nova, setNova] = useState(false);
   const [editando, setEditando] = useState(null);
   const [filtro, setFiltro] = useState("todas");
@@ -188,7 +198,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
   const s = t.status;
   return (
     <>
-      <DadosOrcamento d={d} admin={admin} recarregar={recarregar} setErro={setErro} />
+      <DadosOrcamento d={d} admin={admin} recarregar={recarregar} setErro={setErro} voltar={voltar} />
       <div className="kpis">
         <Kpi rotulo="Plano 2027" valor={fmt(t.plano)} tom="f27" />
         <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
@@ -279,7 +289,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
       {erro && <p className="erro" role="alert">{erro}</p>}
       {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} recarregar={carregar} setErro={setErro} />
         : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={irEtapa} />
-        : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} />}
+        : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} voltar={voltar} />}
     </>
   );
 }

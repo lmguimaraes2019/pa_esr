@@ -355,3 +355,22 @@ def test_orcamento_de_receita(client):
     r1 = client.get("/api/receitas").json()
     assert r1["totais"]["despesa"] == d0 and r1["totais"]["receita"] == round(rec0 + 120000, 2)
     assert client.get("/api/resumo").json()["total_plano"] == resumo0
+
+
+def test_editar_tipo_e_excluir_orcamento(client):
+    entrar(client)
+    r0 = client.get("/api/receitas").json()
+    origem, gerente = r0["origens"][0], r0["gerentes"][0]
+    orc = client.post("/api/projetos", json={"descricao": "Orçamento de teste", "origem": origem, "gerente": gerente}).json()["orcamento"]
+    tipo = lambda: [p for p in client.get("/api/projetos").json() if p["orcamento"] == orc][0]["tipo"]
+    assert tipo() == "despesa"
+    assert client.patch(f"/api/projetos/{orc}", json={"tipo": "receita"}).status_code == 200 and tipo() == "receita"
+    assert client.patch(f"/api/projetos/{orc}", json={"tipo": "xx"}).status_code == 422
+    assert client.patch(f"/api/projetos/{orc}", json={"tipo": "despesa"}).status_code == 200 and tipo() == "despesa"
+    client.post("/api/receitas", json={"orcamento": orc, "fonte": "Parcerias", "valor": 1000})
+    d = client.delete(f"/api/projetos/{orc}")
+    assert d.status_code == 200 and d.json()["removidos"]["receitas"] == 1
+    assert not [p for p in client.get("/api/projetos").json() if p["orcamento"] == orc]
+    # orçamento que existia em 2026 não pode ser excluído
+    existente = next(p["orcamento"] for p in client.get("/api/projetos").json() if not p["novo"])
+    assert client.delete(f"/api/projetos/{existente}").status_code == 409

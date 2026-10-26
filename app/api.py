@@ -124,6 +124,7 @@ class ProjetoPatch(BaseModel):
     descricao: str | None = Field(default=None, min_length=3, max_length=200)
     origem: str | None = Field(default=None, min_length=1, max_length=40)
     gerente: str | None = Field(default=None, min_length=1, max_length=100)
+    tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
 
     @field_validator("n_projeto")
     @classmethod
@@ -353,6 +354,24 @@ def criar_projeto(dados: ProjetoNovo, u: dict = Depends(usuario_liberado)):
     return {"orcamento": chave}
 
 
+@router.delete("/projetos/{orcamento}")
+def excluir_projeto(orcamento: str, u: dict = Depends(usuario_liberado)):
+    """Exclui um orçamento criado no app (sem 2026), com tudo o que foi lançado nele em 2027."""
+    with tx() as c:
+        p = exige_acesso(c, u, orcamento)
+        if not p["novo"]:
+            raise HTTPException(409, "Só é possível excluir orçamentos criados no app. Este existe em 2026 e tem valores aprovados e executados; "
+                                     "para tirá-lo do plano de 2027, exclua as linhas dele.")
+        cont = {}
+        for tabela, filtro in (("linhas", "ciclo=2027 AND orcamento=?"), ("receitas", "ciclo=2027 AND orcamento=?"), ("viagens", "orcamento=?"),
+                               ("eventos", "orcamento=?"), ("headcount", "orcamento=?")):
+            cont[tabela] = c.execute(f"DELETE FROM {tabela} WHERE {filtro}", (orcamento,)).rowcount
+        c.execute("DELETE FROM user_projetos WHERE orcamento=?", (orcamento,))
+        c.execute("DELETE FROM projetos WHERE orcamento=?", (orcamento,))
+        audit(c, u["login"], "excluiu orçamento novo", orcamento, detalhe=f"{p['descricao']} ({p['tipo']}): {cont}")
+    return {"ok": True, "removidos": cont}
+
+
 @router.patch("/projetos/{orcamento}")
 def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuario_liberado)):
     with tx() as c:
@@ -361,6 +380,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
         if u["perfil"] != "admin" and ("n_projeto" in campos or "gerente" in campos
                                        or ("descricao" in campos and not p["novo"])):
             raise HTTPException(403, "Apenas o administrador altera o Nº do Projeto, o gerente e o nome de orçamentos existentes.")
+        if "tipo" in campos and u["perfil"] != "admin" and not p["novo"]:
+            raise HTTPException(403, "Apenas o administrador altera o tipo de um orçamento que já existia em 2026.")
         if "origem" in campos or "gerente" in campos:
             ld = export_xlsx._listas_template()
             if "origem" in campos and campos["origem"] not in ld["origens"]:
