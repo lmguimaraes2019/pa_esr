@@ -10,6 +10,7 @@ UP = Path(os.environ.get("ORC_TEST_UPLOADS", "/mnt/user-data/uploads"))
 F_PROTHEUS = UP / "2026_-_Base_Protheus_-_ESR.xlsx"
 F_TEMPLATE = UP / "Template_Planejamento_Anual_-_2027.xlsx"
 F_PA = UP / "projetos_pa_2026.xlsx"
+F_VIAGENS = UP / "VIAGENS_-_ORÇAMENTO_2026_ESR_VProtheus_16102025.xlsx"
 
 precisa_dados = pytest.mark.skipif(
     not (F_PROTHEUS.exists() and F_TEMPLATE.exists() and F_PA.exists()),
@@ -36,6 +37,10 @@ def banco_semeado(tmp_path_factory):
     try:
         _apontar(mp, pasta)
         info = seed(F_PROTHEUS, F_TEMPLATE, F_PA, admin_senha=ADMIN_SENHA)
+        if F_VIAGENS.exists():
+            from app import db, viagens
+            with db.tx() as c:
+                info["viagens"] = viagens.importar(c, F_VIAGENS)
     finally:
         mp.undo()
     return pasta, info

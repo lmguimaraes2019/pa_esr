@@ -126,6 +126,7 @@ class PremissasIn(BaseModel):
     reajuste_pessoal: float = Field(ge=-50, le=100)
     reajuste_geral: float = Field(ge=-50, le=100)
     dolar: float = Field(gt=0, le=50)
+    viagens_bagagem_vezes: float | None = Field(default=None, ge=0, le=4)
 
 
 class AplicarIn(BaseModel):
@@ -212,9 +213,10 @@ def ler_premissas(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = D
 @router.put("/premissas")
 def gravar_premissas(dados: PremissasIn, u: dict = Depends(exige_admin)):
     with tx() as c:
-        for chave, valor in dados.model_dump().items():
+        enviados = dados.model_dump(exclude_none=True)
+        for chave, valor in enviados.items():
             c.execute("UPDATE premissas SET valor=? WHERE chave=?", (valor, chave))
-        audit(c, u["login"], "alterou premissas", detalhe=str(dados.model_dump()))
+        audit(c, u["login"], "alterou premissas", detalhe=str(enviados))
     return {"ok": True}
 
 
@@ -230,7 +232,7 @@ def aplicar_premissas(dados: AplicarIn, u: dict = Depends(exige_admin)):
         sql = (f"SELECT l.id, l.orcamento, l.editada, k.grupo, {', '.join('l.' + m for m in MESES)}, "
                f"{', '.join('b.' + m + ' AS b_' + m for m in MESES)} "
                "FROM linhas l JOIN linhas b ON b.id = l.base_id JOIN contas k ON k.codigo = l.conta_codigo "
-               "WHERE l.ciclo = ?")
+               "WHERE l.ciclo = ? AND l.fonte <> 'viagens'")
         antes = depois = 0.0
         afetadas = ignoradas_editadas = 0
         for r in c.execute(sql, (config.CICLO_PLANO,)).fetchall():
@@ -256,14 +258,33 @@ def aplicar_premissas(dados: AplicarIn, u: dict = Depends(exige_admin)):
 
 def _linha(r: sqlite3.Row) -> dict:
     meses = [_arred(r[m]) for m in MESES]
+    total = _arred(sum(meses))
     ref = None
     if r["base_id"] is not None:
         rm = [_arred(r["b_" + m]) for m in MESES]
         ref = {"meses": rm, "total": _arred(sum(rm))}
+    realizado, empenhado = _arred(r["realizado"] or 0), _arred(r["empenhado"] or 0)
+    executado = _arred(realizado + empenhado)
+    if r["fonte"] == "viagens":
+        status = "viagens"
+    elif ref is None:
+        status = "nova"
+    elif meses == ref["meses"]:
+        status = "mantida"
+    else:
+        status = "ajustada"
+    alertas = []
+    if ref and ref["total"] > 0:
+        if executado > ref["total"] + 0.5:
+            alertas.append("executado acima do aprovado")
+        elif executado < ref["total"] * 0.5 and ref["total"] >= 1000:
+            alertas.append("executado abaixo de 50% do aprovado")
+        if total == 0:
+            alertas.append("zerada em 2027")
     return {"id": r["id"], "edt": r["edt"], "tarefa": r["tarefa"], "conta_codigo": r["conta_codigo"],
-            "conta_desc": r["conta_desc"], "grupo": r["grupo"], "meses": meses, "total": _arred(sum(meses)),
-            "obs": r["obs"], "editada": bool(r["editada"]), "ref": ref,
-            "realizado": _arred(r["realizado"] or 0), "empenhado": _arred(r["empenhado"] or 0),
+            "conta_desc": r["conta_desc"], "grupo": r["grupo"], "meses": meses, "total": total,
+            "obs": r["obs"], "editada": bool(r["editada"]), "fonte": r["fonte"], "status": status, "ref": ref,
+            "realizado": realizado, "empenhado": empenhado, "executado": executado, "alertas": alertas,
             "atualizado_por": r["atualizado_por"], "atualizado_em": r["atualizado_em"]}
 
 
@@ -319,16 +340,40 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     linhas = [_linha(r) for r in rows]
     ex = c.execute("SELECT COALESCE(SUM(realizado),0), COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=?",
                    (orcamento,)).fetchone()
+    # visão de 2026: o que foi aprovado, o que foi executado e o que aconteceu com a linha em 2027
+    passado = []
+    for r in c.execute(
+            f"""SELECT b.id, b.edt, b.tarefa, b.conta_codigo, k.descricao AS conta_desc, k.grupo,
+                       {', '.join('b.' + m for m in MESES)}, e.realizado, e.empenhado,
+                       (SELECT COUNT(*) FROM linhas p WHERE p.base_id = b.id) AS n27,
+                       (SELECT COALESCE(SUM({SOMA_MESES.replace('m', 'p.m')}),0) FROM linhas p WHERE p.base_id = b.id) AS t27
+                FROM linhas b JOIN contas k ON k.codigo = b.conta_codigo
+                LEFT JOIN execucao e ON e.orcamento = b.orcamento AND e.edt = b.edt AND e.tarefa = b.tarefa
+                     AND e.conta_codigo = b.conta_codigo
+                WHERE b.ciclo = ? AND b.orcamento = ? ORDER BY b.edt, b.tarefa, b.conta_codigo""",
+            (config.CICLO_BASE, orcamento)):
+        meses = [_arred(r[m]) for m in MESES]
+        aprovado = _arred(sum(meses))
+        real, emp = _arred(r["realizado"] or 0), _arred(r["empenhado"] or 0)
+        passado.append({"id": r["id"], "edt": r["edt"], "tarefa": r["tarefa"], "conta_codigo": r["conta_codigo"],
+                        "conta_desc": r["conta_desc"], "grupo": r["grupo"], "meses": meses, "aprovado": aprovado,
+                        "realizado": real, "empenhado": emp, "executado": _arred(real + emp),
+                        "saldo": _arred(aprovado - real - emp),
+                        "pct": round((real + emp) / aprovado * 100, 1) if aprovado > 0 else None,
+                        "plano_2027": _arred(r["t27"]), "removida": r["n27"] == 0})
     casado_r = sum(x["realizado"] for x in linhas)
     casado_e = sum(x["empenhado"] for x in linhas)
+    contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "origem", "gerente", "diretoria")}
                    | {"original_2026": _arred(p["original_2026"])},
-        "linhas": linhas,
+        "linhas": linhas, "passado": passado,
         "totais": {"plano": _arred(sum(x["total"] for x in linhas)),
-                   "base": _arred(sum((x["ref"] or {"total": 0})["total"] for x in linhas)),
+                   "base": _arred(sum(x["aprovado"] for x in passado)),
                    "realizado": _arred(ex[0]), "empenhado": _arred(ex[1]),
-                   "realizado_sem_linha": _arred(ex[0] - casado_r), "empenhado_sem_linha": _arred(ex[1] - casado_e)},
+                   "realizado_sem_linha": _arred(ex[0] - casado_r), "empenhado_sem_linha": _arred(ex[1] - casado_e),
+                   "removidas": sum(1 for x in passado if x["removida"]), "status": contagem,
+                   "alertas": sum(1 for x in linhas if x["alertas"])},
     }
 
 
@@ -360,10 +405,17 @@ def _linha_do_usuario(c: sqlite3.Connection, u: dict, linha_id: int) -> sqlite3.
     return r
 
 
+def _trava_viagens(linha: sqlite3.Row, altera_valor: bool) -> None:
+    if linha["fonte"] == "viagens" and altera_valor:
+        raise HTTPException(409, "Esta linha vem do plano de viagens. Altere o plano na aba Viagens e aplique de novo ao orçamento.")
+
+
 @router.put("/linhas/{linha_id}")
 def editar_linha(linha_id: int, dados: LinhaPatch, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         atual = _linha_do_usuario(c, u, linha_id)
+        _trava_viagens(atual, dados.meses is not None or dados.conta_codigo is not None or dados.edt is not None
+                       or dados.tarefa is not None)
         novo = dados.model_dump(exclude_none=True)
         if "conta_codigo" in novo:
             _checar_conta(c, novo["conta_codigo"])
@@ -390,6 +442,7 @@ def editar_linha(linha_id: int, dados: LinhaPatch, u: dict = Depends(usuario_lib
 def excluir_linha(linha_id: int, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         atual = _linha_do_usuario(c, u, linha_id)
+        _trava_viagens(atual, True)
         c.execute("DELETE FROM linhas WHERE id=?", (linha_id,))
         audit(c, u["login"], "excluiu linha", atual["orcamento"], linha_id,
               f"{atual['tarefa']} / {atual['conta_codigo']} / {_arred(sum(atual[m] for m in MESES))}")
@@ -412,16 +465,46 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         f"SELECT {', '.join(f'SUM({m}) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks})",
         (config.CICLO_PLANO, *ids)).fetchone()
 
-    def agrupar(rows, chave):
+    exec_origem = c.execute(
+        f"""SELECT p.origem AS nome, SUM(e.realizado) r, SUM(e.empenhado) em FROM execucao e JOIN projetos p USING (orcamento)
+            WHERE e.orcamento IN ({marks}) GROUP BY p.origem""", ids).fetchall()
+    exec_grupo = c.execute(
+        f"""SELECT COALESCE(k.grupo, 'Sem conta contábil (folha e outros)') AS nome, SUM(e.realizado) r, SUM(e.empenhado) em
+            FROM execucao e LEFT JOIN contas k ON k.codigo = e.conta_codigo
+            WHERE e.orcamento IN ({marks}) GROUP BY nome""", ids).fetchall()
+
+    def agrupar(rows, chave, execucao):
         out: dict[str, dict] = {}
         for r in rows:
-            d = out.setdefault(r[chave], {"nome": r[chave], "base": 0.0, "plano": 0.0})
+            d = out.setdefault(r[chave], {"nome": r[chave], "base": 0.0, "plano": 0.0, "realizado": 0.0, "empenhado": 0.0})
             d["base" if r["ciclo"] == config.CICLO_BASE else "plano"] = _arred(r["t"])
-        return sorted(out.values(), key=lambda d: -d["plano"])
+        for r in execucao:
+            d = out.setdefault(r["nome"], {"nome": r["nome"], "base": 0.0, "plano": 0.0, "realizado": 0.0, "empenhado": 0.0})
+            d["realizado"], d["empenhado"] = _arred(r["r"] or 0), _arred(r["em"] or 0)
+        for d in out.values():
+            d["executado"] = _arred(d["realizado"] + d["empenhado"])
+        return sorted(out.values(), key=lambda d: -max(d["plano"], d["base"]))
 
-    origens, grupos = agrupar(por_origem, "origem"), agrupar(por_grupo, "grupo")
+    origens, grupos = agrupar(por_origem, "origem", exec_origem), agrupar(por_grupo, "grupo", exec_grupo)
+    tot = lambda lista, k: _arred(sum(x[k] for x in lista)) if lista else 0.0
+    status = {"mantida": 0, "ajustada": 0, "nova": 0, "viagens": 0}
+    for r in c.execute(
+            f"SELECT l.fonte, l.base_id, {', '.join('l.' + m for m in MESES)}, {', '.join('b.' + m + ' AS b_' + m for m in MESES)} "
+            f"FROM linhas l LEFT JOIN linhas b ON b.id = l.base_id WHERE l.ciclo=? AND l.orcamento IN ({marks})",
+            (config.CICLO_PLANO, *ids)):
+        if r["fonte"] == "viagens":
+            status["viagens"] += 1
+        elif r["base_id"] is None:
+            status["nova"] += 1
+        elif all(abs(r[m] - r["b_" + m]) < 0.005 for m in MESES):
+            status["mantida"] += 1
+        else:
+            status["ajustada"] += 1
     return {"ciclo_base": config.CICLO_BASE, "ciclo_plano": config.CICLO_PLANO,
-            "total_base": _arred(sum(o["base"] for o in origens)), "total_plano": _arred(sum(o["plano"] for o in origens)),
+            "total_base": tot(origens, "base"), "total_plano": tot(origens, "plano"),
+            "total_realizado": tot(origens, "realizado"), "total_empenhado": tot(origens, "empenhado"),
+            "total_executado": tot(origens, "executado") if origens else 0.0,
+            "linhas_status": status,
             "por_origem": origens, "por_grupo": grupos,
             "mensal_plano": [{"mes": NOMES_MESES[i], "valor": _arred(mensal[m] or 0)} for i, m in enumerate(MESES)]}
 

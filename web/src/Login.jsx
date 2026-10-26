@@ -14,8 +14,8 @@ export function Login({ onEntrou }) {
   return (
     <div className="centro">
       <form className="cartao login" onSubmit={enviar}>
-        <h1>Orçamento ESR 2027</h1>
-        <p className="mudo">Planejamento anual</p>
+        <img className="logo" src="/logo-positivo.png" alt="Escola Superior de Redes" />
+        <h1 style={{ textAlign: "center", fontSize: "1.1rem" }}>PLANEJAMENTO ANUAL 2027</h1>
         <label>Usuário<input value={login} onChange={(e) => setLogin(e.target.value)} autoFocus autoComplete="username" /></label>
         <label>Senha<input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} autoComplete="current-password" /></label>
         {erro && <p className="erro" role="alert">{erro}</p>}
@@ -37,8 +37,9 @@ export function TrocarSenha({ obrigatoria, onFeito }) {
     catch (x) { setMsg({ erro: x.message, ok: false }); }
   };
   const corpo = (
-    <form className="cartao login" onSubmit={enviar}>
-      <h1>{obrigatoria ? "Defina sua senha" : "Trocar senha"}</h1>
+    <form className={"cartao login"} onSubmit={enviar} style={obrigatoria ? undefined : { borderTop: 0, width: "min(400px,100%)", margin: 0, padding: 0, border: 0 }}>
+      {obrigatoria && <img className="logo" src="/logo-positivo.png" alt="Escola Superior de Redes" />}
+      <h1 style={{ fontSize: "1.1rem" }}>{obrigatoria ? "DEFINA SUA SENHA" : "TROCAR SENHA"}</h1>
       {obrigatoria && <p className="mudo">Troque a senha provisória para continuar. Mínimo de 10 caracteres, com maiúscula, minúscula e número.</p>}
       <label>Senha atual<input type="password" value={atual} onChange={(e) => setAtual(e.target.value)} autoComplete="current-password" /></label>
       <label>Nova senha<input type="password" value={nova} onChange={(e) => setNova(e.target.value)} autoComplete="new-password" /></label>

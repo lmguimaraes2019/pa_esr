@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
+import { Kpi, Delta, pct, Passos, Selo } from "./ui.jsx";
 
-function Celula({ valor, onSalvar }) {
+function Celula({ valor, onSalvar, travada }) {
   const [txt, setTxt] = useState(null);
+  if (travada) return <span className="n" style={{ padding: "5px 6px", display: "block", width: 92 }}>{valor ? fmtN(valor) : ""}</span>;
   const mostra = txt ?? (valor ? fmtN(valor) : "");
   const fim = () => {
     if (txt === null) return;
@@ -23,12 +25,12 @@ function NovaLinha({ contas, onCriar, onFechar }) {
     if (Number.isNaN(total) || total < 0) return setErro("Informe um valor anual válido.");
     const base = Math.floor((total / 12) * 100) / 100;
     const meses = Array(12).fill(base);
-    meses[11] = Math.round((total - base * 11) * 100) / 100;       // o resto dos centavos vai para dezembro
+    meses[11] = Math.round((total - base * 11) * 100) / 100;
     try { await onCriar({ edt: f.edt, tarefa: f.tarefa, conta_codigo: f.conta, meses }); onFechar(); } catch (x) { setErro(x.message); }
   };
   return (
-    <form className="cartao nova" onSubmit={salvar}>
-      <h3>Nova linha</h3>
+    <form className="cartao" onSubmit={salvar}>
+      <h3>Nova linha no plano 2027</h3>
       <div className="grade">
         <label>Meta/EDT<input value={f.edt} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
         <label>Ação/Tarefa<input value={f.tarefa} onChange={(e) => setF({ ...f, tarefa: e.target.value })} required /></label>
@@ -44,79 +46,155 @@ function NovaLinha({ contas, onCriar, onFechar }) {
   );
 }
 
-export default function Projeto({ orcamento, admin, voltar }) {
+function agrupar(linhas) {
+  const m = new Map();
+  linhas.forEach((l) => { const k = `${l.edt} | ${l.tarefa}`; if (!m.has(k)) m.set(k, []); m.get(k).push(l); });
+  return [...m.entries()];
+}
+
+/* ---------------------------------------------------------------- passo 1: o que aconteceu em 2026 */
+function Passado({ d, irPlano }) {
+  const [meses, setMeses] = useState(false);
+  const t = d.totais;
+  const grupos = useMemo(() => agrupar(d.passado), [d]);
+  const exec = t.realizado + t.empenhado;
+  return (
+    <>
+      <div className="nota">Esta é a fotografia de 2026: o que foi aprovado, o que já foi realizado e empenhado, e o que cada linha virou no plano de 2027. Nada aqui é editável.</div>
+      <div className="kpis">
+        <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
+        <Kpi rotulo="Realizado" valor={fmt(t.realizado)} tom="f26" />
+        <Kpi rotulo="Empenhado" valor={fmt(t.empenhado)} tom="f26" />
+        <Kpi rotulo="Saldo não executado" valor={fmt(t.base - exec)} tom="f26" sub={`${pct(exec, t.base)} executado`} />
+      </div>
+      <div className="acoes"><label style={{ flexDirection: "row", alignItems: "center", gap: 8, textTransform: "none" }}><input type="checkbox" style={{ width: "auto" }} checked={meses} onChange={(e) => setMeses(e.target.checked)} />Mostrar o aprovado mês a mês</label></div>
+      <div className="rolagem">
+        <table className="tab">
+          <thead><tr><th>Conta</th><th className="n">Aprovado</th><th className="n">Realizado</th><th className="n">Empenhado</th><th className="n">Saldo</th><th className="n">% exec.</th><th className="n">Em 2027</th><th>Situação</th>
+            {meses && MESES.map((m) => <th key={m} className="n">{m}</th>)}</tr></thead>
+          <tbody>
+            {grupos.map(([k, ls]) => (
+              <React.Fragment key={k}>
+                <tr className="grupo" style={{ background: "var(--azul-claro)" }}><td colSpan={8 + (meses ? 12 : 0)} style={{ fontWeight: 800, color: "var(--azul)" }}>{k}</td></tr>
+                {ls.map((l) => (
+                  <tr key={l.id}>
+                    <td><span className="mudo">{l.grupo}</span><br />{l.conta_desc}</td>
+                    <td className="n">{fmtN(l.aprovado)}</td><td className="n">{fmtN(l.realizado)}</td><td className="n">{fmtN(l.empenhado)}</td>
+                    <td className="n">{fmtN(l.saldo)}</td><td className="n">{l.pct === null ? "-" : l.pct.toFixed(0) + "%"}</td>
+                    <td className="n"><strong>{fmtN(l.plano_2027)}</strong></td>
+                    <td>{l.removida ? <span className="tag removida">removida</span>
+                      : Math.abs(l.plano_2027 - l.aprovado) < 0.005 ? <span className="tag ok">mantida</span>
+                      : <span className="tag ajustada">ajustada</span>}</td>
+                    {meses && l.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}
+                  </tr>))}
+              </React.Fragment>))}
+          </tbody>
+        </table>
+      </div>
+      {(t.realizado_sem_linha > 1 || t.empenhado_sem_linha > 1) && (
+        <p className="mudo">Execução de 2026 sem linha correspondente no aprovado: realizado {fmt(t.realizado_sem_linha)}, empenhado {fmt(t.empenhado_sem_linha)}.</p>)}
+      <div className="acoes" style={{ marginTop: 16 }}><button className="destaque" onClick={irPlano}>Ir para o plano 2027 →</button></div>
+    </>
+  );
+}
+
+/* ---------------------------------------------------------------- passo 2: o que muda em 2027 */
+const FILTROS = [["todas", "Todas"], ["ajustes", "Ajustadas e novas"], ["mantida", "Mantidas de 2026"], ["viagens", "Do plano de viagens"], ["alerta", "Com alerta"]];
+
+function Plano({ d, admin, contas, recarregar, setErro, irViagens }) {
+  const [nova, setNova] = useState(false);
+  const [filtro, setFiltro] = useState("todas");
+  const t = d.totais;
+  const trocar = async (l, corpo) => {
+    try { setErro(""); await api(`/linhas/${l.id}`, { method: "PUT", body: corpo }); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  const salvarMeses = (l, i, v) => { const meses = [...l.meses]; meses[i] = v; trocar(l, { meses }); };
+  const excluir = async (l) => {
+    if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)})?`)) return;
+    try { await api(`/linhas/${l.id}`, { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  const visiveis = d.linhas.filter((l) =>
+    filtro === "todas" ? true : filtro === "ajustes" ? ["ajustada", "nova"].includes(l.status)
+    : filtro === "alerta" ? l.alertas.length > 0 : l.status === filtro);
+  const grupos = useMemo(() => agrupar(visiveis), [d, filtro]);
+  const s = t.status;
+  return (
+    <>
+      <div className="kpis">
+        <Kpi rotulo="Plano 2027" valor={fmt(t.plano)} tom="f27" />
+        <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
+        <Kpi rotulo="Diferença" valor={fmt(t.plano - t.base)} tom={t.plano - t.base > 0 ? "pos" : "neg"} sub={t.base ? ((t.plano - t.base) / t.base * 100).toFixed(1).replace(".", ",") + "%" : ""} />
+        <Kpi rotulo="Executado 2026" valor={fmt(t.realizado + t.empenhado)} tom="f26" sub={pct(t.realizado + t.empenhado, t.base) + " do aprovado"} />
+      </div>
+      {t.alertas > 0 && <div className="nota aviso"><strong>{t.alertas} linha(s) pedem atenção.</strong> Em 2026 o executado ficou acima do aprovado ou abaixo de metade dele. Use o filtro "Com alerta" para revisar.</div>}
+      {t.removidas > 0 && <div className="nota aviso">{t.removidas} linha(s) de 2026 não existem mais no plano de 2027 (veja no passo 1, situação "removida").</div>}
+      <p className="mudo">Cada linha começa igual ao aprovado de 2026 (linha cinza abaixo). Edite os meses direto na tabela e tecle Enter. Cada alteração fica registrada com o seu usuário. Linhas do plano de viagens são alteradas na aba <button className="link" onClick={irViagens}>Viagens</button>.</p>
+      <div className="filtros">{FILTROS.map(([k, n]) => (
+        <button key={k} className={filtro === k ? "on" : ""} onClick={() => setFiltro(k)}>
+          {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
+      <div className="rolagem">
+        <table className="tab grid">
+          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th><th className="n">Δ vs 2026</th><th /></tr></thead>
+          <tbody>
+            {grupos.length === 0 && <tr><td colSpan={16} className="mudo">Nenhuma linha neste filtro.</td></tr>}
+            {grupos.map(([k, ls]) => (
+              <React.Fragment key={k}>
+                <tr className="grupo"><td colSpan={16}>{k}</td></tr>
+                {ls.map((l) => (
+                  <React.Fragment key={l.id}>
+                    <tr className={l.status}>
+                      <td title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
+                        <span className="mudo">{l.grupo}</span>
+                        {l.status === "ajustada" && <span className="tag ajustada">ajustada</span>}
+                        {l.status === "nova" && <span className="tag nova">nova</span>}
+                        {l.status === "viagens" && <span className="tag viagens">plano de viagens</span>}
+                        <br />{l.conta_desc}
+                        {l.alertas.map((a) => <span key={a} className="alerta">⚠ {a}</span>)}
+                      </td>
+                      {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} travada={l.fonte === "viagens"} onSalvar={(n) => salvarMeses(l, i, n)} /></td>)}
+                      <td className="n"><strong>{fmtN(l.total)}</strong></td>
+                      <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} /> : <span className="up">+{fmtN(l.total)}</span>}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {l.status === "ajustada" && <button className="link" title="Voltar aos valores aprovados em 2026" onClick={() => trocar(l, { meses: l.ref.meses })}>desfazer</button>}
+                        {l.fonte !== "viagens" && <button className="link" title="Excluir linha" onClick={() => excluir(l)}>✕</button>}
+                      </td>
+                    </tr>
+                    {l.ref && (
+                      <tr className="ref"><td>2026 aprovado · executado {fmt(l.executado)}</td>
+                        {l.ref.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}<td className="n">{fmtN(l.ref.total)}</td><td /><td /></tr>)}
+                  </React.Fragment>))}
+              </React.Fragment>))}
+          </tbody>
+          <tfoot><tr><td>Total do plano 2027</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(d.linhas.reduce((a, l) => a + l.meses[i], 0))}</td>)}<td className="n">{fmtN(t.plano)}</td><td className="n"><Delta de={t.base} para={t.plano} /></td><td /></tr></tfoot>
+        </table>
+      </div>
+      {nova ? <NovaLinha contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${d.projeto.orcamento}/linhas`, { method: "POST", body: b }); recarregar(); }} />
+            : <button className="primario" onClick={() => setNova(true)}>+ Nova linha</button>}
+    </>
+  );
+}
+
+export default function Projeto({ orcamento, admin, voltar, irViagens }) {
   const [d, setD] = useState(null);
   const [contas, setContas] = useState([]);
   const [erro, setErro] = useState("");
-  const [nova, setNova] = useState(false);
-  const [aberta, setAberta] = useState(null);
-
+  const [passo, setPasso] = useState("plano");
   const carregar = useCallback(() => api(`/projetos/${orcamento}`).then(setD).catch((e) => setErro(e.message)), [orcamento]);
   useEffect(() => { carregar(); api("/contas").then(setContas); }, [carregar]);
-
-  const trocar = (id, nova) => setD((x) => ({ ...x, linhas: x.linhas.map((l) => (l.id === id ? nova : l)) }));
-  const salvarMeses = async (l, i, v) => {
-    const meses = [...l.meses]; meses[i] = v;
-    try { setErro(""); trocar(l.id, await api(`/linhas/${l.id}`, { method: "PUT", body: { meses } })); carregar(); }
-    catch (e) { setErro(e.message); }
-  };
-  const excluir = async (l) => {
-    if (!window.confirm(`Excluir a linha "${l.tarefa} | ${l.conta_desc}" (${fmt(l.total)})?`)) return;
-    try { await api(`/linhas/${l.id}`, { method: "DELETE" }); carregar(); } catch (e) { setErro(e.message); }
-  };
-  const grupos = useMemo(() => {
-    const m = new Map();
-    (d?.linhas || []).forEach((l) => { const k = `${l.edt} | ${l.tarefa}`; if (!m.has(k)) m.set(k, []); m.get(k).push(l); });
-    return [...m.entries()];
-  }, [d]);
-
   if (erro && !d) return <p className="erro">{erro} <button className="link" onClick={voltar}>Voltar</button></p>;
   if (!d) return <p>Carregando…</p>;
-  const { projeto: p, totais: t } = d;
-
+  const p = d.projeto;
   return (
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2>{p.descricao}</h2><p className="mudo">Orçamento {p.orcamento} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p></div>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">Orçamento {p.orcamento} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p></div>
         {admin && !p.n_projeto && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
       </div>
-      <div className="kpis">
-        <div className="kpi"><span>2026 aprovado</span><strong>{fmt(t.base)}</strong></div>
-        <div className="kpi"><span>2027 plano</span><strong>{fmt(t.plano)}</strong></div>
-        <div className="kpi"><span>Variação</span><strong>{fmt(t.plano - t.base)}</strong></div>
-        <div className="kpi"><span>Realizado 2026</span><strong>{fmt(t.realizado)}</strong></div>
-      </div>
+      <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Entender 2026"], ["plano", "Planejar 2027"]]} />
       {erro && <p className="erro" role="alert">{erro}</p>}
-      <p className="mudo">Edite os meses direto na tabela e tecle Enter. Cada alteração fica registrada com o seu usuário. A linha cinza abaixo de cada valor é o 2026 aprovado.</p>
-      <div className="rolagem">
-        <table className="tab grid">
-          <thead><tr><th>Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total</th><th /></tr></thead>
-          <tbody>
-            {grupos.map(([k, ls]) => (
-              <React.Fragment key={k}>
-                <tr className="grupo"><td colSpan={15}>{k}</td></tr>
-                {ls.map((l) => (
-                  <React.Fragment key={l.id}>
-                    <tr className={l.editada ? "ed" : ""}>
-                      <td title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}><span className="mudo">{l.grupo}</span><br />{l.conta_desc}{l.obs && <span className="tag" title={l.obs}>obs</span>}</td>
-                      {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => salvarMeses(l, i, n)} /></td>)}
-                      <td className="n"><strong>{fmtN(l.total)}</strong></td>
-                      <td><button className="link" title="Excluir linha" onClick={() => excluir(l)}>✕</button></td>
-                    </tr>
-                    {l.ref && (
-                      <tr className="ref"><td>2026 {l.realizado > 0 && <small>· realizado {fmt(l.realizado)}</small>}</td>
-                        {l.ref.meses.map((v, i) => <td key={i} className="n">{v ? fmtN(v) : ""}</td>)}<td className="n">{fmtN(l.ref.total)}</td><td /></tr>)}
-                  </React.Fragment>))}
-              </React.Fragment>))}
-          </tbody>
-          <tfoot><tr><td>Total</td>{MESES.map((_, i) => <td key={i} className="n">{fmtN(d.linhas.reduce((a, l) => a + l.meses[i], 0))}</td>)}<td className="n">{fmtN(t.plano)}</td><td /></tr></tfoot>
-        </table>
-      </div>
-      {nova ? <NovaLinha contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${orcamento}/linhas`, { method: "POST", body: b }); carregar(); }} />
-            : <button className="primario" onClick={() => setNova(true)}>+ Nova linha</button>}
-      {(t.realizado_sem_linha > 1 || t.empenhado_sem_linha > 1) && (
-        <p className="mudo">Execução 2026 sem linha correspondente neste projeto: realizado {fmt(t.realizado_sem_linha)}, empenhado {fmt(t.empenhado_sem_linha)}.</p>)}
+      {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} />
+        : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} />}
     </>
   );
 }
@@ -128,9 +206,9 @@ function NumeroProjeto({ orcamento, onSalvo }) {
     try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { n_projeto: v } }); onSalvo(); } catch (e) { setErro(e.message); }
   };
   return (
-    <div className="cartao pend">
+    <div className="cartao pend" style={{ margin: 0 }}>
       <strong>Nº do Projeto pendente</strong>
-      <div className="acoes"><input value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" /><button className="primario" onClick={salvar} disabled={!v}>Salvar</button></div>
+      <div className="acoes"><input style={{ width: 140 }} value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" /><button className="primario" onClick={salvar} disabled={!v}>Salvar</button></div>
       {erro && <p className="erro">{erro}</p>}
     </div>
   );

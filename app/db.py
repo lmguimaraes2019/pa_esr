@@ -77,6 +77,47 @@ CREATE TABLE IF NOT EXISTS premissas (
     descricao TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS viagem_tarifas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('nac','int')),
+    origem TEXT NOT NULL,
+    destino TEXT NOT NULL,
+    passagem REAL NOT NULL DEFAULT 0,        -- ida e volta, valor de 2027 (editável)
+    hospedagem REAL NOT NULL DEFAULT 0,      -- por pernoite
+    bagagem REAL NOT NULL DEFAULT 0,         -- por viagem (só nacionais)
+    aux_transporte REAL NOT NULL DEFAULT 0,  -- por viagem
+    ajuda_custo REAL NOT NULL DEFAULT 0,     -- por dia
+    seguro REAL NOT NULL DEFAULT 0,          -- por viagem (só internacionais)
+    ref_passagem REAL NOT NULL DEFAULT 0,    -- valores de 2026, apenas referência
+    ref_hospedagem REAL NOT NULL DEFAULT 0,
+    ref_bagagem REAL NOT NULL DEFAULT 0,
+    ref_aux_transporte REAL NOT NULL DEFAULT 0,
+    ref_ajuda_custo REAL NOT NULL DEFAULT 0,
+    ref_seguro REAL NOT NULL DEFAULT 0,
+    UNIQUE (tipo, origem, destino)
+);
+
+CREATE TABLE IF NOT EXISTS viagens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ciclo INTEGER NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('nac','int')),
+    mes INTEGER NOT NULL CHECK (mes BETWEEN 1 AND 12),
+    origem TEXT NOT NULL,
+    destino TEXT NOT NULL,
+    n_viagens INTEGER NOT NULL DEFAULT 1,
+    dias INTEGER NOT NULL DEFAULT 1,
+    pernoites INTEGER,                       -- vazio = dias - 1
+    objetivo TEXT NOT NULL DEFAULT '',
+    area TEXT NOT NULL DEFAULT '',
+    orcamento TEXT,                          -- projeto que paga a viagem
+    edt TEXT,                                -- tarefa do orçamento que recebe o valor
+    tarefa TEXT,
+    base_id INTEGER,
+    atualizado_por TEXT NOT NULL DEFAULT '',
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_viagens_ciclo ON viagens (ciclo, tipo);
+
 CREATE TABLE IF NOT EXISTS auditoria (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     em TEXT NOT NULL DEFAULT (datetime('now')),
@@ -91,6 +132,7 @@ CREATE TABLE IF NOT EXISTS auditoria (
 PREMISSAS_PADRAO = [
     ("reajuste_pessoal", 0.0, "Reajuste de 2027 sobre a folha de pessoal (percentual, ex.: 5 para 5%)"),
     ("reajuste_geral", 0.0, "Reajuste de 2027 sobre os demais grupos de despesa (percentual)"),
+    ("viagens_bagagem_vezes", 1.0, "Quantas vezes a franquia de bagagem entra no custo da viagem (a planilha de 2026 contou 2 no consolidado)"),
     ("dolar", 5.5, "Câmbio USD/BRL usado nas calculadoras (a planilha de parcerias usa 5,50)"),
 ]
 
@@ -121,6 +163,9 @@ def tx():
 def init_db() -> None:
     with tx() as c:
         c.executescript(SCHEMA)
+        cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}
+        if "fonte" not in cols:      # migração: origem da linha ('manual' ou 'viagens')
+            c.execute("ALTER TABLE linhas ADD COLUMN fonte TEXT NOT NULL DEFAULT 'manual'")
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))

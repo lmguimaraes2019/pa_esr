@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .api import router
+from .api_viagens import router as viagens_router
 from .db import init_db
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ async def protecoes(request: Request, call_next):
 
 
 app.include_router(router)
+app.include_router(viagens_router)
 
 if config.WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=config.WEB_DIST / "assets"), name="assets")
