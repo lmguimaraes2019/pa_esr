@@ -78,6 +78,11 @@ CREATE TABLE IF NOT EXISTS receitas (
     {_COLS_MESES},
     base_id INTEGER,
     obs TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT 'receita',
+    ano INTEGER NOT NULL DEFAULT 2027,
+    cliente TEXT NOT NULL DEFAULT '',
+    origem_cliente TEXT NOT NULL DEFAULT '',
+    gestor_cliente TEXT NOT NULL DEFAULT '',
     atualizado_por TEXT NOT NULL DEFAULT '',
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -251,6 +256,11 @@ def init_db() -> None:
             for col in ("edt", "tarefa"):
                 if col not in tc:
                     c.execute(f"ALTER TABLE {tabela} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        rc = {r[1] for r in c.execute("PRAGMA table_info(receitas)")}      # migração: transferência intercompany
+        for col, ddl in (("tipo", "TEXT NOT NULL DEFAULT 'receita'"), ("ano", "INTEGER NOT NULL DEFAULT 2027"), ("cliente", "TEXT NOT NULL DEFAULT ''"),
+                         ("origem_cliente", "TEXT NOT NULL DEFAULT ''"), ("gestor_cliente", "TEXT NOT NULL DEFAULT ''")):
+            if col not in rc:
+                c.execute(f"ALTER TABLE receitas ADD COLUMN {col} {ddl}")
         semear_receitas(c)
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",

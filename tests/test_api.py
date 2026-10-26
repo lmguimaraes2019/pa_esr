@@ -311,3 +311,26 @@ def test_planejamento_resumo_e_conclusao(client):
     assert client.get("/api/planejamento").json()["concluido"]["obs"] == "ok"
     assert client.post("/api/planejamento/concluir", json={"concluido": False}).status_code == 200
     assert client.get("/api/planejamento").json()["concluido"] is None
+
+
+def test_receita_intercompany(client):
+    entrar(client)
+    r = client.get("/api/receitas").json()
+    orc, origem, gestor = r["projetos"][0]["orcamento"], r["origens"][0], r["gerentes"][0]
+    base = r["totais"]["receita"]
+    corpo = {"orcamento": orc, "tipo": "intercompany", "ano": 2027, "cliente": "Projeto Alfa", "origem_cliente": origem, "gestor_cliente": gestor, "valor": 1200000.01}
+    assert client.post("/api/receitas", json={**corpo, "cliente": ""}).status_code == 422
+    assert client.post("/api/receitas", json={**corpo, "origem_cliente": "Inventada"}).status_code == 422
+    assert client.post("/api/receitas", json={**corpo, "valor": None}).status_code == 422
+    c = client.post("/api/receitas", json=corpo)
+    assert c.status_code == 201
+    d = c.json()
+    assert d["fonte"] == "Transferência intercompany" and d["total"] == 1200000.01 and len(d["meses"]) == 12 and d["cliente"] == "Projeto Alfa"
+    t = client.get("/api/receitas").json()["totais"]
+    assert t["receita"] == round(base + 1200000.01, 2) and t["intercompany"] == 1200000.01
+    # outro ano fica registrado, mas não soma em 2027
+    o = client.put(f"/api/receitas/{d['id']}", json={"ano": 2028}).json()
+    assert o["conta_em_2027"] is False
+    assert client.get("/api/receitas").json()["totais"]["receita"] == base
+    assert client.put(f"/api/receitas/{d['id']}", json={"ano": 2027, "valor": 600}).json()["total"] == 600
+    assert client.delete(f"/api/receitas/{d['id']}").status_code == 200

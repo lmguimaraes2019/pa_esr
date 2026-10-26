@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from . import config
+from . import export_xlsx
 from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
 
@@ -22,13 +23,34 @@ def _meses(v: list[float]) -> list[float]:
     return [round(float(x), 2) for x in v]
 
 
+FONTE_INTERCOMPANY = "Transferência intercompany"
+
+
+def _espalhar(valor: float) -> list[float]:
+    """Valor anual dividido em 12 parcelas; a última absorve o arredondamento."""
+    base = int(valor / 12 * 100) / 100
+    m = [base] * 12
+    m[11] = round(valor - base * 11, 2)
+    return m
+
+
 class ReceitaIn(BaseModel):
     orcamento: str = Field(min_length=1, max_length=20)
-    fonte: str = Field(min_length=1, max_length=80)
+    fonte: str = Field(default="", max_length=80)
     descricao: str = Field(default="", max_length=200)
-    meses: list[float]
+    meses: list[float] | None = None
     obs: str = Field(default="", max_length=1000)
-    _m = field_validator("meses")(_meses)
+    tipo: str = Field(default="receita", pattern="^(receita|intercompany)$")
+    ano: int = Field(default=2027, ge=2026, le=2035)
+    cliente: str = Field(default="", max_length=120)          # projeto cliente (campo aberto)
+    origem_cliente: str = Field(default="", max_length=80)
+    gestor_cliente: str = Field(default="", max_length=80)
+    valor: float | None = Field(default=None, ge=0, le=1e10)  # valor anual da transferência
+
+    @field_validator("meses")
+    @classmethod
+    def _mm(cls, v):
+        return None if v is None else _meses(v)
 
 
 class ReceitaPatch(BaseModel):
@@ -37,6 +59,11 @@ class ReceitaPatch(BaseModel):
     descricao: str | None = Field(default=None, max_length=200)
     meses: list[float] | None = None
     obs: str | None = Field(default=None, max_length=1000)
+    ano: int | None = Field(default=None, ge=2026, le=2035)
+    cliente: str | None = Field(default=None, max_length=120)
+    origem_cliente: str | None = Field(default=None, max_length=80)
+    gestor_cliente: str | None = Field(default=None, max_length=80)
+    valor: float | None = Field(default=None, ge=0, le=1e10)
 
     @field_validator("meses")
     @classmethod
@@ -48,7 +75,9 @@ def _linha(r: sqlite3.Row, ref: sqlite3.Row | None) -> dict:
     meses = [_arred(r[m]) for m in MESES]
     out = {"id": r["id"], "orcamento": r["orcamento"], "projeto": r["projeto"], "origem": r["origem"], "gerente": r["gerente"],
            "fonte": r["fonte"], "descricao": r["descricao"], "obs": r["obs"], "meses": meses, "total": _arred(sum(meses)),
-           "base_id": r["base_id"], "atualizado_por": r["atualizado_por"], "ref": None}
+           "base_id": r["base_id"], "atualizado_por": r["atualizado_por"], "ref": None,
+           "tipo": r["tipo"], "ano": r["ano"], "cliente": r["cliente"], "origem_cliente": r["origem_cliente"],
+           "gestor_cliente": r["gestor_cliente"], "conta_em_2027": r["ano"] == 2027}
     if ref is not None:
         rm = [_arred(ref[m]) for m in MESES]
         out["ref"] = {"meses": rm, "total": _arred(sum(rm))}
@@ -87,6 +116,8 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     ref_proj: dict[str, float] = {}
     rec_mes = [0.0] * 12
     for l in linhas:
+        if not l["conta_em_2027"]:      # transferência de outro ano aparece na lista, mas não soma em 2027
+            continue
         rec_proj[l["orcamento"]] = rec_proj.get(l["orcamento"], 0.0) + l["total"]
         for i, v in enumerate(l["meses"]):
             rec_mes[i] += v
@@ -114,14 +145,15 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     tot_rec = _arred(sum(rec_mes))
     tot_desp = _arred(sum(despesa.values()))
     return {
-        "linhas": linhas,
+        "linhas": linhas, "origens": export_xlsx._listas_template()["origens"], "gerentes": export_xlsx._listas_template()["gerentes"],
         "fontes": sorted({l["fonte"] for l in linhas}),
         "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"]} for o, p in projetos.items()],
         "por_projeto": por_projeto, "por_origem": sorted(por_origem.values(), key=lambda d: d["origem"]),
         "mensal": [{"mes": NOMES_MESES[i], "receita": _arred(rec_mes[i]), "despesa": _arred(despesa_mes[m])} for i, m in enumerate(MESES)],
         "totais": {"receita": tot_rec, "receita_2026": _arred(ref_total), "despesa": tot_desp,
                    "despesa_2026": _arred(sum(despesa_base.values())), "resultado": _arred(tot_rec - tot_desp),
-                   "linhas": len(linhas), "sem_receita": sum(1 for p in por_projeto if p["receita"] == 0)},
+                   "linhas": len(linhas), "intercompany": _arred(sum(l["total"] for l in linhas if l["tipo"] == "intercompany" and l["conta_em_2027"])),
+                   "sem_receita": sum(1 for p in por_projeto if p["receita"] == 0)},
     }
 
 
@@ -143,15 +175,39 @@ def _do_usuario(c: sqlite3.Connection, u: dict, rid: int) -> sqlite3.Row:
     return r
 
 
+def _valida_intercompany(cliente: str, origem: str, gestor: str) -> None:
+    if not cliente.strip():
+        raise HTTPException(422, "Informe o projeto cliente da transferência.")
+    if origem not in export_xlsx._listas_template()["origens"]:
+        raise HTTPException(422, "Origem de recursos fora da lista do template.")
+    if not gestor.strip():
+        raise HTTPException(422, "Informe o gestor do projeto cliente.")
+
+
 @router.post("", status_code=201)
 def criar(d: ReceitaIn, u: dict = Depends(usuario_liberado)):
+    inter = d.tipo == "intercompany"
+    fonte = FONTE_INTERCOMPANY if inter else d.fonte.strip()
+    if not fonte:
+        raise HTTPException(422, "Informe a fonte da receita.")
+    meses = d.meses
+    if inter:
+        _valida_intercompany(d.cliente, d.origem_cliente, d.gestor_cliente)
+        if meses is None:
+            if d.valor is None:
+                raise HTTPException(422, "Informe o valor da transferência.")
+            meses = _espalhar(d.valor)
+    if meses is None:
+        raise HTTPException(422, "Informe os 12 meses.")
     with tx() as c:
         exige_acesso(c, u, d.orcamento)
         cur = c.execute(
-            f"INSERT INTO receitas (ciclo, orcamento, fonte, descricao, {', '.join(MESES)}, obs, atualizado_por) "
-            f"VALUES (?,?,?,?,{', '.join('?' for _ in MESES)},?,?)",
-            (config.CICLO_PLANO, d.orcamento, d.fonte.strip(), d.descricao.strip(), *d.meses, d.obs.strip(), u["login"]))
-        audit(c, u["login"], "criou receita", d.orcamento, None, f"{d.fonte} / {_arred(sum(d.meses))}")
+            f"INSERT INTO receitas (ciclo, orcamento, fonte, descricao, {', '.join(MESES)}, obs, tipo, ano, cliente, origem_cliente, gestor_cliente, atualizado_por) "
+            f"VALUES (?,?,?,?,{', '.join('?' for _ in MESES)},?,?,?,?,?,?,?)",
+            (config.CICLO_PLANO, d.orcamento, fonte, d.descricao.strip(), *meses, d.obs.strip(), d.tipo, d.ano,
+             d.cliente.strip(), d.origem_cliente, d.gestor_cliente.strip(), u["login"]))
+        audit(c, u["login"], "criou transferência intercompany" if inter else "criou receita", d.orcamento, None,
+              f"{fonte} / {_arred(sum(meses))}" + (f" / cliente {d.cliente}, {d.ano}" if inter else ""))
         return _uma(c, cur.lastrowid)
 
 
@@ -163,9 +219,19 @@ def editar(rid: int, d: ReceitaPatch, u: dict = Depends(usuario_liberado)):
         if "orcamento" in novo:
             exige_acesso(c, u, novo["orcamento"])
         sets, vals = [], []
-        for k in ("orcamento", "fonte", "descricao", "obs"):
+        for k in ("orcamento", "fonte", "descricao", "obs", "cliente", "gestor_cliente"):
             if k in novo:
                 sets.append(f"{k}=?"); vals.append(novo[k].strip())
+        if "ano" in novo:
+            sets.append("ano=?"); vals.append(novo["ano"])
+        if "origem_cliente" in novo:
+            if novo["origem_cliente"] not in export_xlsx._listas_template()["origens"]:
+                raise HTTPException(422, "Origem de recursos fora da lista do template.")
+            sets.append("origem_cliente=?"); vals.append(novo["origem_cliente"])
+        if atual["tipo"] == "intercompany" and ("cliente" in novo and not novo["cliente"].strip()):
+            raise HTTPException(422, "Informe o projeto cliente da transferência.")
+        if "valor" in novo and "meses" not in novo:
+            novo["meses"] = _espalhar(novo["valor"])
         if "meses" in novo:
             sets += [f"{m}=?" for m in MESES]; vals += novo["meses"]
         if not sets:

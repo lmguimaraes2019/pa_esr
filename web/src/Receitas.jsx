@@ -3,10 +3,12 @@ import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
 import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const FONTES_SUGERIDAS = ["Contrato de gestão", "Parcerias", "Growth", "Fomento", "Turmas abertas", "Projetos especiais", "Outras receitas"];
-const vazio = { id: null, orcamento: "", fonte: "", descricao: "", obs: "", meses: Array(12).fill("") };
+const vazio = { id: null, tipo: "receita", orcamento: "", fonte: "", descricao: "", obs: "", meses: Array(12).fill(""), ano: 2027, cliente: "", origem_cliente: "", gestor_cliente: "" };
+const ANOS = [2026, 2027, 2028, 2029, 2030];
 
 function Formulario({ inicial, dados, onSalvar, onFechar }) {
-  const [f, setF] = useState({ ...inicial, meses: inicial.meses.map((v) => (v ? String(v).replace(".", ",") : "")) });
+  const [f, setF] = useState({ ...inicial, meses: inicial.meses.map((v) => (v ? String(v).replace(".", ",") : "")), valor: inicial.id && inicial.total ? String(inicial.total).replace(".", ",") : "" });
+  const inter = f.tipo === "intercompany";
   const [anual, setAnual] = useState("");
   const [erro, setErro] = useState("");
   const total = f.meses.reduce((a, v) => a + (lerNumero(v) || 0), 0);
@@ -19,6 +21,13 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
   };
   const salvar = async (e) => {
     e.preventDefault(); setErro("");
+    if (inter) {
+      const v = lerNumero(f.valor);
+      if (Number.isNaN(v) || v <= 0) return setErro("Informe o valor da transferência.");
+      const corpo = { orcamento: f.orcamento, ano: Number(f.ano), cliente: f.cliente, origem_cliente: f.origem_cliente, gestor_cliente: f.gestor_cliente, obs: f.obs, descricao: f.descricao };
+      try { await onSalvar(f.id ? { ...corpo, valor: v } : { ...corpo, tipo: "intercompany", valor: v }); onFechar(); } catch (x) { setErro(x.message); }
+      return;
+    }
     const nums = f.meses.map(lerNumero);
     if (nums.some((n) => Number.isNaN(n) || n < 0)) return setErro("Use apenas valores positivos nos meses.");
     try { await onSalvar({ orcamento: f.orcamento, fonte: f.fonte, descricao: f.descricao, obs: f.obs, meses: nums.map((n) => Math.round(n * 100) / 100) }); onFechar(); } catch (x) { setErro(x.message); }
@@ -26,7 +35,29 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
   const fontes = [...new Set([...dados.fontes, ...FONTES_SUGERIDAS])];
   return (
     <form className="cartao" id="form-receita" onSubmit={salvar}>
-      <h3>{f.id ? "Editar receita" : "Nova receita 2027"}</h3>
+      <h3>{f.id ? (inter ? "Editar transferência intercompany" : "Editar receita") : "Nova receita 2027"}</h3>
+      {!f.id && <div className="passos" role="tablist" style={{ marginTop: 0 }}>
+        {[["receita", "Receita"], ["intercompany", "Transferência intercompany"]].map(([k, t]) => <button type="button" key={k} role="tab" aria-selected={f.tipo === k} className={f.tipo === k ? "on" : ""} onClick={() => setF({ ...f, tipo: k })}>{t}</button>)}</div>}
+      {inter ? (
+        <>
+          <p className="mudo">Recurso que o projeto recebe de outro projeto da casa. O valor anual é dividido em 12 parcelas iguais, que podem ser ajustadas mês a mês na tabela.</p>
+          <div className="grade">
+            <label><span>Projeto que recebe <span className="obrig">*</span></span><select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
+              <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
+            <label><span>Ano <span className="obrig">*</span></span><select value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })}>{ANOS.map((a) => <option key={a}>{a}</option>)}</select></label>
+            <label><span>Projeto cliente <span className="obrig">*</span></span><input value={f.cliente} onChange={(e) => setF({ ...f, cliente: e.target.value })} placeholder="ex.: nome do projeto que paga a transferência" required /></label>
+            <label><span>Origem de recursos <span className="obrig">*</span></span><select value={f.origem_cliente} onChange={(e) => setF({ ...f, origem_cliente: e.target.value })} required>
+              <option value="">Selecione…</option>{dados.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+            <label><span>Gestor do projeto cliente <span className="obrig">*</span></span><input list="gestores-ic" value={f.gestor_cliente} onChange={(e) => setF({ ...f, gestor_cliente: e.target.value })} required /></label>
+            <datalist id="gestores-ic">{dados.gerentes.map((g) => <option key={g} value={g} />)}</datalist>
+            <label><span>Valor da transferência (R$) <span className="obrig">*</span></span><input value={f.valor} inputMode="decimal" onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="ex.: 250.000,00" required /></label>
+            <label>Observação<input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
+          </div>
+          {Number(f.ano) !== 2027 && <p className="nota aviso">Transferências de {f.ano} ficam registradas, mas só as de 2027 entram nos totais do plano 2027.</p>}
+          {erro && <p className="erro" role="alert">{erro}</p>}
+          <div className="acoes"><button className="primario">Salvar transferência</button><button type="button" onClick={onFechar}>Cancelar</button></div>
+        </>
+      ) : (<>
       <div className="grade">
         <label>Projeto<select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
@@ -43,6 +74,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       <p><strong>Total 2027: {fmt(total)}</strong></p>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="acoes"><button className="primario">Salvar receita</button><button type="button" onClick={onFechar}>Cancelar</button></div>
+      </>)}
     </form>
   );
 }
@@ -74,7 +106,8 @@ function Lancamentos({ dados, recarregar, setErro }) {
           <select style={{ width: 300 }} value={proj} onChange={(e) => setProj(e.target.value)}>
             <option value="todos">Todos os projetos</option>{dados.projetos.filter((p) => origem === "todas" || p.origem === origem).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select>
         </div>
-        <button className="destaque" onClick={() => abrir({ ...vazio, orcamento: proj !== "todos" ? proj : "" })}>+ Nova receita</button>
+        <div className="acoes" style={{ margin: 0 }}><button className="destaque" onClick={() => abrir({ ...vazio, orcamento: proj !== "todos" ? proj : "" })}>+ Nova receita</button>
+        <button onClick={() => abrir({ ...vazio, tipo: "intercompany", orcamento: proj !== "todos" ? proj : "" })}>+ Transferência intercompany</button></div>
       </div>
       <p className="legenda-icones"><span><Lapis /> editar a receita inteira</span><span className="perigo"><Lixeira /> excluir</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
       <div className="rolagem">
@@ -90,6 +123,7 @@ function Lancamentos({ dados, recarregar, setErro }) {
                     <BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta receita" onClick={() => excluir(l)} /></div></td>
                   <td className="col-conta" title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
                     <span className="mudo">{l.orcamento} | {l.projeto}</span><br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
+                    {l.tipo === "intercompany" && <><br /><span className="tag viagens">intercompany {l.ano}</span> <span>cliente: <strong>{l.cliente}</strong></span><br /><span className="mudo">{l.origem_cliente} | gestor {l.gestor_cliente}</span>{!l.conta_em_2027 && <><br /><span className="tag aviso">fora de 2027, não soma</span></>}</>}
                     {l.descricao && <><br /><span className="mudo">{l.descricao}</span></>}</td>
                   {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
                   <td className="n"><strong>{fmtN(l.total)}</strong></td>
@@ -155,6 +189,7 @@ export default function Receitas({ irProjeto }) {
         <Kpi rotulo="Despesa planejada 2027" valor={fmt(t.despesa)} tom="f27" sub={<Delta de={t.despesa_2026} para={t.despesa} />} />
         <Kpi rotulo="Resultado 2027" valor={fmt(t.resultado)} tom={t.resultado < 0 ? "rneg" : "rpos"} sub="receita menos despesa" />
         <Kpi rotulo="Receita prevista 2026" valor={fmt(t.receita_2026)} tom="f26" />
+        {t.intercompany > 0 && <Kpi rotulo="Transferências intercompany" valor={fmt(t.intercompany)} tom="f27" sub="já incluídas na receita 2027" />}
       </div>
       <section className="cartao"><h3>Receita e despesa por mês</h3>
         <div className="legenda"><span><i style={{ background: "var(--laranja)" }} />Receita 2027</span><span><i style={{ background: "var(--azul)" }} />Despesa 2027</span></div>
