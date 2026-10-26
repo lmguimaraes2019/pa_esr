@@ -330,8 +330,28 @@ def test_receita_intercompany(client):
     assert t["receita"] == round(base + 1200000.01, 2) and t["intercompany"] == 1200000.01
     # outro ano fica registrado, mas não soma em 2027
     o = client.put(f"/api/receitas/{d['id']}", json={"ano": 2028}).json()
-    assert o["conta_em_2027"] is False
-    assert client.get("/api/receitas").json()["totais"]["receita"] == base
+    assert o["ano"] == 2028      # o ano é só referência: a transferência sempre conta em 2027
+    assert client.get("/api/receitas").json()["totais"]["receita"] == round(base + 1200000.01, 2)
+    assert sum(m["receita"] for m in client.get("/api/receitas").json()["mensal"]) == base      # sem calendário
     assert client.put(f"/api/receitas/{d['id']}", json={"ano": 2019}).status_code == 422
     assert client.put(f"/api/receitas/{d['id']}", json={"ano": 2027, "valor": 600}).json()["total"] == 600
     assert client.delete(f"/api/receitas/{d['id']}").status_code == 200
+
+
+def test_orcamento_de_receita(client):
+    entrar(client)
+    r0 = client.get("/api/receitas").json()
+    origem, gerente = r0["origens"][0], r0["gerentes"][0]
+    d0, rec0 = r0["totais"]["despesa"], r0["totais"]["receita"]
+    resumo0 = client.get("/api/resumo").json()["total_plano"]
+    c = client.post("/api/projetos", json={"descricao": "Receita de teste", "origem": origem, "gerente": gerente, "tipo": "receita"})
+    assert c.status_code == 201
+    orc = c.json()["orcamento"]
+    assert client.post("/api/projetos", json={"descricao": "X", "origem": origem, "gerente": gerente, "tipo": "outro"}).status_code == 422
+    assert [p for p in client.get("/api/projetos").json() if p["orcamento"] == orc][0]["tipo"] == "receita"
+    # só o valor anual, sem calendarizar
+    k = client.post("/api/receitas", json={"orcamento": orc, "fonte": "Parcerias", "valor": 120000})
+    assert k.status_code == 201 and k.json()["total"] == 120000
+    r1 = client.get("/api/receitas").json()
+    assert r1["totais"]["despesa"] == d0 and r1["totais"]["receita"] == round(rec0 + 120000, 2)
+    assert client.get("/api/resumo").json()["total_plano"] == resumo0

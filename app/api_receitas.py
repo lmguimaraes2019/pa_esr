@@ -77,7 +77,7 @@ def _linha(r: sqlite3.Row, ref: sqlite3.Row | None) -> dict:
            "fonte": r["fonte"], "descricao": r["descricao"], "obs": r["obs"], "meses": meses, "total": _arred(sum(meses)),
            "base_id": r["base_id"], "atualizado_por": r["atualizado_por"], "ref": None,
            "tipo": r["tipo"], "ano": r["ano"], "cliente": r["cliente"], "origem_cliente": r["origem_cliente"],
-           "gestor_cliente": r["gestor_cliente"], "conta_em_2027": r["ano"] == 2027}
+           "gestor_cliente": r["gestor_cliente"], "calendarizada": r["tipo"] != "intercompany"}
     if ref is not None:
         rm = [_arred(ref[m]) for m in MESES]
         out["ref"] = {"meses": rm, "total": _arred(sum(rm))}
@@ -101,26 +101,33 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     usadas = {r["base_id"] for r in rows if r["base_id"]}
     ref_total = sum(x["total"] for x in (_linha_ref(r, c) for r in refs.values() if r["orcamento"] in ids))
     despesa = {r["orcamento"]: _arred(r["t"]) for r in c.execute(
-        f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) GROUP BY orcamento",
+        f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='despesa') GROUP BY orcamento",
         (config.CICLO_PLANO, *ids))}
     despesa_base = {r["orcamento"]: _arred(r["t"]) for r in c.execute(
-        f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) GROUP BY orcamento",
+        f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='despesa') GROUP BY orcamento",
         (config.CICLO_BASE, *ids))}
     despesa_mes = c.execute(
-        f"SELECT {', '.join(f'COALESCE(SUM({m}),0) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks})",
+        f"SELECT {', '.join(f'COALESCE(SUM({m}),0) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='despesa')",
         (config.CICLO_PLANO, *ids)).fetchone()
+    # orçamentos de receita: o total das linhas é receita (resultado positivo)
+    orc_receita = {r["orcamento"]: r for r in c.execute(
+        f"SELECT orcamento, {', '.join(f'SUM({m}) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) "
+        "AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='receita') GROUP BY orcamento", (config.CICLO_PLANO, *ids))}
     projetos = {r["orcamento"]: r for r in c.execute(
-        f"SELECT orcamento, descricao, COALESCE(NULLIF(origem_2027, ''), origem) AS origem, origem AS origem_2026, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
+        f"SELECT orcamento, descricao, tipo, COALESCE(NULLIF(origem_2027, ''), origem) AS origem, origem AS origem_2026, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
 
     rec_proj: dict[str, float] = {}
     ref_proj: dict[str, float] = {}
     rec_mes = [0.0] * 12
     for l in linhas:
-        if not l["conta_em_2027"]:      # transferência de outro ano aparece na lista, mas não soma em 2027
-            continue
         rec_proj[l["orcamento"]] = rec_proj.get(l["orcamento"], 0.0) + l["total"]
-        for i, v in enumerate(l["meses"]):
-            rec_mes[i] += v
+        if l["calendarizada"]:      # transferência intercompany não tem calendário: soma no total, mas não nos meses
+            for i, v in enumerate(l["meses"]):
+                rec_mes[i] += v
+    for o, rr in orc_receita.items():
+        rec_proj[o] = rec_proj.get(o, 0.0) + sum(rr[m] for m in MESES)
+        for i, m in enumerate(MESES):
+            rec_mes[i] += rr[m]
     for r in refs.values():
         if r["orcamento"] in projetos:
             ref_proj[r["orcamento"]] = ref_proj.get(r["orcamento"], 0.0) + sum(r[m] for m in MESES)
@@ -128,7 +135,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     por_projeto, por_origem = [], {}
     for o, p in projetos.items():
         rec, ref, desp = rec_proj.get(o, 0.0), ref_proj.get(o, 0.0), despesa.get(o, 0.0)
-        por_projeto.append({"orcamento": o, "projeto": p["descricao"], "origem": p["origem"], "gerente": p["gerente"],
+        por_projeto.append({"orcamento": o, "projeto": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "tipo": p["tipo"],
                             "receita": _arred(rec), "receita_2026": _arred(ref), "despesa": desp,
                             "despesa_2026": despesa_base.get(o, 0.0), "resultado": _arred(rec - desp)})
         # 2027 entra na origem vigente em 2027; os valores de 2026 ficam na origem que o projeto tinha em 2026
@@ -142,7 +149,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         for k in ("receita", "receita_2026", "despesa", "despesa_2026"):
             d[k] = _arred(d[k])
         d["resultado"] = _arred(d["receita"] - d["despesa"])
-    tot_rec = _arred(sum(rec_mes))
+    tot_rec = _arred(sum(rec_proj.values()))
     tot_desp = _arred(sum(despesa.values()))
     return {
         "linhas": linhas, "origens": export_xlsx._listas_template()["origens"], "gerentes": export_xlsx._listas_template()["gerentes"],
@@ -152,7 +159,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         "mensal": [{"mes": NOMES_MESES[i], "receita": _arred(rec_mes[i]), "despesa": _arred(despesa_mes[m])} for i, m in enumerate(MESES)],
         "totais": {"receita": tot_rec, "receita_2026": _arred(ref_total), "despesa": tot_desp,
                    "despesa_2026": _arred(sum(despesa_base.values())), "resultado": _arred(tot_rec - tot_desp),
-                   "linhas": len(linhas), "intercompany": _arred(sum(l["total"] for l in linhas if l["tipo"] == "intercompany" and l["conta_em_2027"])),
+                   "linhas": len(linhas), "intercompany": _arred(sum(l["total"] for l in linhas if l["tipo"] == "intercompany")),
                    "sem_receita": sum(1 for p in por_projeto if p["receita"] == 0)},
     }
 
@@ -193,12 +200,10 @@ def criar(d: ReceitaIn, u: dict = Depends(usuario_liberado)):
     meses = d.meses
     if inter:
         _valida_intercompany(d.cliente, d.origem_cliente, d.gestor_cliente)
-        if meses is None:
-            if d.valor is None:
-                raise HTTPException(422, "Informe o valor da transferência.")
-            meses = _espalhar(d.valor)
+    if meses is None and d.valor is not None:      # só o valor anual: não precisa calendarizar
+        meses = _espalhar(d.valor)
     if meses is None:
-        raise HTTPException(422, "Informe os 12 meses.")
+        raise HTTPException(422, "Informe o valor da transferência." if inter else "Informe o valor anual ou os 12 meses.")
     with tx() as c:
         exige_acesso(c, u, d.orcamento)
         cur = c.execute(

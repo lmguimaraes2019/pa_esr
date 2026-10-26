@@ -30,6 +30,12 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       return;
     }
     const nums = f.meses.map(lerNumero);
+    if (nums.every((n) => !n) && anual.trim()) {      // só o valor anual: não precisa calendarizar
+      const v = lerNumero(anual);
+      if (Number.isNaN(v) || v <= 0) return setErro("Informe um valor anual válido.");
+      try { await onSalvar({ orcamento: f.orcamento, fonte: f.fonte, descricao: f.descricao, obs: f.obs, valor: v }); onFechar(); } catch (x) { setErro(x.message); }
+      return;
+    }
     if (nums.some((n) => Number.isNaN(n) || n < 0)) return setErro("Use apenas valores positivos nos meses.");
     try { await onSalvar({ orcamento: f.orcamento, fonte: f.fonte, descricao: f.descricao, obs: f.obs, meses: nums.map((n) => Math.round(n * 100) / 100) }); onFechar(); } catch (x) { setErro(x.message); }
   };
@@ -41,11 +47,11 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         {[["receita", "Receita"], ["intercompany", "Transferência intercompany"]].map(([k, t]) => <button type="button" key={k} role="tab" aria-selected={f.tipo === k} className={f.tipo === k ? "on" : ""} onClick={() => setF({ ...f, tipo: k })}>{t}</button>)}</div>}
       {inter ? (
         <>
-          <p className="mudo">Recurso que o projeto recebe de outro projeto da casa. O valor anual é dividido em 12 parcelas iguais, que podem ser ajustadas mês a mês na tabela.</p>
+          <p className="mudo">Recurso que o projeto recebe de outro projeto da casa. O ano é só a referência: a transferência é sempre contabilizada no orçamento de 2027 e não precisa ser calendarizada.</p>
           <div className="grade" style={{ alignItems: "end" }}>
             <label><span>Projeto que recebe <span className="obrig">*</span></span><select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
               <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
-            <label><span>Ano <span className="obrig">*</span></span><input type="number" min="2020" max="2100" step="1" value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })} required /></label>
+            <label><span>Ano de referência <span className="obrig">*</span></span><input type="number" min="2020" max="2100" step="1" value={f.ano} onChange={(e) => setF({ ...f, ano: e.target.value })} required /></label>
             <label><span>Projeto cliente <span className="obrig">*</span></span><input value={f.cliente} onChange={(e) => setF({ ...f, cliente: e.target.value })} placeholder="ex.: nome do projeto que paga a transferência" required /></label>
             <label><span>Origem de recursos <span className="obrig">*</span></span><select value={f.origem_cliente} onChange={(e) => setF({ ...f, origem_cliente: e.target.value })} required>
               <option value="">Selecione…</option>{dados.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
@@ -54,7 +60,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
             <label><span>Valor (R$) <span className="obrig">*</span></span><input value={f.valor} inputMode="decimal" onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="ex.: 250.000,00" required /></label>
             <label>Observação<input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
           </div>
-          {Number(f.ano) !== 2027 && <p className="nota aviso">Transferências de {f.ano} ficam registradas, mas só as de 2027 entram nos totais do plano 2027.</p>}
+
           {erro && <p className="erro" role="alert">{erro}</p>}
           <div className="acoes"><button className="primario">Salvar transferência</button><button type="button" onClick={onFechar}>Cancelar</button></div>
         </>
@@ -67,8 +73,8 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label>Descrição<input value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} placeholder="ex.: turmas AWS, repasse trimestral" /></label>
         <label>Observação<input value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></label>
       </div>
-      <div className="acoes"><label style={{ maxWidth: 220 }}>Distribuir valor anual<input value={anual} inputMode="decimal" onChange={(e) => setAnual(e.target.value)} placeholder="ex.: 1.200.000,00" /></label>
-        <button type="button" onClick={distribuir}>Dividir em 12 meses</button></div>
+      <div className="acoes"><label style={{ maxWidth: 220 }}>Valor anual<input value={anual} inputMode="decimal" onChange={(e) => setAnual(e.target.value)} placeholder="ex.: 1.200.000,00" /></label>
+        <button type="button" onClick={distribuir}>Dividir em 12 meses</button><span className="mudo">Calendarizar é opcional: só o valor anual já basta.</span></div>
       <div className="grade" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
         {MESES.map((m, i) => <label key={m}>{m}<input value={f.meses[i]} inputMode="decimal" onChange={(e) => setF({ ...f, meses: f.meses.map((v, k) => (k === i ? e.target.value : v)) })} /></label>)}
       </div>
@@ -96,7 +102,7 @@ function Lancamentos({ dados, recarregar, setErro }) {
     if (form.id) await api(`/receitas/${form.id}`, { method: "PUT", body: b }); else await api("/receitas", { method: "POST", body: b });
     recarregar();
   };
-  const tot = (i) => lista.reduce((a, l) => a + l.meses[i], 0);
+  const tot = (i) => lista.reduce((a, l) => a + (l.calendarizada ? l.meses[i] : 0), 0);
   return (
     <>
       <div className="nota">Lance aqui a receita prevista de cada projeto, mês a mês, por fonte. O resultado de cada projeto e de cada origem de recurso é a receita menos a despesa planejada em "Despesas". A linha cinza mostra a previsão de 2026, quando existe.</div>
@@ -124,9 +130,9 @@ function Lancamentos({ dados, recarregar, setErro }) {
                     <BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta receita" onClick={() => excluir(l)} /></div></td>
                   <td className="col-conta" title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
                     <span className="mudo">{l.orcamento} | {l.projeto}</span><br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
-                    {l.tipo === "intercompany" && <><br /><span className="tag viagens">intercompany {l.ano}</span> <span>cliente: <strong>{l.cliente}</strong></span><br /><span className="mudo">{l.origem_cliente} | gestor {l.gestor_cliente}</span>{!l.conta_em_2027 && <><br /><span className="tag aviso">fora de 2027, não soma</span></>}</>}
+                    {l.tipo === "intercompany" && <><br /><span className="tag viagens">intercompany, ref. {l.ano}</span> <span>cliente: <strong>{l.cliente}</strong></span><br /><span className="mudo">{l.origem_cliente} | gestor {l.gestor_cliente}</span></>}
                     {l.descricao && <><br /><span className="mudo">{l.descricao}</span></>}</td>
-                  {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
+                  {!l.calendarizada ? <td colSpan={12} className="mudo" style={{ textAlign: "center" }}>sem calendarização, contabilizada no total de 2027</td> : l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
                   <td className="n"><strong>{fmtN(l.total)}</strong></td>
                   <td className="n">{l.ref ? <Delta de={l.ref.total} para={l.total} altaBoa /> : <span className="down">+{fmtN(l.total)}</span>}</td>
                 </tr>
@@ -165,7 +171,7 @@ function PorProjeto({ dados, irProjeto }) {
       <div className="rolagem"><table className="tab">
         <thead><tr><th>Projeto</th><th>Origem</th><th>Gerente</th><th className="n">Receita 2027</th><th className="n">Despesa 2027</th><th className="n">Resultado</th><th /></tr></thead>
         <tbody>{dados.por_projeto.map((p) => (
-          <tr key={p.orcamento}><td><button className="link" onClick={() => irProjeto(p.orcamento)}>{p.orcamento}</button> {p.projeto}</td><td>{p.origem}</td><td>{p.gerente}</td>
+          <tr key={p.orcamento}><td><button className="link" onClick={() => irProjeto(p.orcamento)}>{p.orcamento}</button> {p.projeto} {p.tipo === "receita" && <span className="tag ok">orçamento de receita</span>}</td><td>{p.origem}</td><td>{p.gerente}</td>
             <td className="n"><strong>{fmtN(p.receita)}</strong></td><td className="n">{fmtN(p.despesa)}</td><td className="n"><Resultado v={p.resultado} /></td>
             <td>{p.receita === 0 && <span className="tag aviso">sem receita</span>}</td></tr>))}</tbody>
       </table></div>
@@ -193,6 +199,7 @@ export default function Receitas({ irProjeto }) {
         {t.intercompany > 0 && <Kpi rotulo="Transferências intercompany" valor={fmt(t.intercompany)} tom="f27" sub="já incluídas na receita 2027" />}
       </div>
       <section className="cartao"><h3>Receita e despesa por mês</h3>
+        {t.intercompany > 0 && <p className="mudo">A receita por mês não inclui {fmt(t.intercompany)} de transferências intercompany, que não são calendarizadas.</p>}
         <div className="legenda"><span><i style={{ background: "var(--laranja)" }} />Receita 2027</span><span><i style={{ background: "var(--azul)" }} />Despesa 2027</span></div>
         <div className="meses">{dados.mensal.map((m) => (
           <div key={m.mes} title={`${m.mes}: receita ${fmt(m.receita)} | despesa ${fmt(m.despesa)} | saldo ${fmt(m.receita - m.despesa)}`}><div className="col" style={{ gap: 2 }}>

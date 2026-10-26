@@ -270,11 +270,12 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
-        {admin && !p.n_projeto && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
+        {admin && !p.n_projeto && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
       </div>
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["resumo", "Resumo e pendências"]]} />
+      {p.tipo === "receita" && <div className="nota">Este é um orçamento de <strong>receita</strong>: o total das linhas do plano 2027 entra em Receitas como resultado positivo e não soma nas despesas.</div>}
       {erro && <p className="erro" role="alert">{erro}</p>}
       {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} recarregar={carregar} setErro={setErro} />
         : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={irEtapa} />
