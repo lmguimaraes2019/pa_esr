@@ -435,3 +435,17 @@ def test_pa_por_projeto_inclui_receitas(client):
     depois = next(p for p in client.get("/api/projetos").json() if p["orcamento"] == alvo["orcamento"])
     assert round(depois["receitas_2027"] - antes, 2) == 1200
     assert round(depois["resultado_2027"], 2) == round(depois["receitas_2027"] - depois["total_2027"], 2)
+
+
+def test_contingenciado_e_apagar_numero(client):
+    entrar(client)
+    p = next(x for x in client.get("/api/projetos").json() if x["tipo"] == "despesa" and x["n_linhas"])
+    o = p["orcamento"]
+    assert client.patch(f"/api/projetos/{o}", json={"n_projeto": "1234"}).status_code == 200
+    assert client.patch(f"/api/projetos/{o}", json={"n_projeto": ""}).status_code == 200
+    x = next(y for y in client.get("/api/projetos").json() if y["orcamento"] == o)
+    assert x["n_projeto"] == "" and "Nº do Projeto" in x["pendencias"]
+    assert client.patch(f"/api/projetos/{o}", json={"contingenciado": True}).status_code == 200
+    x = next(y for y in client.get("/api/projetos").json() if y["orcamento"] == o)
+    assert x["contingenciado"] and x["pendencias"] == []
+    assert client.get(f"/api/projetos/{o}").json()["projeto"]["contingenciado"] is True

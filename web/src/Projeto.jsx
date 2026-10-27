@@ -279,9 +279,9 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>}{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
-        {admin && !p.n_projeto && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} onSalvo={carregar} />}
+        {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} onSalvo={carregar} />}
       </div>
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["resumo", "Resumo e pendências"]]} />
       {p.tipo === "receita" && <div className="nota">Este é um orçamento de <strong>receita</strong>: o total das linhas do plano 2027 entra em Receitas como resultado positivo e não soma nas despesas.</div>}
@@ -293,16 +293,20 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
   );
 }
 
-function NumeroProjeto({ orcamento, onSalvo }) {
-  const [v, setV] = useState("");
+function NumeroProjeto({ orcamento, atual, contingenciado, onSalvo }) {
+  const [v, setV] = useState(atual || "");
   const [erro, setErro] = useState("");
-  const salvar = async () => {
-    try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { n_projeto: v } }); onSalvo(); } catch (e) { setErro(e.message); }
-  };
+  useEffect(() => { setV(atual || ""); }, [atual]);
+  const enviar = async (body) => { setErro(""); try { await api(`/projetos/${orcamento}`, { method: "PATCH", body }); onSalvo(); } catch (e) { setErro(e.message); } };
+  const apagar = () => { if (window.confirm("Apagar o Nº do Projeto deste orçamento?")) { setV(""); enviar({ n_projeto: "" }); } };
+  const pendente = !atual && !contingenciado;
   return (
-    <div className="cartao pend" style={{ margin: 0 }}>
-      <strong>Nº do Projeto pendente</strong>
-      <div className="acoes"><input style={{ width: 140 }} value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" /><button className="primario" onClick={salvar} disabled={!v}>Salvar</button></div>
+    <div className={"cartao " + (pendente ? "pend" : "")} style={{ margin: 0 }}>
+      <strong>{pendente ? "Nº do Projeto pendente" : "Nº do Projeto"}</strong>
+      <div className="acoes"><input style={{ width: 140 }} value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" />
+        <button className="primario" onClick={() => enviar({ n_projeto: v })} disabled={!v || v === atual}>Salvar</button>
+        {atual && <button onClick={apagar}>Apagar número</button>}</div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, textTransform: "none", letterSpacing: 0, fontWeight: 500, marginTop: 8 }}><input type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!contingenciado} onChange={(e) => enviar({ contingenciado: e.target.checked })} /> Orçamento contingenciado (não liberado para execução)</label>
       {erro && <p className="erro">{erro}</p>}
     </div>
   );

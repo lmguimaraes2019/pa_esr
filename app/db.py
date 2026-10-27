@@ -250,6 +250,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN novo INTEGER NOT NULL DEFAULT 0")
         if "tipo" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento de despesa ou de receita
             c.execute("ALTER TABLE projetos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'despesa'")
+        if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
+            c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
         if "origem_2027" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:   # migração: origem de recursos só do plano 2027
             c.execute("ALTER TABLE projetos ADD COLUMN origem_2027 TEXT NOT NULL DEFAULT ''")
         cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}

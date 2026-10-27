@@ -51,12 +51,13 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
     cols = ", ".join(f"l.{m}" for m in MESES)
     rows = conn.execute(
         f"SELECT l.id, l.orcamento, l.edt, l.tarefa, l.conta_codigo, {cols}, "
-        "p.n_projeto, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
+        "p.n_projeto, p.contingenciado, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
         "FROM linhas l JOIN projetos p USING (orcamento) JOIN contas k ON k.codigo = l.conta_codigo "
         "WHERE l.ciclo = ? AND p.tipo = 'despesa' ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
 
     zeradas = 0
     pend_num: set[str] = set()
+    cont_num: set[str] = set()
     com_linha: set[str] = set()
     for r in rows:
         meses = [float(r[m]) for m in MESES]
@@ -67,13 +68,15 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         if any(v < 0 for v in meses):
             res.avisos.append(Aviso("aviso", f"Linha {r['tarefa']} / {r['conta_desc']} tem valor negativo.", r["orcamento"]))
         if not r["n_projeto"]:
-            pend_num.add(r["orcamento"])
+            (cont_num if r["contingenciado"] else pend_num).add(r["orcamento"])
         res.linhas.append({
             "diretoria": r["diretoria"], "n_projeto": r["n_projeto"], "descricao": r["descricao"],
             "origem": r["origem"], "gerente": r["gerente"], "edt": r["edt"], "tarefa": r["tarefa"],
             "grupo": r["grupo"], "conta_desc": r["conta_desc"], "conta_cod": r["conta_codigo"], "meses": meses,
         })
 
+    for o in sorted(cont_num):
+        res.avisos.append(Aviso("aviso", "Orçamento contingenciado, sem Nº do Projeto: as linhas seguem na exportação com o número em branco.", o))
     for o in sorted(pend_num):
         res.avisos.append(Aviso("erro", "Projeto com orçamento lançado e sem Nº do Projeto. Preencha antes de exportar.", o))
     for lin in res.linhas:

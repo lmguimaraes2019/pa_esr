@@ -125,6 +125,7 @@ class ProjetoPatch(BaseModel):
     origem: str | None = Field(default=None, min_length=1, max_length=40)
     gerente: str | None = Field(default=None, min_length=1, max_length=100)
     tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
+    contingenciado: bool | None = None
 
     @field_validator("n_projeto")
     @classmethod
@@ -324,7 +325,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
             (SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=p.orcamento) AS realizado,
             (SELECT COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=p.orcamento) AS empenhado
             FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
-    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]), "tipo": r["tipo"],
+    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]), "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
              "total_2027": _arred(r["t_plano"]) if r["tipo"] != "receita" else 0.0,
@@ -332,7 +333,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
              "resultado_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
              "realizado_2026": _arred(r["realizado"]),
              "empenhado_2026": _arred(r["empenhado"]),
-             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] else [])} for r in rows]
+             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] else [])} for r in rows]
 
 
 @router.get("/listas")
@@ -385,6 +386,10 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
     with tx() as c:
         p = exige_acesso(c, u, orcamento)
         campos = dados.model_dump(exclude_none=True)
+        if "contingenciado" in campos:
+            if u["perfil"] != "admin":
+                raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
+            campos["contingenciado"] = int(campos["contingenciado"])
         if u["perfil"] != "admin" and ("n_projeto" in campos or "gerente" in campos
                                        or ("descricao" in campos and not p["novo"])):
             raise HTTPException(403, "Apenas o administrador altera o Nº do Projeto, o gerente e o nome de orçamentos existentes.")
@@ -454,7 +459,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
                    | {"original_2026": _arred(p["original_2026"])},
         "linhas": linhas, "passado": passado,
         "totais": {"plano": _arred(sum(x["total"] for x in linhas)),
