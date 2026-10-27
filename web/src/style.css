@@ -254,3 +254,5 @@ td.total-cel{display:table-cell;text-align:right}td.total-cel small{display:bloc
 .tab.clic { font-size: .92em; }
 .tab.clic th, .tab.clic td { padding-left: .5rem; padding-right: .5rem; }
 .tab.clic td:nth-child(2) { min-width: 12rem; }
+.descricao-proj textarea { width: 100%; box-sizing: border-box; font: inherit; padding: .6rem .7rem; border: 1px solid #c9d3e0; border-radius: 6px; resize: vertical; }
+.descricao-proj label { display: block; }

@@ -126,6 +126,7 @@ class ProjetoPatch(BaseModel):
     gerente: str | None = Field(default=None, min_length=1, max_length=100)
     tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
     contingenciado: bool | None = None
+    detalhe: str | None = Field(default=None, max_length=3000)
 
     @field_validator("n_projeto")
     @classmethod
@@ -403,6 +404,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
                 raise HTTPException(422, "Gerente fora da lista do template.")
         if "descricao" in campos:
             campos["descricao"] = campos["descricao"].strip()
+        if "detalhe" in campos:
+            campos["detalhe"] = campos["detalhe"].strip()
         if "origem" in campos:      # a mudança vale só para 2027; a origem de 2026 fica como está (exceto em orçamento novo, que não tem 2026)
             campos["origem_2027"] = campos.pop("origem")
             if p["novo"]:
@@ -459,7 +462,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
                    | {"original_2026": _arred(p["original_2026"])},
         "linhas": linhas, "passado": passado,
         "totais": {"plano": _arred(sum(x["total"] for x in linhas)),

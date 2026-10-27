@@ -449,3 +449,11 @@ def test_contingenciado_e_apagar_numero(client):
     x = next(y for y in client.get("/api/projetos").json() if y["orcamento"] == o)
     assert x["contingenciado"] and x["pendencias"] == []
     assert client.get(f"/api/projetos/{o}").json()["projeto"]["contingenciado"] is True
+
+
+def test_descricao_do_projeto(client):
+    entrar(client)
+    o = client.get("/api/projetos").json()[0]["orcamento"]
+    assert client.patch(f"/api/projetos/{o}", json={"detalhe": "  Objetivo do projeto em 2027.  "}).status_code == 200
+    assert client.get(f"/api/projetos/{o}").json()["projeto"]["detalhe"] == "Objetivo do projeto em 2027."
+    assert client.patch(f"/api/projetos/{o}", json={"detalhe": "x" * 3001}).status_code == 422

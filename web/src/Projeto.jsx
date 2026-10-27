@@ -283,6 +283,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} onSalvo={carregar} />}
       </div>
+      <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["resumo", "Resumo e pendências"]]} />
       {p.tipo === "receita" && <div className="nota">Este é um orçamento de <strong>receita</strong>: o total das linhas do plano 2027 entra em Receitas como resultado positivo e não soma nas despesas.</div>}
       {erro && <p className="erro" role="alert">{erro}</p>}
@@ -306,8 +307,30 @@ function NumeroProjeto({ orcamento, atual, contingenciado, onSalvo }) {
       <div className="acoes"><input style={{ width: 140 }} value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" />
         <button className="primario" onClick={() => enviar({ n_projeto: v })} disabled={!v || v === atual}>Salvar</button>
         {atual && <button onClick={apagar}>Apagar número</button>}</div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, textTransform: "none", letterSpacing: 0, fontWeight: 500, marginTop: 8 }}><input type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!contingenciado} onChange={(e) => enviar({ contingenciado: e.target.checked })} /> Orçamento contingenciado (não liberado para execução)</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+        <input id="cont-chk" type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!contingenciado} onChange={(e) => enviar({ contingenciado: e.target.checked })} />
+        <label htmlFor="cont-chk" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, margin: 0 }}>Orçamento contingenciado (não liberado para execução)</label></div>
       {erro && <p className="erro">{erro}</p>}
     </div>
+  );
+}
+
+function DescricaoProjeto({ orcamento, atual, onSalvo }) {
+  const [v, setV] = useState(atual || "");
+  const [msg, setMsg] = useState("");
+  const [erro, setErro] = useState("");
+  useEffect(() => { setV(atual || ""); }, [atual]);
+  const salvar = async () => {
+    setErro(""); setMsg("");
+    try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { detalhe: v } }); setMsg("Descrição salva."); onSalvo(); } catch (e) { setErro(e.message); }
+  };
+  return (
+    <section className="cartao descricao-proj">
+      <label>Descrição do projeto
+        <textarea rows={4} maxLength={3000} value={v} onChange={(e) => { setV(e.target.value); setMsg(""); }}
+          placeholder="Descreva o objetivo do projeto, o que será feito em 2027 e o que justifica os valores planejados." /></label>
+      <div className="acoes"><button className="primario" disabled={v.trim() === (atual || "").trim()} onClick={salvar}>Salvar descrição</button>
+        <small className="mudo">{v.length}/3000</small>{msg && <span className="ok">{msg}</span>}{erro && <span className="erro">{erro}</span>}</div>
+    </section>
   );
 }
