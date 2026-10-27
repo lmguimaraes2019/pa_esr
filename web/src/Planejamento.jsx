@@ -67,20 +67,20 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
       {admin && plano.gerencias && (
         <>
           <h4 className="sub">Acompanhamento por gerência</h4>
-          <div className="rolagem"><table className="tab ger"><thead><tr><th>Gerência / responsáveis</th><th className="n">Projetos</th><th className="n">Plano 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Pendências</th><th>Situação</th></tr></thead>
+          <div className="rolagem"><table className="tab ger"><thead><tr><th>Gerência / responsáveis</th><th className="n">Projetos</th><th className="n">Plano 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Receitas 2027</th><th className="n">Pendências</th><th>Situação</th></tr></thead>
             <tbody>{plano.gerencias.map((g) => (
               <Fragment key={g.gerencia || "_"}>
                 <tr className={"ger-linha " + g.nivel}><td><strong>{g.gerencia || "Sem gerência definida"}</strong></td><td className="n">{g.projetos}</td><td className="n">{fmtN(g.aprovado)}</td><td className="n">{fmtN(g.executado)}</td>
-                  <td className="n">{g.aprovado ? pct(g.executado, g.aprovado) : "-"}</td><td className="n">{fmtN(g.plano)}</td><td className="n">{g.pendencias || "-"}</td>
+                  <td className="n">{g.aprovado ? pct(g.executado, g.aprovado) : "-"}</td><td className="n">{fmtN(g.plano)}</td><td className="n">{g.receitas ? fmtN(g.receitas) : "-"}</td><td className="n">{g.pendencias || "-"}</td>
                   <td>{g.concluido ? <><Estado tom="ok">concluída</Estado> <span className="mudo">{quando(g.concluido_em)}</span></> : <Estado tom={g.pendencias ? "pend" : "neutro"}>{g.pendencias ? "com pendências" : "em andamento"}</Estado>}</td></tr>
                 {g.pessoas.map((p) => (
                   <tr key={p.login} className={"ger-pessoa " + (p.cargo === "coordenador" ? "n2" : "n1")}>
                     <td><span className="ger-nome">{p.nome}</span> <span className="mudo">{CARGOS[p.cargo] || "sem cargo"}</span></td>
                     <td className="n">{p.projetos ?? ""}</td><td className="n">{p.aprovado != null ? fmtN(p.aprovado) : ""}</td><td className="n">{p.executado != null ? fmtN(p.executado) : ""}</td><td className="n">{p.aprovado ? pct(p.executado, p.aprovado) : ""}</td>
-                    <td className="n">{p.plano != null ? fmtN(p.plano) : ""}</td><td className="n">{p.projetos == null ? "" : p.pendencias || "-"}</td>
+                    <td className="n">{p.plano != null ? fmtN(p.plano) : ""}</td><td className="n">{p.receitas != null ? (p.receitas ? fmtN(p.receitas) : "-") : ""}</td><td className="n">{p.projetos == null ? "" : p.pendencias || "-"}</td>
                     <td>{p.projetos == null || g.nivel === "diretoria" ? "" : p.concluido_em ? <><Estado tom="ok">concluído</Estado> <span className="mudo">{quando(p.concluido_em)}{p.obs && ` | ${p.obs}`}</span></> : <Estado tom={p.pendencias ? "pend" : "neutro"}>{p.pendencias ? "com pendências" : "em andamento"}</Estado>}</td></tr>))}
               </Fragment>))}
-              {!plano.gerencias.length && <tr><td colSpan={8} className="mudo">Nenhum gestor cadastrado.</td></tr>}</tbody></table></div>
+              {!plano.gerencias.length && <tr><td colSpan={9} className="mudo">Nenhum gestor cadastrado.</td></tr>}</tbody></table></div>
         </>
       )}
     </section>

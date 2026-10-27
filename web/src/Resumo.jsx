@@ -33,6 +33,8 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   const max = Math.max(1, ...r.mensal_plano.map((m) => m.valor));
   const s = r.linhas_status;
   const delta = r.total_plano - r.total_base;
+  const receitas = plano ? plano.etapas.receitas.total : 0;
+  const resultado = receitas - r.total_plano;
   return (
     <>
       <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
@@ -55,6 +57,8 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
           <div className="kpis">
             <Kpi rotulo="Plano 2027" valor={mi(r.total_plano)} />
             <Kpi rotulo="Diferença para 2026" valor={fmt(delta)} sub={r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado" : ""} />
+            <Kpi rotulo="Receitas 2027" valor={mi(receitas)} sub={plano ? `${plano.etapas.receitas.n} lançamento(s)` : ""} />
+            <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receitas menos despesas" tom={resultado < 0 ? "rneg" : "rpos"} />
             <Kpi rotulo="Linhas ajustadas" valor={s.ajustada + s.nova} sub={`${s.mantida} mantidas de 2026`} />
             <Kpi rotulo="Vindas de viagens, eventos e headcount" valor={s.viagens} />
           </div>

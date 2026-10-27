@@ -25,7 +25,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
     """Situação de cada projeto nas cinco etapas do plano 2027."""
     ids = sorted(ids)
     marks = ",".join("?" for _ in ids) or "''"
-    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo FROM projetos WHERE orcamento IN ({marks})", ids)}
+    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo FROM projetos WHERE orcamento IN ({marks})", ids)}
     out = {o: {"orcamento": o, "projeto": nomes[o]["descricao"], "gerente": nomes[o]["gerente"], "novo": bool(nomes[o]["novo"]),
                "despesas": {"aprovado": 0.0, "plano": 0.0, "linhas": 0, "ajustadas": 0, "novas": 0, "excluidas": 0, "bloqueadas": 0},
                "receitas": {"n": 0, "total": 0.0},
@@ -78,7 +78,11 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
         x = out[r["orcamento"]]["headcount"]
         x["n"] += r["quantidade"]; x["total"] += d["custo_2027"]; x["pendentes"] += 1 if d["faltando"] else 0
 
-    for p in out.values():
+    for o, p in out.items():
+        if nomes[o]["tipo"] == "receita":      # orçamento de receita: o total das linhas é receita (resultado positivo), não despesa
+            p["receitas"]["total"] += p["despesas"]["plano"]
+            p["receitas"]["n"] += p["despesas"]["linhas"]
+            p["despesas"]["aprovado"] = p["despesas"]["plano"] = 0.0
         for k in ("despesas", "receitas", "viagens", "eventos", "headcount"):
             for f in ("aprovado", "plano", "total"):
                 if f in p[k]:
@@ -137,7 +141,8 @@ def _agrega(c: sqlite3.Connection, ids) -> dict:
     ids = sorted(set(ids))
     res = list(resumir(c, ids).values())
     return {"projetos": len(res), "aprovado": _arred(sum(p["despesas"]["aprovado"] for p in res)), "executado": _executado(c, set(ids)),
-            "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "pendencias": sum(p["pendencias"] for p in res)}
+            "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "receitas": _arred(sum(p["receitas"]["total"] for p in res)),
+            "pendencias": sum(p["pendencias"] for p in res)}
 
 
 def _nivel(gerencia: str) -> str:
@@ -172,7 +177,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
                 pri = _sem_acento(m["nome"]).split(" ")[0]
                 meus = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos") if _sem_acento(r["gerente"]).startswith(pri)]
                 a = _agrega(c, meus)
-                base.update(projetos=a["projetos"], plano=a["plano"], pendencias=a["pendencias"], aprovado=a["aprovado"], executado=a["executado"])
+                base.update(projetos=a["projetos"], plano=a["plano"], pendencias=a["pendencias"], aprovado=a["aprovado"], executado=a["executado"], receitas=a["receitas"])
             elif m["perfil"] != "admin" and nv == "gerencia":
                 ids |= set(permitidos(c, m))
                 su = _situacao(c, m)
@@ -180,7 +185,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
                 todos_concluidos = todos_concluidos and bool(cu)
                 if cu and (conc_em is None or cu["concluido_em"] > conc_em):
                     conc_em = cu["concluido_em"]
-                base.update(projetos=len(su["projetos"]), plano=su["etapas"]["despesas"]["plano"], pendencias=su["pendencias"])
+                base.update(projetos=len(su["projetos"]), plano=su["etapas"]["despesas"]["plano"], receitas=su["etapas"]["receitas"]["total"], pendencias=su["pendencias"])
             pessoas.append(base)
         pessoas.sort(key=lambda p: (ORDEM_CARGO.get(p["cargo"], 9), p["nome"].lower()))
         if nv in ("dss", "diretoria"):      # a DSS repete a Diretoria Adjunta: ambas somam todos os projetos da ESR
