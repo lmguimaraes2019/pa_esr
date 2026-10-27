@@ -550,16 +550,19 @@ def excluir_linha(linha_id: int, u: dict = Depends(usuario_liberado)):
 
 
 @router.delete("/projetos/{orcamento}/linhas")
-def excluir_grupo(orcamento: str, edt: str, tarefa: str | None = None, u: dict = Depends(usuario_liberado)):
+def excluir_grupo(orcamento: str, edt: str, tarefa: str | None = None, somente_manuais: bool = False, u: dict = Depends(usuario_liberado)):
     """Exclui do plano de 2027 todas as linhas de uma Meta/EDT (ou só de uma Ação/Tarefa dela)."""
     with tx() as c:
         exige_acesso(c, u, orcamento)
         filtro, args = "ciclo=? AND orcamento=? AND edt=?", [config.CICLO_PLANO, orcamento, edt]
         if tarefa is not None:
             filtro += " AND tarefa=?"; args.append(tarefa)
+        if somente_manuais:      # as linhas que vêm de Viagens, Eventos ou Headcount ficam: só se removem na página delas
+            filtro += " AND fonte='manual'"
         alvo = c.execute(f"SELECT * FROM linhas WHERE {filtro}", args).fetchall()
         if not alvo:
-            raise HTTPException(404, "Nenhuma linha encontrada nesse grupo.")
+            raise HTTPException(404, "Nenhuma linha encontrada nesse grupo." if not somente_manuais else
+                                "O grupo só tem linhas que vêm de Viagens, Eventos ou Headcount. Remova-as na página delas.")
         if any(r["fonte"] in ("viagens", "eventos", "headcount") for r in alvo):
             raise HTTPException(409, "O grupo tem linhas que vêm de Viagens, Eventos ou Headcount. Altere nessas páginas ou exclua as outras linhas uma a uma.")
         total = _arred(sum(sum(r[m] for m in MESES) for r in alvo))

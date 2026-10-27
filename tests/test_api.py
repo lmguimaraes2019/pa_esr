@@ -536,3 +536,20 @@ def test_importar_salarios_e_tarifas(client):
     t2 = client.get("/api/viagens/tarifas").json()
     assert len(t2) == len(t) + 1
     assert next(x for x in t2 if x["id"] == ex["id"])["passagem"] == 1234.5
+
+
+def test_excluir_grupo_com_linhas_de_headcount(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    orc = h["projetos"][0]["orcamento"]
+    tf = h["tarefas"][orc]["lista"][0]
+    r = client.post("/api/headcount", json={"orcamento": orc, "funcao": "A", "cargo": "B", "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO",
+                                            "grupo": "GRUPO 01", "justificativa": "x", "edt": tf["edt"], "tarefa": tf["tarefa"]})
+    assert r.status_code == 201
+    q = {"edt": tf["edt"], "tarefa": tf["tarefa"]}
+    assert client.delete(f"/api/projetos/{orc}/linhas", params=q).status_code == 409
+    antes = [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["edt"] == tf["edt"] and x["tarefa"] == tf["tarefa"]]
+    ok = client.delete(f"/api/projetos/{orc}/linhas", params={**q, "somente_manuais": "true"})
+    depois = [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["edt"] == tf["edt"] and x["tarefa"] == tf["tarefa"]]
+    assert ok.status_code in (200, 404) and all(x["fonte"] == "headcount" for x in depois) and depois
+    assert len(depois) <= len(antes)

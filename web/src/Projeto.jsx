@@ -187,9 +187,18 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   };
   const excluirGrupo = async (edt, tarefa) => {
     const alvo = d.linhas.filter((l) => l.edt === edt && (tarefa === undefined || l.tarefa === tarefa));
+    const manuais = alvo.filter((l) => l.fonte === "manual");
+    const bloq = alvo.length - manuais.length;
     const nome = tarefa === undefined ? `a Meta/EDT "${edt}" inteira (todas as ações)` : `a ação "${edt} | ${tarefa}"`;
-    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${alvo.length} linha(s), ${fmt(alvo.reduce((a, l) => a + l.total, 0))}.\nAs linhas de 2026 continuam em "Passado 2026" e podem ser trazidas de volta.`)) return;
-    try { setErro(""); await api(`/projetos/${d.projeto.orcamento}/linhas?` + new URLSearchParams(tarefa === undefined ? { edt } : { edt, tarefa }), { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
+    if (!manuais.length) { setErro(`${nome[0].toUpperCase() + nome.slice(1)} só tem linhas que vêm de Viagens, Eventos ou Headcount. Para removê-las, exclua o item na página correspondente (por exemplo, a posição em Headcount).`); return; }
+    const aviso = bloq ? `\n\nATENÇÃO: ${bloq} linha(s) vinda(s) de Viagens, Eventos ou Headcount NÃO serão excluídas aqui. Para removê-las, exclua o item na página correspondente.` : "";
+    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${manuais.length} linha(s), ${fmt(manuais.reduce((a, l) => a + l.total, 0))}.\nAs linhas de 2026 continuam em "Passado 2026" e podem ser trazidas de volta.${aviso}`)) return;
+    try {
+      setErro("");
+      await api(`/projetos/${d.projeto.orcamento}/linhas?` + new URLSearchParams({ ...(tarefa === undefined ? { edt } : { edt, tarefa }), somente_manuais: "true" }), { method: "DELETE" });
+      if (bloq) setErro(`Linhas manuais excluídas. ${bloq} linha(s) de Viagens, Eventos ou Headcount continuam no grupo: remova o item na página correspondente.`);
+      recarregar();
+    } catch (e) { setErro(e.message); }
   };
   const visiveis = d.linhas.filter((l) =>
     filtro === "todas" ? true : filtro === "ajustes" ? ["ajustada", "nova"].includes(l.status)
