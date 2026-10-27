@@ -48,22 +48,22 @@ export default function Projetos({ abrir }) {
       {!ps.length && <p className="mudo">Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima.</p>}
       <div className="rolagem"><table className="tab clic">
         <thead>
-          <tr className="grupos"><th colSpan={4} style={{ background: "#fff" }} /><th colSpan={3} className="g26"><Selo ano={2026} /></th><th colSpan={4} className="g27"><Selo ano={2027} /></th></tr>
-          <tr><th>Orçamento</th><th>Projeto</th><th>Origem</th><th>Gerente</th><th className="n g26">Aprovado</th><th className="n g26" title="Valor realizado em 2026, sem o empenhado">Executado</th><th className="n g26" title="Executado dividido pelo aprovado, sem o empenhado">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ vs aprovado</th><th className="n g27" title="Receitas lançadas no projeto (previsão, transferências intercompany e orçamentos de receita)">Receitas 2027</th><th className="n g27" title="Receitas menos despesas do plano 2027">Resultado</th></tr>
+          <tr className="grupos"><th colSpan={4} style={{ background: "#fff" }} /><th colSpan={5} className="g26"><Selo ano={2026} /></th><th colSpan={4} className="g27"><Selo ano={2027} /></th></tr>
+          <tr><th>Orçamento</th><th>Projeto</th><th>Origem</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Planejado</th><th className="n g26" title="Valor já empenhado, ainda não realizado">Empenhado</th><th className="n g26" title="Valor realizado em 2026, sem o empenhado">Executado</th><th className="n g26" title="Planejado menos executado e empenhado">Saldo</th><th className="n g26" title="Executado dividido pelo planejado">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ vs aprovado</th><th className="n g27" title="Receitas lançadas no projeto (previsão, transferências intercompany e orçamentos de receita)">Receitas 2027</th><th className="n g27" title="Receitas menos despesas do plano 2027">Resultado</th></tr>
         </thead>
         <tbody>{ps.map((p) => (
           <tr key={p.orcamento} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
             <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
             <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
             <td>{p.origem}</td><td>{p.gerente}</td>
-            <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
+            <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.empenhado_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className={"n " + (p.total_2026 - p.realizado_2026 - p.empenhado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026 - p.empenhado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
             {p.tipo === "receita"
               ? <><td className="n mudo">-</td><td className="n mudo">receita</td></>
               : <><td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td></>}
             <td className="n">{p.receitas_2027 ? <span className="res-pos">+{fmt(p.receitas_2027)}</span> : <span className="mudo">-</span>}</td>
             <td className="n"><strong className={p.resultado_2027 > 0 ? "res-pos" : p.resultado_2027 < 0 ? "res-neg" : ""}>{fmt(p.resultado_2027)}</strong></td>
           </tr>))}</tbody>
-        <tfoot><tr><td colSpan={4}>Total</td><td className="n">{fmt(soma("total_2026"))}</td><td className="n">{fmt(soma("realizado_2026"))}</td><td className="n">{pct(soma("realizado_2026"), soma("total_2026"))}</td><td className="n">{fmt(soma("total_2027"))}</td><td className="n"><Delta de={soma("total_2026")} para={soma("total_2027")} /></td><td className="n"><span className="res-pos">+{fmt(somaT("receitas_2027"))}</span></td><td className="n"><strong className={somaT("resultado_2027") < 0 ? "res-neg" : "res-pos"}>{fmt(somaT("resultado_2027"))}</strong></td></tr></tfoot>
+        <tfoot><tr><td colSpan={4}>Total</td><td className="n">{fmt(soma("total_2026"))}</td><td className="n">{fmt(soma("empenhado_2026"))}</td><td className="n">{fmt(soma("realizado_2026"))}</td><td className="n">{fmt(soma("total_2026") - soma("realizado_2026") - soma("empenhado_2026"))}</td><td className="n">{pct(soma("realizado_2026"), soma("total_2026"))}</td><td className="n">{fmt(soma("total_2027"))}</td><td className="n"><Delta de={soma("total_2026")} para={soma("total_2027")} /></td><td className="n"><span className="res-pos">+{fmt(somaT("receitas_2027"))}</span></td><td className="n"><strong className={somaT("resultado_2027") < 0 ? "res-neg" : "res-pos"}>{fmt(somaT("resultado_2027"))}</strong></td></tr></tfoot>
       </table></div>
     </>
   );
