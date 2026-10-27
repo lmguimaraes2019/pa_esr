@@ -478,3 +478,61 @@ def test_headcount_com_equipamentos_do_catalogo(client):
     hw = [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["conta_codigo"] == "13010102" and x["fonte"] == "headcount"]
     assert hw and hw[0]["meses"][2] == unit * 2 and sum(hw[0]["meses"]) == unit * 2      # só no mês de início
     assert client.post("/api/headcount", json={**base, "monitor": "N2.B"}).status_code == 422      # código de outro tipo
+
+
+def _xlsx(linhas):
+    import io
+    import openpyxl
+    wb = openpyxl.Workbook()
+    for l in linhas:
+        wb.active.append(l)
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def _envia(client, tipo, dados, simular, nome="t.xlsx"):
+    return client.post(f"/api/referencias/{tipo}/importar?simular={'true' if simular else 'false'}", files={"arquivo": (nome, dados)})
+
+
+def test_importar_equipamentos(client):
+    entrar(client)
+    assert len(client.get("/api/referencias").json()) == 3
+    modelo = client.get("/api/referencias/equipamentos/modelo")
+    assert modelo.status_code == 200 and modelo.content[:2] == b"PK"
+    arq = _xlsx([["Código", "Tipo", "Equipamento", "Perfil", "Valor"],
+                 ["D1", "computador", "Desktop Mini", "Regular", "5.500,00"], ["M1", "monitor", "Monitor 24", "", 700], ["DS1", "periférico", "Dock", "", 1300]])
+    sim = _envia(client, "equipamentos", arq, True).json()
+    assert sim["novos"] == 0 and sim["alterados"] == 3 and len(sim["ausentes"]) == 8 and sim["erros"] == []
+    h = client.get("/api/headcount").json()
+    assert len(h["catalogo"]["itens"]) == 11      # simulação não grava
+    assert _envia(client, "equipamentos", arq, False).status_code == 200
+    h = client.get("/api/headcount").json()
+    assert [i["codigo"] for i in h["catalogo"]["itens"]] == ["D1", "M1", "DS1"] and h["catalogo"]["itens"][0]["valor"] == 5500.0
+    ruim = _xlsx([["Código", "Tipo", "Equipamento", "Valor"], ["X1", "carro", "Fusca", 10]])
+    assert _envia(client, "equipamentos", ruim, True).json()["erros"]
+    assert _envia(client, "equipamentos", ruim, False).status_code == 422
+
+
+def test_importar_salarios_e_tarifas(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    f = next(x for x in h["tabela"] if x["trajetoria"] == "GESTAO DO NEGOCIO" and x["nivel"] == "PLENO" and x["grupo"] == "GRUPO 01")
+    arq = _xlsx([["Trajetória", "Nível", "Grupo", "Início da faixa (80%)", "Fim da faixa (120%)"], ["Gestão do Negócio", "Pleno", "Grupo 01", 7000, 10000]])
+    sim = _envia(client, "salarios", arq, True).json()
+    assert sim["alterados"] == 1 and sim["novos"] == 0 and sim["erros"] == []
+    assert _envia(client, "salarios", arq, False).status_code == 200
+    h2 = client.get("/api/headcount").json()
+    assert len(h2["tabela"]) == 1 and h2["tabela"][0]["inicio"] == 7000 and h2["tabela"][0]["trajetoria"] == f["trajetoria"]
+    # tarifas: atualiza as existentes e inclui novas, sem apagar as demais
+    t = client.get("/api/viagens/tarifas").json()
+    ex = t[0]
+    csv_ = ("tipo;origem;destino;passagem;hospedagem;bagagem;aux_transporte;ajuda_custo;seguro\n"
+            f"{'nacional' if ex['tipo'] == 'nac' else 'internacional'};{ex['origem']};{ex['destino']};1.234,50;100;0;0;0;0\n"
+            "nacional;ORIGEM X;DESTINO Y;500;200;50;30;40;0\n").encode()
+    sim = _envia(client, "viagens", csv_, True, "t.csv").json()
+    assert sim["novos"] == 1 and sim["alterados"] == 1 and sim["erros"] == []
+    assert _envia(client, "viagens", csv_, False, "t.csv").status_code == 200
+    t2 = client.get("/api/viagens/tarifas").json()
+    assert len(t2) == len(t) + 1
+    assert next(x for x in t2 if x["id"] == ex["id"])["passagem"] == 1234.5

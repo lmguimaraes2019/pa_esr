@@ -8,7 +8,7 @@ import Viagens from "./Viagens.jsx";
 import Receitas from "./Receitas.jsx";
 import Eventos from "./Eventos.jsx";
 import Headcount from "./Headcount.jsx";
-import { Premissas, Usuarios, Exportar, Auditoria, Realizado } from "./Admin.jsx";
+import { Premissas, Usuarios, Exportar, Auditoria, Realizado, Referencias } from "./Admin.jsx";
 
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -26,7 +26,7 @@ export default function App() {
   if (user.trocar_senha) return <TrocarSenha obrigatoria onFeito={carregar} />;
 
   const admin = user.perfil === "admin";
-  const ADMIN = [["premissas", "Premissas"], ["realizado", "Realizado 2026"], ["exportar", "Exportar para o PMO"], ["usuarios", "Usuários"], ["auditoria", "Histórico"]];
+  const ADMIN = [["premissas", "Premissas"], ["realizado", "Realizado 2026"], ["referencias", "Tabelas de referência"], ["exportar", "Exportar para o PMO"], ["usuarios", "Usuários"], ["auditoria", "Histórico"]];
   const ETAPAS = [["projetos", "Despesas"], ["receitas", "Receitas"], ["viagens", "Viagens"], ["eventos", "Eventos"], ["headcount", "Headcount"]];
   const emPlano = ETAPAS.some(([k]) => k === aba);
   const emAdmin = ADMIN.some(([k]) => k === aba);
@@ -58,6 +58,7 @@ export default function App() {
         {aba === "viagens" && <Viagens admin={admin} irProjeto={(o) => ir("projetos", o)} />}
         {admin && aba === "premissas" && <Premissas />}
         {admin && aba === "realizado" && <Realizado />}
+        {admin && aba === "referencias" && <Referencias />}
         {admin && aba === "exportar" && <Exportar irProjeto={(o) => ir("projetos", o)} />}
         {admin && aba === "usuarios" && <Usuarios />}
         {admin && aba === "auditoria" && <Auditoria />}

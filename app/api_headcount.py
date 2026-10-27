@@ -97,8 +97,8 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         "itens": itens, "por_projeto": list(por_proj.values()),
         "totais": {"posicoes": sum(d["quantidade"] for d in itens), "anualizado": _arred(sum(d["anualizado"] for d in itens)),
                    "custo_2027": _arred(sum(d["custo_2027"] for d in itens)), "incompletos": sum(1 for d in itens if d["faltando"])},
-        "tabela": pessoal.tabela_salarial(), "reajuste": reaj,
-        "catalogo": {"itens": equipamentos.CATALOGO, "atualizado_em": equipamentos.ATUALIZADO_EM},
+        "tabela": pessoal.tabela_salarial(), "tabela_nome": pessoal.tabela_info()["nome"], "reajuste": reaj,
+        "catalogo": {"itens": equipamentos.catalogo(), "atualizado_em": equipamentos.carregar()["atualizado_em"]},
         "parametros": [{"chave": k, "valor": par[k], "descricao": v[1], "padrao": v[0]} for k, v in pessoal.PARAMETROS.items()],
         "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "meu": o in meus}
                      for o, p in projetos.items() if p["tipo"] == "despesa"],

@@ -5,10 +5,14 @@ de início da posição, na conta Hardware, multiplicado pela quantidade de posi
 """
 from __future__ import annotations
 
+import json
+
+from . import config
+
 CONTA_HARDWARE = "13010102"      # grupo Hardware ("Despesas de hardware HW / SJ" no chamado de aquisição)
 ATUALIZADO_EM = "29/09/2026"
 
-CATALOGO = [
+PADRAO = [
     {"codigo": "D1", "tipo": "computador", "nome": "Desktop Mini Intel Core i7 / 16GB / SSD 256GB / Win 11", "perfil": "Usuário Regular", "valor": 5320.00},
     {"codigo": "N2.A", "tipo": "computador", "nome": 'Notebook 14" Intel Core Ultra 7 / 16GB / SSD 512GB / Win 11', "perfil": "Usuário Intermediário", "valor": 6530.00},
     {"codigo": "N2.B", "tipo": "computador", "nome": 'Notebook 14" Intel Core Ultra 7 / 16GB / SSD 1TB / Win 11', "perfil": "Usuário Intermediário", "valor": 7203.00},
@@ -21,11 +25,36 @@ CATALOGO = [
     {"codigo": "M2", "tipo": "monitor", "nome": 'Monitor 27" Full HD', "perfil": "", "valor": 850.00},
     {"codigo": "DS1", "tipo": "periferico", "nome": "Dock Station USB-C", "perfil": "", "valor": 1219.00},
 ]
-_POR_CODIGO = {i["codigo"]: i for i in CATALOGO}
+ARQUIVO = "catalogo_equipamentos.json"      # gravado em DATA_DIR quando o administrador importa um catálogo novo
+_cache: dict = {"mtime": None, "dados": None}
+
+
+def _arquivo():
+    return config.DATA_DIR / ARQUIVO
+
+
+def carregar() -> dict:
+    """Catálogo vigente: o importado pelo administrador ou, se não houver, o padrão do sistema."""
+    f = _arquivo()
+    mtime = f.stat().st_mtime_ns if f.exists() else None
+    if _cache["dados"] is None or _cache["mtime"] != mtime or _cache.get("pasta") != str(f):
+        dados = json.loads(f.read_text(encoding="utf-8")) if mtime else {"atualizado_em": ATUALIZADO_EM, "itens": PADRAO, "origem": "padrão do sistema"}
+        _cache.update(mtime=mtime, dados=dados, pasta=str(f))
+    return _cache["dados"]
+
+
+def gravar(itens: list[dict], atualizado_em: str, origem: str) -> None:
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _arquivo().write_text(json.dumps({"atualizado_em": atualizado_em, "itens": itens, "origem": origem}, ensure_ascii=False, indent=1), encoding="utf-8")
+    _cache["dados"] = None
+
+
+def catalogo() -> list[dict]:
+    return carregar()["itens"]
 
 
 def item(codigo: str, tipo: str) -> dict | None:
-    i = _POR_CODIGO.get(codigo or "")
+    i = next((x for x in catalogo() if x["codigo"] == (codigo or "")), None)
     return i if i and i["tipo"] == tipo else None
 
 

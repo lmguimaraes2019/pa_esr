@@ -22,9 +22,35 @@ PARAMETROS = {
 }
 
 
-@lru_cache(maxsize=1)
+ARQUIVO_TABELA = "tabela_salarial.json"      # gravado em DATA_DIR quando o administrador importa uma tabela nova
+_tab: dict = {"chave": None, "dados": None}
+
+
+def _meta_tabela() -> dict:
+    f = config.DATA_DIR / ARQUIVO_TABELA
+    if f.exists():
+        d = json.loads(f.read_text(encoding="utf-8"))
+        return {"faixas": d["faixas"], "nome": d.get("nome", "Tabela Salarial importada"), "origem": "importada"}
+    return {"faixas": json.loads((config.ASSETS_DIR / "tabela_salarial_2025.json").read_text(encoding="utf-8")),
+            "nome": "Tabela Salarial 2025", "origem": "padrão do sistema"}
+
+
+def tabela_info() -> dict:
+    f = config.DATA_DIR / ARQUIVO_TABELA
+    chave = (str(f), f.stat().st_mtime_ns if f.exists() else None)
+    if _tab["chave"] != chave:
+        _tab.update(chave=chave, dados=_meta_tabela())
+    return _tab["dados"]
+
+
 def tabela_salarial() -> list[dict]:
-    return json.loads((config.ASSETS_DIR / "tabela_salarial_2025.json").read_text(encoding="utf-8"))
+    return tabela_info()["faixas"]
+
+
+def gravar_tabela(faixas: list[dict], nome: str) -> None:
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (config.DATA_DIR / ARQUIVO_TABELA).write_text(json.dumps({"nome": nome, "faixas": faixas}, ensure_ascii=False, indent=1), encoding="utf-8")
+    _tab["chave"] = None
 
 
 def faixa(trajetoria: str, nivel: str, grupo: str) -> dict | None:

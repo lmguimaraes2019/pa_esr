@@ -253,3 +253,64 @@ export function Realizado() {
     </>
   );
 }
+
+
+function CartaoReferencia({ t, onImportado }) {
+  const [arq, setArq] = useState(null);
+  const [r, setR] = useState(null);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const enviar = async (simular) => {
+    setErro(""); setMsg("");
+    if (!arq) return setErro("Escolha o arquivo primeiro.");
+    if (!simular && !window.confirm(`Importar "${t.nome}" e substituir os valores atuais? Os custos de viagens, eventos e headcount serão recalculados.`)) return;
+    setOcupado(true);
+    try {
+      const f = new FormData(); f.append("arquivo", arq);
+      const resp = await fetch(`/api/referencias/${t.tipo}/importar?simular=${simular}`, { method: "POST", body: f, credentials: "same-origin" });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(typeof j.detail === "string" ? j.detail : "Não foi possível ler o arquivo.");
+      setR(j);
+      if (!simular) { setMsg(`${t.nome} importada: ${j.novos} nova(s), ${j.alterados} alterada(s).`); setArq(null); onImportado(); }
+    } catch (e) { setErro(e.message); } finally { setOcupado(false); }
+  };
+  const pronto = r && r.simulacao && !r.erros.length && arq;
+  return (
+    <section className="cartao ref-card">
+      <div className="cab"><div><h3>{t.nome}</h3><p className="mudo">{t.detalhe}</p>
+        <p className="mudo"><strong>{t.registros}</strong> registro(s) | fonte: {t.origem}</p></div>
+        <a className="botao" href={`/api/referencias/${t.tipo}/modelo`} download>Baixar planilha com os valores atuais</a></div>
+      <p className="mudo">Colunas do arquivo: {t.colunas.join(" | ")}. Aceita .xlsx e .csv. Edite a planilha baixada e envie de volta.</p>
+      <label>Arquivo<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { setArq(e.target.files[0] || null); setR(null); setMsg(""); setErro(""); }} /></label>
+      <div className="acoes"><button onClick={() => enviar(true)} disabled={!arq || ocupado}>Conferir antes de importar</button>
+        <button className="primario" onClick={() => enviar(false)} disabled={!pronto || ocupado}>Importar</button></div>
+      {msg && <p className="ok">{msg}</p>}{erro && <p className="erro" role="alert" style={{ whiteSpace: "pre-line" }}>{erro}</p>}
+      {r && r.simulacao && (
+        <div>
+          <p><strong>{r.lidos}</strong> linha(s) lidas: <strong>{r.novos}</strong> nova(s), <strong>{r.alterados}</strong> alterada(s), {r.iguais} igual(is).</p>
+          {r.erros.length > 0 && <div className="nota aviso"><strong>Corrija antes de importar:</strong><ul>{r.erros.map((x, i) => <li key={i}>{x}</li>)}</ul>{r.mais_erros > 0 && <p>e mais {r.mais_erros} erro(s).</p>}</div>}
+          {r.aviso && <div className="nota">{r.aviso} {r.ausentes.length > 0 && <>({r.ausentes.length + r.mais_ausentes}: {r.ausentes.slice(0, 5).join("; ")}{r.ausentes.length > 5 ? "…" : ""})</>}</div>}
+          {r.mudancas.length > 0 && (
+            <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th>Situação</th><th>Antes</th><th>Depois</th></tr></thead>
+              <tbody>{r.mudancas.map((m, i) => <tr key={i}><td>{m.item}</td><td>{m.situacao}</td><td className="mudo">{m.antes}</td><td><strong>{m.depois}</strong></td></tr>)}</tbody></table>
+              {r.mais_mudancas > 0 && <p className="mudo">e mais {r.mais_mudancas} mudança(s) não listadas.</p>}</div>)}
+          {!r.mudancas.length && !r.erros.length && <p className="mudo">Nenhuma diferença em relação aos valores atuais.</p>}
+        </div>)}
+    </section>
+  );
+}
+
+export function Referencias() {
+  const [lista, setLista] = useState(null);
+  const carregar = () => api("/referencias").then(setLista);
+  useEffect(() => { carregar(); }, []);
+  if (!lista) return <p>Carregando…</p>;
+  return (
+    <>
+      <h2>Tabelas de referência</h2>
+      <div className="nota">Importe aqui os valores usados nos cálculos: tarifas de viagens, catálogo de equipamentos do headcount e tabela salarial. Cada importação mostra o que muda antes de gravar, e os custos de viagens, eventos e headcount são recalculados depois de importar.</div>
+      {lista.map((t) => <CartaoReferencia key={t.tipo} t={t} onImportado={carregar} />)}
+    </>
+  );
+}

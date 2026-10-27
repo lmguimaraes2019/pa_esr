@@ -45,7 +45,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label><span>Cargo <Obrig /></span><input value={f.cargo} onChange={(e) => set("cargo", e.target.value)} placeholder="ex.: Analista de Desenvolvimento Pleno" /></label>
         <label>Quantidade de posições<input type="number" min="1" max="100" value={f.quantidade} onChange={(e) => set("quantidade", e.target.value)} /></label>
       </div>
-      <h4 className="sub">Trajetória e faixa salarial <span className="mudo">Tabela Salarial 2025</span></h4>
+      <h4 className="sub">Trajetória e faixa salarial <span className="mudo">{dados.tabela_nome}</span></h4>
       <div className="grade">
         <label><span>Trajetória <Obrig /></span><select value={f.trajetoria} onChange={(e) => setF((x) => ({ ...x, trajetoria: e.target.value, nivel: "", grupo: "" }))} required>
           <option value="">Selecione…</option>{trajs.map((t) => <option key={t} value={t}>{bonito(t)}</option>)}</select></label>
