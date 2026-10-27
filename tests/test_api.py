@@ -422,3 +422,16 @@ def test_gerencia_e_cargo_obrigatorios_e_niveis(client):
     assert [x["nivel"] for x in g[:2]] == ["dss", "diretoria"]
     assert g[0]["projetos"] == g[1]["projetos"] > 0 and g[0]["plano"] == g[1]["plano"]      # DSS repete a Diretoria Adjunta
     assert {p["cargo"] for p in g[0]["pessoas"]} == {"diretor_executivo", "pmo"}
+
+
+def test_pa_por_projeto_inclui_receitas(client):
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    alvo = next(p for p in ps if p["tipo"] == "despesa")
+    antes = alvo["receitas_2027"]
+    r = client.post("/api/receitas", json={"orcamento": alvo["orcamento"], "tipo": "intercompany", "ano": 2026, "cliente": "Cliente X",
+                                           "origem_cliente": "Fomento", "gestor_cliente": "Fulano", "valor": 1200})
+    assert r.status_code in (200, 201), r.text
+    depois = next(p for p in client.get("/api/projetos").json() if p["orcamento"] == alvo["orcamento"])
+    assert round(depois["receitas_2027"] - antes, 2) == 1200
+    assert round(depois["resultado_2027"], 2) == round(depois["receitas_2027"] - depois["total_2027"], 2)

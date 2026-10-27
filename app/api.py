@@ -320,13 +320,17 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
             (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_BASE} AND orcamento=p.orcamento) AS t_base,
             (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_plano,
             (SELECT COUNT(*) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS n_linhas,
+            (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM receitas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_receitas,
             (SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=p.orcamento) AS realizado,
             (SELECT COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=p.orcamento) AS empenhado
             FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]), "tipo": r["tipo"],
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
-             "total_2027": _arred(r["t_plano"]), "realizado_2026": _arred(r["realizado"]),
+             "total_2027": _arred(r["t_plano"]) if r["tipo"] != "receita" else 0.0,
+             "receitas_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else 0)),
+             "resultado_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
+             "realizado_2026": _arred(r["realizado"]),
              "empenhado_2026": _arred(r["empenhado"]),
              "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] else [])} for r in rows]
 
