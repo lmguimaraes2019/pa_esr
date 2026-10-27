@@ -21,17 +21,22 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
   const c = faixa ? custoMensal(sal, par) : null;
   const q = Math.max(Number(f.quantidade) || 1, 1);
   const meses = 13 - Number(f.mes_inicio);
+  const cat = dados.catalogo.itens;
+  const valorEq = (tipo) => cat.find((i) => i.codigo === f[tipo] && i.tipo === tipo)?.valor || 0;
+  const eqUnit = valorEq("computador") + valorEq("monitor") + valorEq("periferico");
+  const opcoes = (tipo) => cat.filter((i) => i.tipo === tipo).map((i) => <option key={i.codigo} value={i.codigo}>{i.codigo} | {fmt(i.valor)} | {i.nome}</option>);
   const salvar = async (e) => {
     e.preventDefault(); setErro("");
     try { await onSalvar({ orcamento: f.orcamento, funcao: f.funcao, cargo: f.cargo, trajetoria: f.trajetoria, nivel: f.nivel, grupo: f.grupo,
-      posicao: Number(f.posicao), mes_inicio: Number(f.mes_inicio), quantidade: q, justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "" }); onFechar(); } catch (x) { setErro(x.message); }
+      posicao: Number(f.posicao), mes_inicio: Number(f.mes_inicio), quantidade: q, justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "",
+      computador: f.computador || "", monitor: f.monitor || "", periferico: f.periferico || "" }); onFechar(); } catch (x) { setErro(x.message); }
   };
   return (
     <form className="cartao" id="form-hc" onSubmit={salvar}>
       <h3>{f.id ? "Editar posição" : "Nova posição de headcount 2027"}</h3>
       <p className="mudo">Campos com <Obrig /> são necessários para a posição ser considerada completa.</p>
       <div className="grade">
-        <label><span>Projeto que vai custear <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "" }))} required>
+        <label><span>Projeto que vai custear <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "", computador: "", monitor: "", periferico: "" }))} required>
           <option value="">Selecione…</option><optgroup label="Meus projetos">{dados.projetos.filter((p) => p.meu).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</optgroup>
           <optgroup label="Projetos de outros gestores">{dados.projetos.filter((p) => !p.meu).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao} ({p.gerente})</option>)}</optgroup></select>
           <small className="mudo">Pode ser qualquer projeto da casa, inclusive de outro gestor.</small></label>
@@ -58,10 +63,21 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
             <span>Salário {dados.reajuste ? `com reajuste de ${fmtN(dados.reajuste)}%` : ""}: <strong>{fmt(sal)}</strong></span></div>
         </div>)}
       <label><span>Justificativa <Obrig /></span><textarea rows={3} value={f.justificativa} onChange={(e) => set("justificativa", e.target.value)} placeholder="Por que a posição é necessária? Qual entrega ou meta depende dela?" /></label>
+      <h4 className="sub">Equipamentos <span className="mudo">Catálogo de Hardware Homologado, atualizado em {dados.catalogo.atualizado_em}</span></h4>
+      <div className="grade">
+        <label>Computador<select value={f.computador || ""} onChange={(e) => set("computador", e.target.value)}>
+          <option value="">Sem computador</option>{opcoes("computador")}</select>
+          <small className="mudo">Regular: D1 | Intermediário: N2.A ou N2.B | Avançado: N3.A ou N3.B | Diretoria e perfis aprovados: N4, N5.a, N5.b</small></label>
+        <label>Monitor<select value={f.monitor || ""} onChange={(e) => set("monitor", e.target.value)}>
+          <option value="">Sem monitor</option>{opcoes("monitor")}</select></label>
+        <label>Periférico<select value={f.periferico || ""} onChange={(e) => set("periferico", e.target.value)}>
+          <option value="">Sem periférico</option>{opcoes("periferico")}</select></label>
+      </div>
+      {eqUnit > 0 && <p className="mudo">Custo pontual dos equipamentos: <strong>{fmt(eqUnit)}</strong> por posição, <strong>{fmt(eqUnit * q)}</strong> para {q} posição(ões), lançado em {MESES_N[Number(f.mes_inicio) - 1]} na conta Hardware. A aquisição é solicitada à GTI, Gestão de Ativos.</p>}
       {c && (
         <div className="resumo-custo">
           <span>Salário e encargos <strong>{fmt(c.encargos)}</strong></span><span>Benefícios <strong>{fmt(c.beneficios)}</strong></span><span>Provisões (férias e 13º) <strong>{fmt(c.provisoes)}</strong></span>
-          <span>Custo mensal <strong>{fmt(c.mensal)}</strong></span><span>Anualizado ({q} posição) <strong>{fmt(c.anual * q)}</strong></span><span>Em 2027 ({meses} meses) <strong>{fmt(c.mensal * meses * q)}</strong></span>
+          <span>Custo mensal <strong>{fmt(c.mensal)}</strong></span><span>Anualizado ({q} posição) <strong>{fmt(c.anual * q)}</strong></span><span>Em 2027 ({meses} meses{eqUnit ? " + equipamentos" : ""}) <strong>{fmt(c.mensal * meses * q + eqUnit * q)}</strong></span>
         </div>)}
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="acoes"><button className="primario">Salvar posição</button><button type="button" onClick={onFechar}>Cancelar</button></div>
@@ -104,9 +120,9 @@ export default function Headcount({ admin, irProjeto }) {
       </div>
       <p className="legenda-icones"><span><Lapis /> editar a posição</span><span className="perigo"><Lixeira /> excluir</span></p>
       <div className="rolagem"><table className="tab">
-        <thead><tr><th>Ações</th><th>Função e cargo</th><th>Trajetória, nível e grupo</th><th>Projeto que custeia</th><th className="n">Qtd</th><th>Início</th><th className="n">Salário</th><th className="n">Custo mensal</th><th className="n">Anualizado</th><th className="n">Em 2027</th><th>Situação</th></tr></thead>
+        <thead><tr><th>Ações</th><th>Função e cargo</th><th>Trajetória, nível e grupo</th><th>Projeto que custeia</th><th className="n">Qtd</th><th>Início</th><th className="n">Salário</th><th>Equipamentos</th><th className="n">Custo mensal</th><th className="n">Anualizado</th><th className="n">Em 2027</th><th>Situação</th></tr></thead>
         <tbody>
-          {lista.length === 0 && <tr><td colSpan={11} className="mudo">Nenhuma posição lançada. Use "+ Nova posição".</td></tr>}
+          {lista.length === 0 && <tr><td colSpan={12} className="mudo">Nenhuma posição lançada. Use "+ Nova posição".</td></tr>}
           {lista.map((d) => (
             <tr key={d.id}>
               <td style={{ whiteSpace: "nowrap" }}><div className="barra-icones"><BotaoIcone icone={<Lapis />} dica="Editar a posição" onClick={() => abrir(d)} /><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir a posição" onClick={() => excluir(d)} /></div></td>
@@ -115,12 +131,13 @@ export default function Headcount({ admin, irProjeto }) {
               <td>{bonito(d.trajetoria)}<br /><span className="mudo">{bonito(d.nivel)} | {bonito(d.grupo)} | {d.posicao}% da faixa</span></td>
               <td><button className="link" onClick={() => irProjeto(d.orcamento)}>{d.orcamento}</button><br /><span className="mudo">{d.projeto}</span>{!(dados.projetos.find((p) => p.orcamento === d.orcamento)?.meu) && <><br /><span className="tag aviso">projeto de {dados.projetos.find((p) => p.orcamento === d.orcamento)?.gerente}</span></>}{d.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {d.tarefa}</span></>}</td>
               <td className="n">{d.quantidade}</td><td>{MESES_N[d.mes_inicio - 1].slice(0, 3)}</td>
-              <td className="n">{fmtN(d.custo.salario)}</td><td className="n">{fmtN(d.custo.mensal)}</td>
+              <td className="n">{fmtN(d.custo.salario)}</td>
+              <td style={{ fontSize: ".8rem" }}>{d.computador || d.monitor || d.periferico ? <>{[d.computador, d.monitor, d.periferico].filter(Boolean).join(" + ")}<br /><span className="mudo">{fmtN(d.equipamentos.total)}</span></> : <span className="mudo">-</span>}</td><td className="n">{fmtN(d.custo.mensal)}</td>
               <td className="n"><strong>{fmtN(d.anualizado)}</strong></td><td className="n"><strong>{fmtN(d.custo_2027)}</strong></td>
               <td>{d.faltando.length === 0 ? <span className="tag ok">completo</span> : <><span className="tag aviso">pendente</span><div className="pend-lista">{d.faltando.map((x) => <span key={x}>{x}</span>)}</div></>}</td>
             </tr>))}
         </tbody>
-        <tfoot><tr><td colSpan={4}>Total do filtro</td><td className="n">{lista.reduce((a, d) => a + d.quantidade, 0)}</td><td /><td /><td /><td className="n">{fmtN(lista.reduce((a, d) => a + d.anualizado, 0))}</td><td className="n">{fmtN(lista.reduce((a, d) => a + d.custo_2027, 0))}</td><td /></tr></tfoot>
+        <tfoot><tr><td colSpan={4}>Total do filtro</td><td className="n">{lista.reduce((a, d) => a + d.quantidade, 0)}</td><td /><td /><td /><td /><td className="n">{fmtN(lista.reduce((a, d) => a + d.anualizado, 0))}</td><td className="n">{fmtN(lista.reduce((a, d) => a + d.custo_2027, 0))}</td><td /></tr></tfoot>
       </table></div>
       {form && <Formulario key={form.id ?? "novo"} inicial={form} dados={dados} onFechar={() => setForm(null)} onSalvar={salvar} />}
       {dados.por_projeto.length > 0 && (

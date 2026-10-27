@@ -269,6 +269,10 @@ def init_db() -> None:
                          ("origem_cliente", "TEXT NOT NULL DEFAULT ''"), ("gestor_cliente", "TEXT NOT NULL DEFAULT ''")):
             if col not in rc:
                 c.execute(f"ALTER TABLE receitas ADD COLUMN {col} {ddl}")
+        hc = {r[1] for r in c.execute("PRAGMA table_info(headcount)")}      # migração: equipamentos do catálogo de computação pessoal
+        for col in ("computador", "monitor", "periferico"):
+            if col not in hc:
+                c.execute(f"ALTER TABLE headcount ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         if "criado_por" not in {r[1] for r in c.execute("PRAGMA table_info(headcount)")}:      # migração: quem lançou a posição
             c.execute("ALTER TABLE headcount ADD COLUMN criado_por TEXT NOT NULL DEFAULT ''")
             c.execute("UPDATE headcount SET criado_por = atualizado_por")

@@ -10,7 +10,7 @@ import json
 import re
 import sqlite3
 
-from . import config, pessoal, viagens as vg
+from . import config, equipamentos, pessoal, viagens as vg
 from .db import MESES
 
 FONTES_SYNC = ("eventos", "headcount")
@@ -68,6 +68,8 @@ def linhas_de_headcount(c: sqlite3.Connection, orcamento: str) -> dict:
         for comp, conta in CONTAS_PESSOAL.items():
             for mes in range(r["mes_inicio"], 13):
                 _soma(out, (r["edt"], r["tarefa"], conta, "headcount"), mes, round(cm[comp] * r["quantidade"], 2))
+        hw = equipamentos.custo(r["computador"], r["monitor"], r["periferico"])["total"]      # custo pontual, no mês de início
+        _soma(out, (r["edt"], r["tarefa"], equipamentos.CONTA_HARDWARE, "headcount"), r["mes_inicio"], round(hw * r["quantidade"], 2))
     return out
 
 

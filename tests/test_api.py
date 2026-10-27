@@ -457,3 +457,24 @@ def test_descricao_do_projeto(client):
     assert client.patch(f"/api/projetos/{o}", json={"detalhe": "  Objetivo do projeto em 2027.  "}).status_code == 200
     assert client.get(f"/api/projetos/{o}").json()["projeto"]["detalhe"] == "Objetivo do projeto em 2027."
     assert client.patch(f"/api/projetos/{o}", json={"detalhe": "x" * 3001}).status_code == 422
+
+
+def test_headcount_com_equipamentos_do_catalogo(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    assert len(h["catalogo"]["itens"]) == 11
+    orc = h["projetos"][0]["orcamento"]
+    tf = h["tarefas"][orc]["lista"][0]
+    base = {"orcamento": orc, "funcao": "Analista", "cargo": "Pleno", "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO", "grupo": "GRUPO 01",
+            "posicao": 0, "mes_inicio": 3, "quantidade": 2, "justificativa": "x", "edt": tf["edt"], "tarefa": tf["tarefa"]}
+    sem = client.post("/api/headcount", json=base).json()
+    com = client.post("/api/headcount", json={**base, "computador": "N2.B", "monitor": "M2", "periferico": "DS1"})
+    assert com.status_code == 201, com.text
+    com = com.json()
+    unit = 7203.00 + 850.00 + 1219.00
+    assert com["equipamentos"]["unitario"] == unit and com["equipamentos"]["total"] == unit * 2
+    assert round(com["custo_2027"] - sem["custo_2027"], 2) == unit * 2
+    assert round(com["anualizado"] - sem["anualizado"], 2) == 0
+    hw = [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["conta_codigo"] == "13010102" and x["fonte"] == "headcount"]
+    assert hw and hw[0]["meses"][2] == unit * 2 and sum(hw[0]["meses"]) == unit * 2      # só no mês de início
+    assert client.post("/api/headcount", json={**base, "monitor": "N2.B"}).status_code == 422      # código de outro tipo
