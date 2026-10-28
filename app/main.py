@@ -16,6 +16,7 @@ from .api_eventos import router as eventos_router
 from .api_headcount import router as headcount_router
 from .api_planejamento import router as planejamento_router
 from .api_referencias import router as referencias_router
+from .api_entregas import router as entregas_router
 from .db import init_db
 
 @asynccontextmanager
@@ -56,6 +57,7 @@ app.include_router(eventos_router)
 app.include_router(headcount_router)
 app.include_router(planejamento_router)
 app.include_router(referencias_router)
+app.include_router(entregas_router)
 
 if config.WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=config.WEB_DIST / "assets"), name="assets")

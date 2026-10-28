@@ -306,6 +306,10 @@ def test_planejamento_resumo_e_conclusao(client):
     for v in client.get("/api/viagens").json()["viagens"]:      # a carga de viagens traz itens ainda sem tarefa
         if not v["orcamento"] or not v["edt"] or not v["tem_tarifa"]:
             client.delete(f"/api/viagens/{v['id']}")
+    pend = client.get("/api/planejamento").json()
+    assert pend["pendencias"] == pend["etapas"]["entregas"]["pendentes"] > 0      # só faltam as entregas dos projetos
+    for p in client.get("/api/projetos").json():
+        client.post(f"/api/projetos/{p['orcamento']}/entregas/lote", json={"linhas": ["Entrega prevista do projeto"]})
     assert client.get("/api/planejamento").json()["pendencias"] == 0
     assert client.post("/api/planejamento/concluir", json={"concluido": True, "obs": "ok"}).status_code == 200
     assert client.get("/api/planejamento").json()["concluido"]["obs"] == "ok"
@@ -497,7 +501,7 @@ def _envia(client, tipo, dados, simular, nome="t.xlsx"):
 
 def test_importar_equipamentos(client):
     entrar(client)
-    assert len(client.get("/api/referencias").json()) == 3
+    assert len(client.get("/api/referencias").json()) == 4
     modelo = client.get("/api/referencias/equipamentos/modelo")
     assert modelo.status_code == 200 and modelo.content[:2] == b"PK"
     arq = _xlsx([["Código", "Tipo", "Equipamento", "Perfil", "Valor"],
@@ -553,3 +557,39 @@ def test_excluir_grupo_com_linhas_de_headcount(client):
     depois = [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["edt"] == tf["edt"] and x["tarefa"] == tf["tarefa"]]
     assert ok.status_code in (200, 404) and all(x["fonte"] == "headcount" for x in depois) and depois
     assert len(depois) <= len(antes)
+
+
+def test_entregas_e_conexao_estrategica(client):
+    entrar(client)
+    # catálogo do PO e do CG, importado pelo administrador
+    arq = _xlsx([["Tipo", "Código", "Descrição", "Meta ou critério"],
+                 ["PO", "RC 6.1.2", "900 alunos capacitados via parcerias", "Q3"], ["CG", "Indicador 10", "Alinhamento da consultoria educacional", ""]])
+    assert _envia(client, "estrategia", arq, False).status_code == 200
+    ps = [p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0]
+    orc = ps[0]["orcamento"]
+    d = client.get(f"/api/projetos/{orc}/entregas").json()
+    assert d["entregas"] == [] and [e["codigo"] for e in d["catalogo"]] == ["Indicador 10", "RC 6.1.2"] or len(d["catalogo"]) == 2
+    # sem entregas: pendência do projeto
+    assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["pendentes"] == 1
+    po = next(e["id"] for e in d["catalogo"] if e["tipo"] == "po")
+    r = client.post(f"/api/projetos/{orc}/entregas", json={"descricao": "Turmas de parceiros concluídas", "mes": 9, "kpi": "Alunos capacitados", "meta": "300", "estrategia": [po, 99999]})
+    assert r.status_code == 201
+    assert client.post(f"/api/projetos/{orc}/entregas/lote", json={"linhas": ["- Curso novo publicado", "  ", "Relatório final"]}).json()["incluidas"] == 2
+    ent = client.get(f"/api/projetos/{orc}/entregas").json()["entregas"]
+    assert len(ent) == 3 and ent[0]["estrategia"] == [po] and ent[0]["mes"] == 9 and ent[1]["descricao"] == "Curso novo publicado"
+    res = client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]
+    assert res["pendentes"] == 0 and res["n"] == 3 and res["sem_conexao"] == 2
+    assert client.put(f"/api/entregas/{ent[1]['id']}", json={"descricao": "Curso novo publicado", "mes": 3, "estrategia": [po]}).status_code == 200
+    cob = client.get("/api/estrategia/cobertura").json()
+    rc = next(i for i in cob["itens"] if i["tipo"] == "po")
+    assert rc["entregas"] == 2 and rc["projetos"] == 1 and rc["plano_projetos"] > 0
+    cg = next(i for i in cob["itens"] if i["tipo"] == "cg")
+    assert cg["entregas"] == 0
+    assert orc not in {x["orcamento"] for x in cob["sem_vinculo"]}
+    assert client.delete(f"/api/entregas/{ent[2]['id']}").status_code == 200
+    assert len(client.get(f"/api/projetos/{orc}/entregas").json()["entregas"]) == 2
+    # contingenciado não exige entregas
+    ctg = ps[1]["orcamento"]
+    assert client.get(f"/api/planejamento/projeto/{ctg}").json()["entregas"]["pendentes"] == 1
+    client.patch(f"/api/projetos/{ctg}", json={"contingenciado": True})
+    assert client.get(f"/api/planejamento/projeto/{ctg}").json()["entregas"]["pendentes"] == 0

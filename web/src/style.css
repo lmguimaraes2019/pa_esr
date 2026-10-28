@@ -256,3 +256,21 @@ td.total-cel{display:table-cell;text-align:right}td.total-cel small{display:bloc
 .tab.clic td:nth-child(2) { min-width: 12rem; }
 .descricao-proj textarea { width: 100%; box-sizing: border-box; font: inherit; padding: .6rem .7rem; border: 1px solid #c9d3e0; border-radius: 6px; resize: vertical; }
 .descricao-proj label { display: block; }
+
+/* Entregas */
+.ent-lista{list-style:none;padding:0;margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.ent-item{display:flex;gap:12px;border:1px solid #d9dee7;border-radius:8px;padding:12px;background:#fff}
+.ent-item.sem{border-left:4px solid #d97706}
+.ent-n{flex:none;width:26px;height:26px;border-radius:50%;background:#e8eef7;color:#1f3a63;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px}
+.ent-corpo{flex:1;min-width:0}
+.ent-texto{margin:0 0 8px;white-space:pre-wrap}
+.ent-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.chip{font-size:12px;padding:2px 8px;border-radius:999px;background:#eef1f5;color:#334}
+.chip.po{background:#e3f2e8;color:#1b5e32}.chip.cg{background:#e6eefc;color:#1d4a9c}.chip.kpi{background:#fdf1d8;color:#7a4b00}.chip.vazio{background:#f6e7e7;color:#8a2b2b}
+.ent-resumo{display:flex;gap:18px;flex-wrap:wrap;margin:8px 0;font-size:14px}
+.ent-form{display:flex;flex-direction:column;gap:10px}
+.ent-form textarea,.ent-rapido textarea{width:100%;box-sizing:border-box}
+.ent-estrategia{border:1px solid #d9dee7;border-radius:6px;padding:8px 12px;max-height:320px;overflow:auto}
+.ent-grupo{margin:6px 0}.ent-check{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-size:14px}
+.ent-rapido{margin-top:14px;border-top:1px dashed #d9dee7;padding-top:12px}
+tr.sem-cobertura td{background:#fff6ea}

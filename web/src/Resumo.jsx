@@ -24,6 +24,24 @@ function Quadro({ itens, rotulo }) {
   );
 }
 
+function Cobertura() {
+  const [c, setC] = useState(null);
+  useEffect(() => { api("/estrategia/cobertura").then(setC).catch(() => setC(false)); }, []);
+  if (!c) return null;
+  const grupos = [["po", "Plano de Operação"], ["cg", "Contrato de Gestão"]];
+  return (
+    <section className="cartao"><h3>Conexão estratégica</h3>
+      <p className="mudo">Quais resultados do PO e indicadores do Contrato de Gestão têm entregas planejadas e quanto do plano 2027 está ligado a eles.</p>
+      {c.catalogo_vazio ? <p className="mudo">Cadastre os itens em Administração, Tabelas de referência, "Plano de Operação e indicadores do Contrato de Gestão".</p> : (
+        <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th className="n">Entregas</th><th className="n">Projetos</th><th className="n">Plano 2027 dos projetos</th></tr></thead>
+          <tbody>{grupos.map(([t, nome]) => (<React.Fragment key={t}><tr><td colSpan={4}><strong>{nome}</strong></td></tr>
+            {c.itens.filter((i) => i.tipo === t).map((i) => (
+              <tr key={i.id} className={i.entregas ? "" : "sem-cobertura"}><td><b>{i.codigo}</b> {i.descricao}</td><td className="n">{i.entregas || "sem entregas"}</td><td className="n">{i.projetos}</td><td className="n">{fmt(i.plano_projetos)}</td></tr>))}</React.Fragment>))}</tbody></table></div>)}
+      {c.sem_vinculo && c.sem_vinculo.length > 0 && <p className="aviso-txt"><strong>{c.sem_vinculo.length}</strong> projeto(s) com plano 2027 e nenhuma entrega ligada ao PO ou ao CG: {c.sem_vinculo.slice(0, 12).map((p) => p.orcamento || p).join(", ")}{c.sem_vinculo.length > 12 ? "…" : ""}</p>}
+    </section>
+  );
+}
+
 export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   const [r, setR] = useState(null);
   const [erro, setErro] = useState("");
@@ -64,6 +82,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
           </div>
         </section>
       </div>
+      <Cobertura />
       <section className="cartao"><h3>Por origem de recurso</h3><Quadro itens={r.por_origem} rotulo="Origem" /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>

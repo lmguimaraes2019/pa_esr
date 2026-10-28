@@ -43,16 +43,19 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
       `${e.eventos.n} evento(s)`, e.eventos.total, e.eventos.pendentes ? "Completar" : "Abrir eventos"],
     ["headcount", "Headcount", e.headcount.pendentes ? "pend" : "ok", e.headcount.pendentes ? `${e.headcount.pendentes} incompleta(s)` : e.headcount.n ? "em dia" : "nenhuma",
       `${e.headcount.n} posição(ões) nova(s), custo em 2027`, e.headcount.total, e.headcount.pendentes ? "Completar" : "Abrir headcount"],
+    ["entregas", "Entregas e conexão estratégica", e.entregas.pendentes ? "pend" : "ok", e.entregas.pendentes ? `${e.entregas.pendentes} projeto(s) sem entregas` : "informadas",
+      `${e.entregas.n} entrega(s) nos projetos${e.entregas.sem_conexao ? `, ${e.entregas.sem_conexao} sem KPI nem conexão com PO e CG` : ""}`, null,
+      e.entregas.pendentes ? "Informar entregas" : "Revisar nos projetos"],
   ];
   const feitas = itens.filter((i) => i[2] !== "pend").length;
   return (
     <section className="cartao meu-plano">
       <div className="cab">
         <div><h3 style={{ margin: 0 }}>Etapas do plano 2027</h3>
-          <p className="mudo">Percorra as cinco etapas em ordem. Os valores de Viagens, Eventos e Headcount entram sozinhos no orçamento de cada projeto.</p></div>
+          <p className="mudo">Percorra as etapas em ordem. Os valores de Viagens, Eventos e Headcount entram sozinhos no orçamento de cada projeto. As entregas são informadas dentro de cada projeto, na aba "Entregas 2027".</p></div>
         <div className="progresso" title={`${feitas} de ${itens.length} etapas sem pendência`}><span style={{ width: (feitas / itens.length) * 100 + "%" }} /><small>{feitas} de {itens.length} em dia</small></div>
       </div>
-      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => ir(k)} />)}</ol>
+      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => ir(k === "entregas" ? "projetos" : k)} />)}</ol>
       <div className="concluir">
         {plano.concluido ? (
           <><p><Estado tom="ok">concluído</Estado> Você marcou o planejamento como concluído em {quando(plano.concluido.concluido_em)}.{plano.concluido.obs && ` Observação: ${plano.concluido.obs}`}</p>
@@ -100,6 +103,7 @@ export function ResumoProjeto({ orcamento, irEtapa }) {
     ["viagens", "Viagens", fmt(d.viagens.total), `${d.viagens.n} viagem(ns)`, d.viagens.pendentes],
     ["eventos", "Eventos", fmt(d.eventos.total), `${d.eventos.n} evento(s)`, d.eventos.pendentes],
     ["headcount", "Headcount", fmt(d.headcount.total), `${d.headcount.n} posição(ões) | custo em 2027`, d.headcount.pendentes],
+    ["entregas", "Entregas", `${d.entregas.n}`, d.entregas.n ? `${d.entregas.n - d.entregas.sem_conexao} com KPI ou conexão estratégica` : "Nenhuma entrega informada", d.entregas.pendentes],
   ];
   return (
     <section className="cartao">
@@ -108,8 +112,8 @@ export function ResumoProjeto({ orcamento, irEtapa }) {
       <div className="resumo-cards">{cartoes.map(([k, t, v, s, p], i) => (
         <div key={k} className={"resumo-card " + (p ? "pend" : "")}>
           <span className="etapa-n">{i + 1}</span><strong>{t}</strong><b>{v}</b><small className="mudo">{s}</small>
-          {p > 0 && <Estado tom="pend">{p} pendente(s)</Estado>}
-          <button onClick={() => irEtapa(k)}>{k === "projetos" ? "Ver as linhas" : "Abrir"}</button>
+          {p > 0 && <Estado tom="pend">{k === "entregas" ? "pendente" : `${p} pendente(s)`}</Estado>}
+          <button onClick={() => irEtapa(k)}>{k === "projetos" ? "Ver as linhas" : k === "entregas" ? "Informar entregas" : "Abrir"}</button>
         </div>))}</div>
     </section>
   );

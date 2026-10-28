@@ -27,12 +27,13 @@ TABELAS = {
     "viagens": {"nome": "Tarifas de viagens", "colunas": ["tipo", "origem", "destino", *vg.CAMPOS_TARIFA]},
     "equipamentos": {"nome": "Catálogo de equipamentos", "colunas": ["codigo", "tipo", "nome", "perfil", "valor"]},
     "salarios": {"nome": "Tabela salarial", "colunas": ["trajetoria", "nivel", "grupo", "inicio", "fim"]},
+    "estrategia": {"nome": "Plano de Operação e indicadores do Contrato de Gestão", "colunas": ["tipo", "codigo", "descricao", "meta"]},
 }
 ROTULOS = {
     "tipo": "Tipo", "origem": "Origem", "destino": "Destino", "passagem": "Passagem", "hospedagem": "Hospedagem", "bagagem": "Bagagem",
     "aux_transporte": "Aux. transporte", "ajuda_custo": "Ajuda de custo", "seguro": "Seguro", "codigo": "Código", "nome": "Equipamento",
     "perfil": "Perfil", "valor": "Valor", "trajetoria": "Trajetória", "nivel": "Nível", "grupo": "Grupo", "inicio": "Início da faixa (80%)",
-    "fim": "Fim da faixa (120%)",
+    "fim": "Fim da faixa (120%)", "descricao": "Descrição", "meta": "Meta ou critério",
 }
 ALIAS = {
     "tipo": ["tipo", "categoria"], "origem": ["origem"], "destino": ["destino"],
@@ -42,6 +43,7 @@ ALIAS = {
     "perfil": ["perfil", "observacao", "perfil_observacao"], "valor": ["valor", "valor_r", "valor_(r$)", "preco"],
     "trajetoria": ["trajetoria"], "nivel": ["nivel"], "grupo": ["grupo"],
     "inicio": ["inicio", "inicio_da_faixa", "inicio_da_faixa_(80%)", "faixa_inicio", "minimo"], "fim": ["fim", "fim_da_faixa", "fim_da_faixa_(120%)", "faixa_fim", "maximo"],
+    "descricao": ["descricao", "resultado_chave", "indicador", "nome", "enunciado"], "meta": ["meta", "criterio", "criterios", "meta_criterio", "meta_ou_criterio"],
     "referencia": ["referencia", "valor_100%", "ponto_medio", "salario_referencia", "100%"],
 }
 
@@ -263,7 +265,52 @@ def _preparar_salarios(c: sqlite3.Connection, linhas: list[dict]) -> dict:
             "aviso": "As faixas que não constam no arquivo saem da tabela." if ausentes else "", "_dados": novos}
 
 
-PREPARAR = {"viagens": _preparar_viagens, "equipamentos": _preparar_equipamentos, "salarios": _preparar_salarios}
+_TIPOS_ESTRATEGIA = {"po": "po", "plano_de_operacao": "po", "plano_operacao": "po", "rc": "po", "resultado-chave": "po", "resultado_chave": "po", "okr": "po",
+                     "cg": "cg", "contrato_de_gestao": "cg", "contrato_gestao": "cg", "indicador": "cg", "indicador_cg": "cg"}
+
+
+def _preparar_estrategia(c: sqlite3.Connection, linhas: list[dict]) -> dict:
+    _exige_colunas(linhas, ["tipo", "codigo", "descricao"])
+    atuais = {(r["tipo"], r["codigo"].upper()): r for r in c.execute("SELECT * FROM estrategia")}
+    novos, erros, vistos = [], [], set()
+    for n, l in enumerate(linhas, start=2):
+        tipo = _TIPOS_ESTRATEGIA.get(_chave(_pega(l, "tipo")))
+        cod, desc = str(_pega(l, "codigo") or "").strip(), str(_pega(l, "descricao") or "").strip()
+        if not (cod and desc):
+            erros.append(f"Linha {n}: informe código e descrição.")
+        elif not tipo:
+            erros.append(f"Linha {n} ({cod}): tipo deve ser PO (resultado-chave do Plano de Operação) ou CG (indicador do Contrato de Gestão).")
+        elif (tipo, cod.upper()) in vistos:
+            erros.append(f"Linha {n}: {cod} repetido.")
+        else:
+            vistos.add((tipo, cod.upper()))
+            novos.append({"tipo": tipo, "codigo": cod, "descricao": desc[:500], "meta": str(_pega(l, "meta") or "").strip()[:500]})
+    mudancas, iguais = [], 0
+    for x in novos:
+        a = atuais.get((x["tipo"], x["codigo"].upper()))
+        rot = f"{'PO' if x['tipo'] == 'po' else 'CG'} {x['codigo']} | {x['descricao'][:80]}"
+        if not a:
+            mudancas.append({"item": rot, "situacao": "novo", "antes": "", "depois": x["meta"]})
+        elif a["descricao"] != x["descricao"] or a["meta"] != x["meta"]:
+            mudancas.append({"item": rot, "situacao": "alterado", "antes": f"{a['descricao'][:60]} | {a['meta'][:40]}", "depois": f"{x['descricao'][:60]} | {x['meta'][:40]}"})
+        else:
+            iguais += 1
+    ausentes = [f"{'PO' if k[0] == 'po' else 'CG'} {r['codigo']}" for k, r in atuais.items() if k not in vistos]
+    return {"lidos": len(novos), "novos": sum(1 for m in mudancas if m["situacao"] == "novo"), "alterados": sum(1 for m in mudancas if m["situacao"] == "alterado"),
+            "iguais": iguais, "ausentes": ausentes, "mudancas": mudancas, "erros": erros,
+            "aviso": "Os itens que não constam no arquivo continuam no catálogo e nas entregas já vinculadas." if ausentes else "", "_dados": novos, "_atuais": atuais}
+
+
+def _aplicar_estrategia(c: sqlite3.Connection, p: dict) -> None:
+    for x in p["_dados"]:
+        a = p["_atuais"].get((x["tipo"], x["codigo"].upper()))
+        if a:
+            c.execute("UPDATE estrategia SET codigo=?, descricao=?, meta=? WHERE id=?", (x["codigo"], x["descricao"], x["meta"], a["id"]))
+        else:
+            c.execute("INSERT INTO estrategia (tipo, codigo, descricao, meta) VALUES (?,?,?,?)", (x["tipo"], x["codigo"], x["descricao"], x["meta"]))
+
+
+PREPARAR = {"estrategia": _preparar_estrategia, "viagens": _preparar_viagens, "equipamentos": _preparar_equipamentos, "salarios": _preparar_salarios}
 
 
 # ---------------------------------------------------------------- rotas
@@ -284,6 +331,9 @@ def situacao(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_co
          "colunas": [ROTULOS[k] for k in TABELAS["viagens"]["colunas"]]},
         {"tipo": "equipamentos", "nome": TABELAS["equipamentos"]["nome"], "registros": len(eq["itens"]), "origem": eq.get("origem", "importado"),
          "detalhe": f"Catálogo de Hardware Homologado, atualizado em {eq['atualizado_em']}.", "colunas": [ROTULOS[k] for k in TABELAS["equipamentos"]["colunas"]]},
+        {"tipo": "estrategia", "nome": TABELAS["estrategia"]["nome"], "registros": c.execute("SELECT COUNT(*) FROM estrategia").fetchone()[0],
+         "origem": "banco de dados", "detalhe": "Resultados-chave (RC) do PO e indicadores do CG. Os gestores vinculam cada entrega do projeto a eles. Tipo: PO ou CG.",
+         "colunas": [ROTULOS[k] for k in TABELAS["estrategia"]["colunas"]]},
         {"tipo": "salarios", "nome": TABELAS["salarios"]["nome"], "registros": len(ti["faixas"]), "origem": ti["origem"],
          "detalhe": f"{ti['nome']}: faixas por trajetória, nível e grupo (80% a 120% da referência).", "colunas": [ROTULOS[k] for k in TABELAS["salarios"]["colunas"]]},
     ]
@@ -300,6 +350,8 @@ def modelo(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = De
                   for r in c.execute("SELECT * FROM viagem_tarifas ORDER BY tipo, origem, destino")]
     elif tipo == "equipamentos":
         linhas = [[i[k] for k in cols] for i in equipamentos.catalogo()]
+    elif tipo == "estrategia":
+        linhas = [[r[k] if k != "tipo" else r["tipo"].upper() for k in cols] for r in c.execute("SELECT * FROM estrategia ORDER BY tipo DESC, codigo")]
     else:
         linhas = [[f[k] for k in cols] for f in pessoal.tabela_salarial()]
     wb = openpyxl.Workbook()
@@ -312,6 +364,13 @@ def modelo(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = De
         ws.append(l)
     for i, k in enumerate(cols, start=1):
         ws.column_dimensions[ws.cell(1, i).column_letter].width = 60 if k == "nome" else 26
+    if tipo == "estrategia":
+        aj = wb.create_sheet("Como preencher")
+        for l in (["Preencha a aba da tabela e importe o arquivo."], ["Tipo: PO para resultado-chave do Plano de Operação; CG para indicador do Contrato de Gestão."],
+                  ["Código: como o item é conhecido (ex.: RC 6.1.2 ou Indicador 10). É a chave: o mesmo código atualiza o item."],
+                  ["Descrição: o enunciado do resultado-chave ou do indicador."], ["Meta ou critério: opcional (ex.: 900 alunos capacitados até o 3º trimestre)."]):
+            aj.append(l)
+        aj.column_dimensions["A"].width = 120
     buf = io.BytesIO()
     wb.save(buf)
     return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -334,6 +393,8 @@ async def importar(tipo: str, simular: bool = True, arquivo: UploadFile = File(.
         hoje = datetime.now().strftime("%d/%m/%Y")
         if tipo == "viagens":
             _aplicar_viagens(c, p)
+        elif tipo == "estrategia":
+            _aplicar_estrategia(c, p)
         elif tipo == "equipamentos":
             equipamentos.gravar(p["_dados"], hoje, f"importado de {arquivo.filename}")
         else:

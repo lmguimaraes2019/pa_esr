@@ -132,6 +132,36 @@ CREATE TABLE IF NOT EXISTS headcount (
 
 CREATE TABLE IF NOT EXISTS hc_parametros (chave TEXT PRIMARY KEY, valor REAL NOT NULL);
 
+-- conexão estratégica: resultados-chave (RC) do Plano de Operação e indicadores do Contrato de Gestão, importados pelo administrador
+CREATE TABLE IF NOT EXISTS estrategia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('po','cg')),
+    codigo TEXT NOT NULL,
+    descricao TEXT NOT NULL,
+    meta TEXT NOT NULL DEFAULT '',
+    UNIQUE (tipo, codigo)
+);
+
+-- entregas previstas de cada projeto em 2027, com prazo, KPI próprio e vínculo com o PO e o CG
+CREATE TABLE IF NOT EXISTS entregas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    orcamento TEXT NOT NULL REFERENCES projetos(orcamento),
+    descricao TEXT NOT NULL,
+    mes INTEGER NOT NULL DEFAULT 0,
+    kpi TEXT NOT NULL DEFAULT '',
+    meta TEXT NOT NULL DEFAULT '',
+    ordem INTEGER NOT NULL DEFAULT 0,
+    criado_por TEXT NOT NULL DEFAULT '',
+    atualizado_por TEXT NOT NULL DEFAULT '',
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS entrega_estrategia (
+    entrega_id INTEGER NOT NULL REFERENCES entregas(id) ON DELETE CASCADE,
+    estrategia_id INTEGER NOT NULL REFERENCES estrategia(id),
+    PRIMARY KEY (entrega_id, estrategia_id)
+);
+
 CREATE TABLE IF NOT EXISTS conclusoes (
     login TEXT PRIMARY KEY,
     concluido_em TEXT NOT NULL DEFAULT (datetime('now')),

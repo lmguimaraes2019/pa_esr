@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ResumoProjeto } from "./Planejamento.jsx";
+import EntregasProjeto from "./Entregas.jsx";
 import { api, fmt, fmtN, fmtI, lerNumero, MESES } from "./api.js";
 import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer } from "./ui.jsx";
 
@@ -293,11 +294,12 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} onSalvo={carregar} />}
       </div>
       <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
-      <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["resumo", "Resumo e pendências"]]} />
+      <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["entregas", "Entregas 2027"], ["resumo", "Resumo e pendências"]]} />
       {p.tipo === "receita" && <div className="nota">Este é um orçamento de <strong>receita</strong>: o total das linhas do plano 2027 entra em Receitas como resultado positivo e não soma nas despesas.</div>}
       {erro && <p className="erro" role="alert">{erro}</p>}
       {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} recarregar={carregar} setErro={setErro} />
-        : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={irEtapa} />
+        : passo === "entregas" ? <EntregasProjeto orcamento={orcamento} contingenciado={p.contingenciado} />
+        : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={(k) => (k === "entregas" ? setPasso("entregas") : irEtapa(k))} />
         : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} voltar={voltar} />}
     </>
   );

@@ -25,13 +25,14 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
     """Situação de cada projeto nas cinco etapas do plano 2027."""
     ids = sorted(ids)
     marks = ",".join("?" for _ in ids) or "''"
-    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo FROM projetos WHERE orcamento IN ({marks})", ids)}
+    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo, contingenciado FROM projetos WHERE orcamento IN ({marks})", ids)}
     out = {o: {"orcamento": o, "projeto": nomes[o]["descricao"], "gerente": nomes[o]["gerente"], "novo": bool(nomes[o]["novo"]),
                "despesas": {"aprovado": 0.0, "plano": 0.0, "linhas": 0, "ajustadas": 0, "novas": 0, "excluidas": 0, "bloqueadas": 0},
                "receitas": {"n": 0, "total": 0.0},
                "viagens": {"n": 0, "total": 0.0, "pendentes": 0},
                "eventos": {"n": 0, "total": 0.0, "pendentes": 0},
-               "headcount": {"n": 0, "total": 0.0, "pendentes": 0}} for o in ids if o in nomes}
+               "headcount": {"n": 0, "total": 0.0, "pendentes": 0},
+               "entregas": {"n": 0, "sem_conexao": 0, "pendentes": 0}} for o in ids if o in nomes}
 
     # despesas: compara cada linha de 2027 com a de 2026
     usadas: set[int] = set()
@@ -78,6 +79,11 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
         x = out[r["orcamento"]]["headcount"]
         x["n"] += r["quantidade"]; x["total"] += d["custo_2027"]; x["pendentes"] += 1 if d["faltando"] else 0
 
+    for r in c.execute(f"""SELECT e.orcamento, COUNT(*) n,
+                           SUM(CASE WHEN e.kpi='' AND NOT EXISTS (SELECT 1 FROM entrega_estrategia x WHERE x.entrega_id=e.id) THEN 1 ELSE 0 END) sem
+                           FROM entregas e WHERE e.orcamento IN ({marks}) GROUP BY e.orcamento""", ids):
+        out[r["orcamento"]]["entregas"].update(n=r["n"], sem_conexao=r["sem"] or 0)
+
     for o, p in out.items():
         if nomes[o]["tipo"] == "receita":      # orçamento de receita: o total das linhas é receita (resultado positivo), não despesa
             p["receitas"]["total"] += p["despesas"]["plano"]
@@ -87,7 +93,10 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
             for f in ("aprovado", "plano", "total"):
                 if f in p[k]:
                     p[k][f] = _arred(p[k][f])
-        p["pendencias"] = p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"]
+        # todo projeto de despesa com orçamento em 2027 precisa informar as entregas previstas (exceto o contingenciado)
+        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and p["despesas"]["plano"] > 0 and not p["entregas"]["n"]:
+            p["entregas"]["pendentes"] = 1
+        p["pendencias"] = (p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"] + p["entregas"]["pendentes"])
     return out
 
 
@@ -100,6 +109,7 @@ def _etapas(projetos: list[dict]) -> dict:
         "viagens": {"n": soma("viagens", "n"), "total": _arred(soma("viagens", "total")), "pendentes": soma("viagens", "pendentes")},
         "eventos": {"n": soma("eventos", "n"), "total": _arred(soma("eventos", "total")), "pendentes": soma("eventos", "pendentes")},
         "headcount": {"n": soma("headcount", "n"), "total": _arred(soma("headcount", "total")), "pendentes": soma("headcount", "pendentes")},
+        "entregas": {"n": soma("entregas", "n"), "sem_conexao": soma("entregas", "sem_conexao"), "pendentes": soma("entregas", "pendentes"), "projetos": len(projetos)},
     }
 
 
@@ -115,7 +125,7 @@ def _situacao(c: sqlite3.Connection, u: dict) -> dict:
         d = _calc_hc(r, par, reaj)
         x = etapas["headcount"]
         x["n"] += r["quantidade"]; x["total"] = _arred(x["total"] + d["custo_2027"]); x["pendentes"] += 1 if d["faltando"] else 0
-    pend = etapas["viagens"]["pendentes"] + etapas["eventos"]["pendentes"] + etapas["headcount"]["pendentes"]
+    pend = etapas["viagens"]["pendentes"] + etapas["eventos"]["pendentes"] + etapas["headcount"]["pendentes"] + etapas["entregas"]["pendentes"]
     return {"projetos": projetos, "etapas": etapas, "pendencias": pend}
 
 

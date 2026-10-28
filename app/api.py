@@ -373,7 +373,8 @@ def excluir_projeto(orcamento: str, u: dict = Depends(usuario_liberado)):
             raise HTTPException(409, "Só é possível excluir orçamentos criados no app. Este existe em 2026 e tem valores aprovados e executados; "
                                      "para tirá-lo do plano de 2027, exclua as linhas dele.")
         cont = {}
-        for tabela, filtro in (("linhas", "ciclo=2027 AND orcamento=?"), ("receitas", "ciclo=2027 AND orcamento=?"), ("viagens", "orcamento=?"),
+        c.execute("DELETE FROM entrega_estrategia WHERE entrega_id IN (SELECT id FROM entregas WHERE orcamento=?)", (orcamento,))
+        for tabela, filtro in (("entregas", "orcamento=?"), ("linhas", "ciclo=2027 AND orcamento=?"), ("receitas", "ciclo=2027 AND orcamento=?"), ("viagens", "orcamento=?"),
                                ("eventos", "orcamento=?"), ("headcount", "orcamento=?")):
             cont[tabela] = c.execute(f"DELETE FROM {tabela} WHERE {filtro}", (orcamento,)).rowcount
         c.execute("DELETE FROM user_projetos WHERE orcamento=?", (orcamento,))
