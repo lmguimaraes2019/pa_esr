@@ -255,6 +255,101 @@ export function Realizado() {
 }
 
 
+function Conferencia({ r }) {
+  return (
+    <div>
+      <p><strong>{r.lidos}</strong> linha(s) lidas: <strong>{r.novos}</strong> nova(s), <strong>{r.alterados}</strong> alterada(s), {r.iguais} igual(is).</p>
+      {r.erros.length > 0 && <div className="nota aviso"><strong>Corrija antes de gravar:</strong><ul>{r.erros.map((x, i) => <li key={i}>{x}</li>)}</ul>{r.mais_erros > 0 && <p>e mais {r.mais_erros} erro(s).</p>}</div>}
+      {r.aviso && <div className="nota">{r.aviso} {r.ausentes.length > 0 && <>({r.ausentes.length + r.mais_ausentes}: {r.ausentes.slice(0, 5).join("; ")}{r.ausentes.length > 5 ? "…" : ""})</>}</div>}
+      {r.mudancas.length > 0 && (
+        <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th>Situação</th><th>Antes</th><th>Depois</th></tr></thead>
+          <tbody>{r.mudancas.map((m, i) => <tr key={i}><td>{m.item}</td><td>{m.situacao}</td><td className="mudo">{m.antes}</td><td><strong>{m.depois}</strong></td></tr>)}</tbody></table>
+          {r.mais_mudancas > 0 && <p className="mudo">e mais {r.mais_mudancas} mudança(s) não listadas.</p>}</div>)}
+      {!r.mudancas.length && !r.erros.length && <p className="mudo">Nenhuma diferença em relação aos valores atuais.</p>}
+    </div>
+  );
+}
+
+const MAX_LINHAS_GRADE = 300;
+
+function GradeReferencia({ t, onGravado }) {
+  const [d, setD] = useState(null);
+  const [linhas, setLinhas] = useState([]);
+  const [orig, setOrig] = useState({});
+  const [filtro, setFiltro] = useState("");
+  const [r, setR] = useState(null);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const carregar = () => api(`/referencias/${t.tipo}/itens`).then((x) => {
+    const ls = x.linhas.map((l, i) => ({ ...l, _id: i }));
+    setD(x); setLinhas(ls); setOrig(Object.fromEntries(ls.map((l) => [l._id, l]))); setR(null);
+  }).catch((e) => setErro(e.message));
+  useEffect(() => { carregar(); }, [t.tipo]); // eslint-disable-line
+  if (!d) return <p>{erro || "Carregando…"}</p>;
+  const mudou = (l, k) => (l._novo ? true : String(orig[l._id]?.[k] ?? "") !== String(l[k] ?? ""));
+  const alteradas = linhas.filter((l) => l._novo || d.colunas.some((c) => mudou(l, c.k))).length;
+  const editar = (id, k, v) => { setLinhas(linhas.map((l) => (l._id === id ? { ...l, [k]: v } : l))); setR(null); setMsg(""); };
+  const nova = () => {
+    const base = Object.fromEntries(d.colunas.map((c) => [c.k, c.opcoes ? c.opcoes[0][0] : ""]));
+    setLinhas([{ ...base, _id: "n" + Date.now(), _novo: true }, ...linhas]); setFiltro(""); setR(null);
+  };
+  const remover = (l) => {
+    if (!l._novo && !window.confirm("Remover esta linha da tabela? Itens que dependem dela (por exemplo, equipamentos já escolhidos no headcount) deixam de ser calculados.")) return;
+    setLinhas(linhas.filter((x) => x._id !== l._id)); setR(null);
+  };
+  const corpo = () => ({ linhas: linhas.map((l) => Object.fromEntries(d.colunas.map((c) => [c.k, l[c.k]]))) });
+  const enviar = async (simular) => {
+    setErro(""); setMsg("");
+    if (!simular && !window.confirm(`Gravar as alterações em "${t.nome}"? Os custos de viagens, eventos e headcount serão recalculados.`)) return;
+    setOcupado(true);
+    try {
+      const j = await api(`/referencias/${t.tipo}/itens?simular=${simular}`, { method: "POST", body: corpo() });
+      if (simular) setR(j); else { setMsg(`Gravado: ${j.novos} nova(s), ${j.alterados} alterada(s).`); setR(null); await carregar(); onGravado(); }
+    } catch (e) { setErro(e.message); } finally { setOcupado(false); }
+  };
+  const q = filtro.trim().toLowerCase();
+  const vis = linhas.filter((l) => !q || l._novo || d.colunas.some((c) => String(l[c.k] ?? "").toLowerCase().includes(q)));
+  const mostradas = vis.slice(0, MAX_LINHAS_GRADE);
+  const podeGravar = r && !r.erros.length && (r.novos + r.alterados > 0 || d.substitui) && alteradas > 0;
+  return (
+    <div className="grade-ref">
+      <div className="barra-ferramentas">
+        <input type="search" placeholder="Filtrar linhas" value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label="Filtrar linhas da tabela" />
+        <button onClick={nova}>+ Nova linha</button>
+        <span className="mudo">{linhas.length} linha(s){alteradas > 0 && <> | <strong>{alteradas} alterada(s)</strong></>}</span>
+      </div>
+      <p className="mudo">Edite os valores direto nas células. {d.colunas.some((c) => c.chave) && <>Os campos que identificam a linha ({d.colunas.filter((c) => c.chave).map((c) => c.rotulo).join(", ")}) só podem ser definidos em linhas novas. </>}Nada é gravado antes de conferir e confirmar.</p>
+      <div className="rolagem"><table className="tab grade-edit">
+        <thead><tr><th />{d.colunas.map((c) => <th key={c.k} className={c.numero ? "n" : ""}>{c.rotulo}</th>)}</tr></thead>
+        <tbody>{mostradas.map((l) => (
+          <tr key={l._id} className={l._novo ? "nova" : ""}>
+            <td className="col-acoes">{(d.substitui || l._novo) && <button type="button" className="link perigo" onClick={() => remover(l)} title="Remover linha">Remover</button>}</td>
+            {d.colunas.map((c) => {
+              const trava = c.chave && !l._novo;
+              const cls = (mudou(l, c.k) && !l._novo ? "alterado " : "") + (c.numero ? "n" : "");
+              return (
+                <td key={c.k} className={cls}>
+                  {c.opcoes ? <select value={l[c.k]} disabled={trava} onChange={(e) => editar(l._id, c.k, e.target.value)} aria-label={c.rotulo}>{c.opcoes.map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select>
+                    : c.longo ? <textarea rows={2} value={l[c.k] ?? ""} disabled={trava} onChange={(e) => editar(l._id, c.k, e.target.value)} aria-label={c.rotulo} />
+                    : <input value={l[c.k] ?? ""} disabled={trava} inputMode={c.numero ? "decimal" : undefined} onChange={(e) => editar(l._id, c.k, e.target.value)} aria-label={c.rotulo} />}
+                </td>);
+            })}
+          </tr>))}
+          {!mostradas.length && <tr><td colSpan={d.colunas.length + 1} className="mudo">Nenhuma linha com esse filtro.</td></tr>}
+        </tbody></table></div>
+      {vis.length > MAX_LINHAS_GRADE && <p className="mudo">Mostrando {MAX_LINHAS_GRADE} de {vis.length} linhas. Use o filtro para achar as demais.</p>}
+      <div className="acoes">
+        <button onClick={() => enviar(true)} disabled={ocupado || !alteradas}>Conferir alterações</button>
+        <button className="primario" onClick={() => enviar(false)} disabled={ocupado || !podeGravar}>Gravar alterações</button>
+        <button onClick={carregar} disabled={ocupado || !alteradas}>Descartar alterações</button>
+      </div>
+      {msg && <p className="ok">{msg}</p>}{erro && <p className="erro" role="alert" style={{ whiteSpace: "pre-line" }}>{erro}</p>}
+      {r && r.simulacao && <Conferencia r={r} />}
+    </div>
+  );
+}
+
 function CartaoReferencia({ t, onImportado }) {
   const [arq, setArq] = useState(null);
   const [r, setR] = useState(null);
@@ -276,27 +371,21 @@ function CartaoReferencia({ t, onImportado }) {
     } catch (e) { setErro(e.message); } finally { setOcupado(false); }
   };
   const pronto = r && r.simulacao && !r.erros.length && arq;
+  const [editando, setEditando] = useState(false);
   return (
     <section className="cartao ref-card">
       <div className="cab"><div><h3>{t.nome}</h3><p className="mudo">{t.detalhe}</p>
         <p className="mudo"><strong>{t.registros}</strong> registro(s) | fonte: {t.origem}</p></div>
-        <a className="botao" href={`/api/referencias/${t.tipo}/modelo`} download>Baixar planilha com os valores atuais</a></div>
+        <div className="acoes"><button className={editando ? "" : "primario"} onClick={() => setEditando(!editando)}>{editando ? "Fechar edição" : "Editar valores na tela"}</button>
+          <a className="botao" href={`/api/referencias/${t.tipo}/modelo`} download>Baixar planilha com os valores atuais</a></div></div>
+      {editando && <GradeReferencia t={t} onGravado={onImportado} />}
+      <h4 className="sub">Importar em lote a partir de um arquivo</h4>
       <p className="mudo">Colunas do arquivo: {t.colunas.join(" | ")}. Aceita .xlsx e .csv. Edite a planilha baixada e envie de volta.</p>
       <label>Arquivo<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { setArq(e.target.files[0] || null); setR(null); setMsg(""); setErro(""); }} /></label>
       <div className="acoes"><button onClick={() => enviar(true)} disabled={!arq || ocupado}>Conferir antes de importar</button>
         <button className="primario" onClick={() => enviar(false)} disabled={!pronto || ocupado}>Importar</button></div>
       {msg && <p className="ok">{msg}</p>}{erro && <p className="erro" role="alert" style={{ whiteSpace: "pre-line" }}>{erro}</p>}
-      {r && r.simulacao && (
-        <div>
-          <p><strong>{r.lidos}</strong> linha(s) lidas: <strong>{r.novos}</strong> nova(s), <strong>{r.alterados}</strong> alterada(s), {r.iguais} igual(is).</p>
-          {r.erros.length > 0 && <div className="nota aviso"><strong>Corrija antes de importar:</strong><ul>{r.erros.map((x, i) => <li key={i}>{x}</li>)}</ul>{r.mais_erros > 0 && <p>e mais {r.mais_erros} erro(s).</p>}</div>}
-          {r.aviso && <div className="nota">{r.aviso} {r.ausentes.length > 0 && <>({r.ausentes.length + r.mais_ausentes}: {r.ausentes.slice(0, 5).join("; ")}{r.ausentes.length > 5 ? "…" : ""})</>}</div>}
-          {r.mudancas.length > 0 && (
-            <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th>Situação</th><th>Antes</th><th>Depois</th></tr></thead>
-              <tbody>{r.mudancas.map((m, i) => <tr key={i}><td>{m.item}</td><td>{m.situacao}</td><td className="mudo">{m.antes}</td><td><strong>{m.depois}</strong></td></tr>)}</tbody></table>
-              {r.mais_mudancas > 0 && <p className="mudo">e mais {r.mais_mudancas} mudança(s) não listadas.</p>}</div>)}
-          {!r.mudancas.length && !r.erros.length && <p className="mudo">Nenhuma diferença em relação aos valores atuais.</p>}
-        </div>)}
+      {r && r.simulacao && <Conferencia r={r} />}
     </section>
   );
 }
@@ -309,7 +398,7 @@ export function Referencias() {
   return (
     <>
       <h2>Tabelas de referência</h2>
-      <div className="nota">Importe aqui os valores usados nos cálculos: tarifas de viagens, catálogo de equipamentos do headcount e tabela salarial. Cada importação mostra o que muda antes de gravar, e os custos de viagens, eventos e headcount são recalculados depois de importar.</div>
+      <div className="nota">Edite aqui, valor a valor, ou importe em lote a partir de um arquivo os valores usados nos cálculos: tarifas de viagens, catálogo de equipamentos do headcount e tabela salarial. Cada importação mostra o que muda antes de gravar, e os custos de viagens, eventos e headcount são recalculados depois de importar.</div>
       {lista.map((t) => <CartaoReferencia key={t.tipo} t={t} onImportado={carregar} />)}
     </>
   );

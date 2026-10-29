@@ -685,3 +685,40 @@ def test_renomear_meta_e_acao(client):
     # nova ação dentro de uma Meta/EDT existente
     nl = client.post(f"/api/projetos/{orc}/linhas", json={"edt": "Meta nova", "tarefa": "Segunda ação", "conta_codigo": depois[0]["conta_codigo"], "meses": [100] + [0] * 11})
     assert nl.status_code == 201
+
+
+def test_editar_tabelas_de_referencia_na_tela(client):
+    entrar(client)
+    # tarifa de viagem: altera um valor e confere antes de gravar
+    t = client.get("/api/referencias/viagens/itens").json()
+    assert t["colunas"][0]["chave"] and not t["substitui"] and t["linhas"]
+    linhas = t["linhas"]
+    linhas[0]["passagem"] = "1.234,50"
+    r = client.post("/api/referencias/viagens/itens?simular=true", json={"linhas": linhas}).json()
+    assert r["simulacao"] and r["alterados"] == 1 and not r["erros"]
+    assert client.post("/api/referencias/viagens/itens?simular=false", json={"linhas": linhas}).status_code == 200
+    assert client.get("/api/referencias/viagens/itens").json()["linhas"][0]["passagem"] == 1234.5
+    # erro: número da linha conta a partir de 1
+    linhas[2]["tipo"] = "xyz"
+    e = client.post("/api/referencias/viagens/itens?simular=true", json={"linhas": linhas}).json()["erros"]
+    assert e and e[0].startswith("Linha 3")
+    assert client.post("/api/referencias/viagens/itens?simular=false", json={"linhas": linhas}).status_code == 422
+    # equipamentos substituem a tabela: nova linha entra, valor alterado grava
+    eq = client.get("/api/referencias/equipamentos/itens").json()
+    assert eq["substitui"]
+    ls = eq["linhas"] + [{"codigo": "ZZ9", "tipo": "monitor", "nome": "Monitor teste", "perfil": "", "valor": "999,90"}]
+    assert client.post("/api/referencias/equipamentos/itens?simular=false", json={"linhas": ls}).status_code == 200
+    assert any(i["codigo"] == "ZZ9" and i["valor"] == 999.9 for i in client.get("/api/referencias/equipamentos/itens").json()["linhas"])
+    # estratégia: editar o texto de um item sem mexer nos demais
+    from app import db, estrategia
+    with db.tx() as c:
+        estrategia.semear_po(c)
+    es = client.get("/api/referencias/estrategia/itens").json()["linhas"]
+    ro = next(x for x in es if x["tipo"] == "po" and x["codigo"] == "7.1.2")
+    ro["conclusao"] = "Q2"
+    assert client.post("/api/referencias/estrategia/itens?simular=false", json={"linhas": es}).json()["alterados"] == 1
+    assert next(x for x in client.get("/api/referencias/estrategia/itens").json()["linhas"] if x["codigo"] == "7.1.2")["conclusao"] == "Q2"
+    # salários
+    sal = client.get("/api/referencias/salarios/itens").json()["linhas"]
+    sal[0]["fim"] = sal[0]["fim"] + 100
+    assert client.post("/api/referencias/salarios/itens?simular=false", json={"linhas": sal}).status_code == 200

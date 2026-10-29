@@ -302,3 +302,10 @@ label.est-item input,label.ent-check input{width:auto;flex:none;margin-top:4px}
 .grupo-acoes{display:inline-flex;align-items:center;gap:8px;margin-left:12px;vertical-align:middle;text-transform:none;letter-spacing:0;font-weight:500}
 .grupo-acoes .icone{width:26px;height:26px}.grupo-acoes .link{font-size:.8rem}
 form.renomear{display:inline-flex;gap:6px;align-items:center;margin-left:6px}form.renomear input{min-width:380px;text-transform:none;font-weight:500}
+
+/* tabelas de referência: grade de edição */
+.grade-ref{margin:12px 0;padding:12px;border:1px solid #d9dee7;border-radius:8px;background:#fafbfd}
+.grade-edit td{padding:4px 6px;vertical-align:top}.grade-edit input,.grade-edit select,.grade-edit textarea{width:100%;box-sizing:border-box;min-width:90px;text-transform:none}
+.grade-edit textarea{min-width:220px;resize:vertical}.grade-edit td.n input{text-align:right;min-width:100px}
+.grade-edit td.alterado input,.grade-edit td.alterado select,.grade-edit td.alterado textarea{background:#fff3d6;border-color:#d97706}
+.grade-edit tr.nova td{background:#eefaf0}.grade-edit input:disabled,.grade-edit select:disabled,.grade-edit textarea:disabled{background:#f1f3f6;color:#475467}

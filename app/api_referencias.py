@@ -14,6 +14,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
 from . import equipamentos, estrategia, pessoal, sync, viagens as vg
 from .api import _conn, exige_admin
@@ -410,7 +411,7 @@ def situacao(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_co
         {"tipo": "equipamentos", "nome": TABELAS["equipamentos"]["nome"], "registros": len(eq["itens"]), "origem": eq.get("origem", "importado"),
          "detalhe": f"Catálogo de Hardware Homologado, atualizado em {eq['atualizado_em']}.", "colunas": [ROTULOS[k] for k in TABELAS["equipamentos"]["colunas"]]},
         {"tipo": "estrategia", "nome": TABELAS["estrategia"]["nome"], "registros": c.execute("SELECT COUNT(*) FROM estrategia").fetchone()[0],
-         "origem": "banco de dados", "detalhe": "Resultados-chave (RC) do PO e indicadores do CG. Os gestores vinculam cada entrega do projeto a eles. Tipo: PO ou CG.",
+         "origem": "banco de dados", "detalhe": "Diretrizes, resultados estratégicos (RE), resultados operacionais (RO) do Plano de Operação e indicadores do Contrato de Gestão. Os gestores vinculam cada orçamento e cada entrega a eles.",
          "colunas": [ROTULOS[k] for k in TABELAS["estrategia"]["colunas"]]},
         {"tipo": "salarios", "nome": TABELAS["salarios"]["nome"], "registros": len(ti["faixas"]), "origem": ti["origem"],
          "detalhe": f"{ti['nome']}: faixas por trajetória, nível e grupo (80% a 120% da referência).", "colunas": [ROTULOS[k] for k in TABELAS["salarios"]["colunas"]]},
@@ -457,30 +458,82 @@ def modelo(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = De
                     headers={"Content-Disposition": f'attachment; filename="modelo_{tipo}.xlsx"'})
 
 
-@router.post("/{tipo}/importar")
-async def importar(tipo: str, simular: bool = True, arquivo: UploadFile = File(...), u: dict = Depends(exige_admin)):
-    _tabela(tipo)
-    conteudo = await arquivo.read()
-    linhas = (_ler_po(arquivo.filename or "", conteudo) if tipo == "estrategia" else None) or _ler(arquivo.filename or "", conteudo)
+def _processar(tipo: str, linhas: list[dict], simular: bool, u: dict, origem: str, deslocar: int = 0) -> dict:
+    """Confere (simular) ou grava a tabela a partir das linhas lidas de um arquivo ou editadas na tela."""
     with tx() as c:
         p = PREPARAR[tipo](c, linhas)
+        if deslocar:      # na grade da tela a primeira linha é a 1 (no arquivo é a 2, depois do cabeçalho)
+            p["erros"] = [re.sub(r"^Linha (\d+)", lambda m: f"Linha {int(m.group(1)) - deslocar}", e) for e in p["erros"]]
         limpo = {k: v for k, v in p.items() if not k.startswith("_")}
         limpo.update(simulacao=simular, tipo=tipo, mudancas=p["mudancas"][:AMOSTRA], mais_mudancas=max(0, len(p["mudancas"]) - AMOSTRA),
                      ausentes=p["ausentes"][:50], mais_ausentes=max(0, len(p["ausentes"]) - 50), erros=p["erros"][:50], mais_erros=max(0, len(p["erros"]) - 50))
         if simular:
             return limpo
         if p["erros"]:
-            raise HTTPException(422, "Há erros no arquivo. Corrija e confira de novo antes de importar:\n" + "\n".join(p["erros"][:10]))
+            raise HTTPException(422, "Há erros. Corrija e confira de novo antes de gravar:\n" + "\n".join(p["erros"][:10]))
         hoje = datetime.now().strftime("%d/%m/%Y")
         if tipo == "viagens":
             _aplicar_viagens(c, p)
         elif tipo == "estrategia":
             _aplicar_estrategia(c, p)
         elif tipo == "equipamentos":
-            equipamentos.gravar(p["_dados"], hoje, f"importado de {arquivo.filename}")
+            equipamentos.gravar(p["_dados"], hoje, origem)
         else:
-            pessoal.gravar_tabela(p["_dados"], f"Tabela Salarial importada de {arquivo.filename} em {hoje}")
-        audit(c, u["login"], f"importou {TABELAS[tipo]['nome'].lower()}",
-              detalhe=f"{arquivo.filename}: {limpo['novos']} novos, {limpo['alterados']} alterados, {len(p['ausentes'])} ausentes do arquivo")
+            pessoal.gravar_tabela(p["_dados"], f"Tabela Salarial: {origem} em {hoje}")
+        audit(c, u["login"], f"atualizou {TABELAS[tipo]['nome'].lower()}",
+              detalhe=f"{origem}: {limpo['novos']} novos, {limpo['alterados']} alterados, {len(p['ausentes'])} ausentes")
         sync.sincronizar_todos(c, u["login"])      # custos de viagens, eventos e headcount passam a usar os valores novos
         return limpo
+
+
+@router.post("/{tipo}/importar")
+async def importar(tipo: str, simular: bool = True, arquivo: UploadFile = File(...), u: dict = Depends(exige_admin)):
+    _tabela(tipo)
+    conteudo = await arquivo.read()
+    linhas = (_ler_po(arquivo.filename or "", conteudo) if tipo == "estrategia" else None) or _ler(arquivo.filename or "", conteudo)
+    return _processar(tipo, linhas, simular, u, f"importado de {arquivo.filename}")
+
+
+# ---------------------------------------------------------------- edição valor a valor, na tela
+
+CHAVES = {"viagens": ["tipo", "origem", "destino"], "estrategia": ["tipo", "codigo"], "equipamentos": [], "salarios": []}
+NUMERICOS = {"passagem", "hospedagem", "bagagem", "aux_transporte", "ajuda_custo", "seguro", "valor", "inicio", "fim"}
+LONGOS = {"descricao", "meta", "objetivo", "fomento", "lider", "nome", "perfil"}
+OPCOES = {("viagens", "tipo"): [["nacional", "Nacional"], ["internacional", "Internacional"]],
+          ("equipamentos", "tipo"): [["computador", "Computador"], ["monitor", "Monitor"], ["periferico", "Periférico"]],
+          ("estrategia", "tipo"): [["diretriz", "Diretriz"], ["re", "RE"], ["po", "RO"], ["cg", "CG"]]}
+
+
+def _linhas_atuais(c: sqlite3.Connection, tipo: str) -> list[dict]:
+    cols = TABELAS[tipo]["colunas"]
+    if tipo == "viagens":
+        return [{k: ("nacional" if r["tipo"] == "nac" else "internacional") if k == "tipo" else r[k] for k in cols}
+                for r in c.execute("SELECT * FROM viagem_tarifas ORDER BY tipo, origem, destino")]
+    if tipo == "equipamentos":
+        return [{k: i.get(k, "") for k in cols} for i in equipamentos.catalogo()]
+    if tipo == "estrategia":
+        return [{k: r[k] for k in cols} for r in estrategia.arvore(c)]
+    return [{k: f[k] for k in cols} for f in pessoal.tabela_salarial()]
+
+
+class ItensIn(BaseModel):
+    linhas: list[dict] = Field(max_length=5000)
+
+
+@router.get("/{tipo}/itens")
+def itens(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    """Valores vigentes da tabela, para a grade de edição da tela."""
+    cols = _tabela(tipo)["colunas"]
+    return {"tipo": tipo, "substitui": tipo in ("equipamentos", "salarios"),
+            "colunas": [{"k": k, "rotulo": ROTULOS[k], "chave": k in CHAVES[tipo], "numero": k in NUMERICOS, "longo": k in LONGOS, "opcoes": OPCOES.get((tipo, k))} for k in cols],
+            "linhas": _linhas_atuais(c, tipo)}
+
+
+@router.post("/{tipo}/itens")
+def gravar_itens(tipo: str, d: ItensIn, simular: bool = True, u: dict = Depends(exige_admin)):
+    """Confere ou grava a tabela editada na tela, com as mesmas regras da importação de arquivo."""
+    cols = _tabela(tipo)["colunas"]
+    linhas = [{k: ("" if l.get(k) is None else l.get(k)) for k in cols} for l in d.linhas]
+    if not linhas:
+        raise HTTPException(422, "A tabela não pode ficar vazia.")
+    return _processar(tipo, linhas, simular, u, "edição na tela", deslocar=1)
