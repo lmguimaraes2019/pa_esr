@@ -722,3 +722,31 @@ def test_editar_tabelas_de_referencia_na_tela(client):
     sal = client.get("/api/referencias/salarios/itens").json()["linhas"]
     sal[0]["fim"] = sal[0]["fim"] + 100
     assert client.post("/api/referencias/salarios/itens?simular=false", json={"linhas": sal}).status_code == 200
+
+
+def test_relatorio_do_diretor_executivo(client):
+    import io
+    import zipfile
+    from lxml import etree
+    entrar(client)
+    r = client.get("/api/export/relatorio")
+    assert r.status_code == 200
+    assert "wordprocessingml.document" in r.headers["content-type"]
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert z.testzip() is None
+    xml = z.read("word/document.xml").decode("utf-8")
+    etree.fromstring(xml.encode("utf-8"))                       # XML bem formado
+    assert "Visão geral" in xml and "Projetos" in xml and "Planejamento Anual 2027" in xml
+    assert "Digitar título" not in xml and "Lorem" not in xml    # sem sobra do modelo
+    assert "wordprocessingml.document.main+xml" in z.read("[Content_Types].xml").decode()
+    assert not [n for n in z.namelist() if n.startswith(("word/charts", "word/embeddings"))]
+    projetos = client.get("/api/projetos").json()
+    for p in projetos:                                           # um capítulo por projeto
+        assert p["orcamento"] in xml
+    assert "PLANEJAMENTO ANUAL 2027" in z.read("word/header2.xml").decode()
+
+
+def test_relatorio_so_para_admin(client):
+    entrar(client)
+    gestor_liberado(client)
+    assert client.get("/api/export/relatorio").status_code == 403

@@ -879,6 +879,19 @@ def exportar(u: dict = Depends(exige_admin)):
                              headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
+@router.get("/export/relatorio")
+def relatorio_diretor(u: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    """Relatório do planejamento para o Diretor Executivo, em Word, no modelo da RNP."""
+    from . import relatorio
+    conteudo = relatorio.gerar(c, u)
+    audit(c, u["login"], "gerou relatório do diretor", detalhe=f"{len(conteudo) // 1024} KB")
+    c.commit()
+    nome = f"Relatorio_Planejamento_{config.CICLO_PLANO}_ESR_{datetime.now():%Y%m%d_%H%M}.docx"
+    return StreamingResponse(iter([conteudo]),
+                             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                             headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
 @router.get("/auditoria")
 def ver_auditoria(limite: int = 200, _: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
     rows = c.execute("SELECT * FROM auditoria ORDER BY id DESC LIMIT ?", (max(1, min(limite, 1000)),)).fetchall()

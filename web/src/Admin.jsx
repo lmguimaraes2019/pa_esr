@@ -126,6 +126,12 @@ export function Exportar({ irProjeto }) {
         </div>
         <p className="mudo">O arquivo é o template oficial com a aba Calendarização preenchida. Ao abrir no Excel, as fórmulas de conta e total são recalculadas.</p>
       </section>
+      <section className="cartao">
+        <h3>Relatório para o Diretor Executivo</h3>
+        <p>Documento em Word, no modelo da RNP, que explica tudo o que foi gerado no planejamento. A primeira parte traz a visão geral: síntese, evolução de 2026 para 2027 por origem de recurso e grupo de despesa, receitas e resultado, headcount, viagens, eventos, conexão com o Plano Operacional e o Contrato de Gestão, acompanhamento por gerência e premissas. A segunda parte traz um capítulo por projeto, com números, relação estratégica, entregas e o detalhe de cada linha do orçamento.</p>
+        <div className="acoes"><a className="botao primario" href="/api/export/relatorio">Gerar relatório (Word)</a></div>
+        <p className="mudo">O relatório usa os dados de agora e não depende da conferência acima. Ao abrir no Word, aceite a atualização dos campos para acertar a numeração do sumário.</p>
+      </section>
     </>
   );
 }
