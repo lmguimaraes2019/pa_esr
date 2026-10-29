@@ -37,7 +37,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
     } catch (x) { setErro(x.message); }
   };
   return (
-    <form className="cartao" onSubmit={salvar}>
+    <form className="cartao" id="form-viagem" onSubmit={salvar}>
       <h3>{f.id ? "Editar viagem" : "Nova viagem"}</h3>
       <div className="grade">
         <label>Tipo<select value={f.tipo} onChange={(e) => trocarTipo(e.target.value)}><option value="nac">Nacional</option><option value="int">Internacional</option></select></label>
@@ -64,6 +64,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
 
 function PlanoViagens({ dados, tarifas, recarregar }) {
   const [edit, setEdit] = useState(null);
+  const abrir = (v) => { setEdit(v); setTimeout(() => document.getElementById("form-viagem")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const [tipo, setTipo] = useState("todas");
   const [proj, setProj] = useState("todos");
   const [soPend, setSoPend] = useState(false);
@@ -92,7 +93,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
             <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento ? `${p.orcamento} | ${p.projeto}` : "Sem projeto definido"}</option>)}</select>
           {soPend && <button className="on" onClick={() => setSoPend(false)}>Só pendentes ✕</button>}
         </div>
-        <button className="destaque" onClick={() => setEdit(novo)}>+ Nova viagem</button>
+        <button className="destaque" onClick={() => abrir(novo)}>+ Nova viagem</button>
       </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="rolagem">
@@ -110,7 +111,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
                 <td><div className="custos">{COMP.filter(([k]) => v.custo[k] > 0).map(([k, n]) => <span key={k}>{n} {fmtN(v.custo[k])}</span>)}</div>{!v.tem_tarifa && <span className="erro">sem tarifa</span>}</td>
                 <td className="n"><strong>{fmtN(v.custo.total)}</strong></td>
                 <td className="n mudo">{v.ref_2026 == null ? "nova" : fmtN(v.ref_2026)}</td>
-                <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => setEdit({ ...v, pernoites: v.pernoites })}>editar</button><button className="link" onClick={() => excluir(v)}>✕</button></td>
+                <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => abrir({ ...v, pernoites: v.pernoites })}>editar</button><button className="link" onClick={() => excluir(v)}>✕</button></td>
               </tr>))}
           </tbody>
           <tfoot><tr><td colSpan={7}>Total do filtro</td><td className="n">{fmtN(total)}</td><td className="n">{fmtN(lista.reduce((a, v) => a + (v.ref_2026 || 0), 0))}</td><td /></tr></tfoot>
