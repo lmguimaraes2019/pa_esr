@@ -309,3 +309,19 @@ form.renomear{display:inline-flex;gap:6px;align-items:center;margin-left:6px}for
 .grade-edit textarea{min-width:220px;resize:vertical}.grade-edit td.n input{text-align:right;min-width:100px}
 .grade-edit td.alterado input,.grade-edit td.alterado select,.grade-edit td.alterado textarea{background:#fff3d6;border-color:#d97706}
 .grade-edit tr.nova td{background:#eefaf0}.grade-edit input:disabled,.grade-edit select:disabled,.grade-edit textarea:disabled{background:#f1f3f6;color:#475467}
+
+/* viagens: leitura da tabela e calendário */
+.tab.viag td{font-size:.88rem;line-height:1.4;padding:10px 12px}
+.tab.viag td.obj{min-width:200px;max-width:280px;overflow-wrap:anywhere}
+.tab.viag .tag.bloco{display:table;margin:5px 0 0 0}
+.viag-topo{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch;margin-bottom:12px}
+.viag-topo .cartao{margin:0}
+@media (max-width:1000px){.viag-topo{grid-template-columns:1fr}}
+.meses.alto .col{height:300px}.meses.alto{gap:6px}.meses small.val{font-size:.68rem;color:var(--cinza);min-height:14px;text-align:center;display:block}
+.calendario{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mes-cal{border:1px solid var(--bd);border-top:4px solid var(--laranja);border-radius:6px;padding:8px 10px;background:#fff;min-height:104px}
+.mes-cal.vazio{border-top-color:var(--cinza-claro);background:#fafafa}
+.mes-nome{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--azul)}
+.mes-valor{font-size:1.05rem;font-weight:700;margin:2px 0}
+.mes-info{font-size:.78rem;line-height:1.35}
+.mes-dest{font-size:.74rem;color:var(--cinza);margin-top:4px;overflow-wrap:anywhere}

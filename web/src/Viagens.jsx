@@ -97,16 +97,16 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
       </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="rolagem">
-        <table className="tab">
+        <table className="tab viag">
           <thead><tr><th>Mês</th><th>Trecho</th><th className="n">Viag.</th><th className="n">Dias</th><th>Objetivo</th><th>Projeto e tarefa</th><th>Composição do custo</th><th className="n">Custo 2027</th><th className="n">2026</th><th /></tr></thead>
           <tbody>
             {lista.length === 0 && <tr><td colSpan={10} className="mudo">Nenhuma viagem neste filtro.</td></tr>}
             {lista.map((v) => (
               <tr key={v.id}>
                 <td>{MESES_N[v.mes - 1].slice(0, 3)}</td>
-                <td>{v.origem} <span className="mudo">para</span> {v.destino} {v.tipo === "int" && <span className="tag nova">int.</span>}</td>
+                <td>{v.origem} <span className="mudo">para</span> {v.destino} {v.tipo === "int" && <span className="tag nova bloco">int.</span>}</td>
                 <td className="n">{v.n_viagens}</td><td className="n">{v.dias}</td>
-                <td style={{ maxWidth: 280 }}>{v.objetivo}{v.area && <span className="tag">{v.area}</span>}</td>
+                <td className="obj">{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}</td>
                 <td>{v.orcamento ? <>{v.orcamento} | {v.projeto}<br /><span className="mudo">{v.tarefa || <span className="up">tarefa pendente</span>}</span></> : <span className="tag aviso">sem projeto</span>}</td>
                 <td><div className="custos">{COMP.filter(([k]) => v.custo[k] > 0).map(([k, n]) => <span key={k}>{n} {fmtN(v.custo[k])}</span>)}</div>{!v.tem_tarifa && <span className="erro">sem tarifa</span>}</td>
                 <td className="n"><strong>{fmtN(v.custo.total)}</strong></td>
@@ -245,6 +245,12 @@ export default function Viagens({ admin, irProjeto }) {
   if (!dados || !prem) return <p>Carregando…</p>;
   const t = dados.totais;
   const max = Math.max(1, ...dados.mensal.map((m) => Math.max(m.plano, m.ref)));
+  const cal = dados.mensal.map((m, i) => {
+    const vs = dados.viagens.filter((v) => v.mes === i + 1);
+    const destinos = [...new Set(vs.map((v) => v.destino))];
+    return { ...m, n: vs.reduce((a, v) => a + v.n_viagens, 0), nac: vs.filter((v) => v.tipo === "nac").reduce((a, v) => a + v.n_viagens, 0),
+             int: vs.filter((v) => v.tipo === "int").reduce((a, v) => a + v.n_viagens, 0), destinos };
+  });
   return (
     <>
       <h2>Planejamento de viagens 2027</h2>
@@ -254,12 +260,27 @@ export default function Viagens({ admin, irProjeto }) {
         <Kpi rotulo="Aprovado em 2026" valor={fmt(t.aprovado)} tom="f26" />
         <Kpi rotulo="Executado em 2026" valor={fmt(t.executado)} tom="f26" />
       </div>
-      <section className="cartao"><h3>Custo mensal das viagens</h3>
-        <div className="legenda"><span><i style={{ background: "var(--laranja)" }} />Plano 2027</span><span><i style={{ background: "var(--cinza-claro)" }} />Planilha 2026</span></div>
-        <div className="meses">{dados.mensal.map((m) => (
-          <div key={m.mes} title={`${m.mes}: ${fmt(m.plano)} (2026: ${fmt(m.ref)})`}><div className="col" style={{ gap: 2 }}>
-            <span style={{ height: (m.ref / max) * 100 + "%", background: "var(--cinza-claro)" }} /><span style={{ height: (m.plano / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
-      </section>
+      <div className="viag-topo">
+        <section className="cartao"><h3>Custo mensal das viagens</h3>
+          <div className="legenda"><span><i style={{ background: "var(--laranja)" }} />Plano 2027</span><span><i style={{ background: "var(--cinza-claro)" }} />Planilha 2026</span></div>
+          <div className="meses alto">{dados.mensal.map((m) => (
+            <div key={m.mes} title={`${m.mes}: ${fmt(m.plano)} (2026: ${fmt(m.ref)})`}><small className="val">{m.plano ? fmtN(m.plano / 1000) : ""}</small><div className="col" style={{ gap: 2 }}>
+              <span style={{ height: (m.ref / max) * 100 + "%", background: "var(--cinza-claro)" }} /><span style={{ height: (m.plano / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
+          <p className="mudo" style={{ margin: "6px 0 0" }}>Valores em R$ mil.</p>
+        </section>
+        <section className="cartao"><h3>Calendário de 2027</h3>
+          <div className="calendario">{cal.map((m) => (
+            <div key={m.mes} className={"mes-cal" + (m.n ? "" : " vazio")}>
+              <div className="mes-nome">{m.mes}</div>
+              {m.n ? <>
+                <div className="mes-valor">{fmt(m.plano)}</div>
+                <div className="mes-info">{m.n} viage{m.n === 1 ? "m" : "ns"}{m.int > 0 && <> ({m.nac} nac. e {m.int} int.)</>}</div>
+                <div className="mes-info mudo">{m.ref ? <>2026: {fmt(m.ref)}</> : "sem referência em 2026"}</div>
+                <div className="mes-dest">{m.destinos.slice(0, 3).join(", ")}{m.destinos.length > 3 && ` e mais ${m.destinos.length - 3}`}</div>
+              </> : <div className="mes-info mudo">Sem viagens</div>}
+            </div>))}</div>
+        </section>
+      </div>
       <Passos ativo={aba} onMudar={setAba} itens={[["plano", "Planejar as viagens"], ["tarifas", "Tarifas"], ["orcamento", "Levar ao orçamento"]]} />
       {aba === "plano" && <PlanoViagens dados={dados} tarifas={tarifas} recarregar={carregar} />}
       {aba === "tarifas" && <Tarifas admin={admin} tarifas={tarifas} recarregar={() => { carregarTarifas(); carregar(); }} premissas={prem} recarregarPrem={carregarPrem} />}
