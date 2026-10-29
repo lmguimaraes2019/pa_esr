@@ -499,6 +499,33 @@ def criar_linha(orcamento: str, dados: LinhaIn, u: dict = Depends(usuario_libera
     return _linha(row)
 
 
+class GrupoPatch(BaseModel):
+    edt: str = Field(min_length=1, max_length=200)
+    tarefa: str | None = Field(default=None, max_length=200)          # vazio: renomeia a Meta/EDT inteira
+    novo_nome: str = Field(min_length=1, max_length=200)
+
+
+@router.patch("/projetos/{orcamento}/grupo")
+def renomear_grupo(orcamento: str, d: GrupoPatch, u: dict = Depends(usuario_liberado)):
+    """Renomeia uma Meta/EDT (todas as ações dela) ou uma Ação/Tarefa (todas as contas dela) no plano 2027.
+    Viagens, eventos e headcount que apontam para o grupo acompanham o novo nome."""
+    novo = d.novo_nome.strip()
+    if not novo:
+        raise HTTPException(422, "Informe o novo nome.")
+    campo = "tarefa" if d.tarefa is not None else "edt"
+    filtro, args = ("edt=? AND tarefa=?", (d.edt, d.tarefa)) if d.tarefa is not None else ("edt=?", (d.edt,))
+    with tx() as c:
+        exige_acesso(c, u, orcamento)
+        n = c.execute(f"UPDATE linhas SET {campo}=?, atualizado_por=?, atualizado_em=datetime('now') WHERE ciclo=? AND orcamento=? AND {filtro}",
+                      (novo, u["login"], config.CICLO_PLANO, orcamento, *args)).rowcount
+        if not n:
+            raise HTTPException(404, "Grupo não encontrado no plano 2027.")
+        for t, extra in (("viagens", f"ciclo={config.CICLO_PLANO} AND "), ("eventos", ""), ("headcount", "")):
+            c.execute(f"UPDATE {t} SET {campo}=? WHERE {extra}orcamento=? AND {filtro}", (novo, orcamento, *args))
+        audit(c, u["login"], "renomeou " + ("ação/tarefa" if campo == "tarefa" else "meta/EDT"), orcamento, detalhe=f"{d.edt} / {d.tarefa or ''} para {novo} ({n} linha(s))")
+    return {"ok": True, "linhas": n}
+
+
 def _linha_do_usuario(c: sqlite3.Connection, u: dict, linha_id: int) -> sqlite3.Row:
     r = c.execute("SELECT * FROM linhas WHERE id=? AND ciclo=?", (linha_id, config.CICLO_PLANO)).fetchone()
     if not r:

@@ -3,7 +3,7 @@ import { ResumoProjeto } from "./Planejamento.jsx";
 import EntregasProjeto, { fecho, rotuloEst } from "./Entregas.jsx";
 import { ReplicarProjeto, FaixaMigracao } from "./Replicar.jsx";
 import { api, fmt, fmtN, fmtI, lerNumero, MESES } from "./api.js";
-import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer } from "./ui.jsx";
+import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer, Mais } from "./ui.jsx";
 
 function EditarLinha({ l, contas, onSalvar, onFechar }) {
   const trava = l.fonte !== "manual";
@@ -39,8 +39,8 @@ function EditarLinha({ l, contas, onSalvar, onFechar }) {
   );
 }
 
-function NovaLinha({ contas, onCriar, onFechar }) {
-  const [f, setF] = useState({ edt: "", tarefa: "", conta: "", total: "" });
+function NovaLinha({ contas, onCriar, onFechar, inicial, edts = [], tarefas = [] }) {
+  const [f, setF] = useState({ edt: "", tarefa: "", conta: "", total: "", ...(inicial || {}) });
   const [erro, setErro] = useState("");
   const salvar = async (e) => {
     e.preventDefault();
@@ -53,10 +53,12 @@ function NovaLinha({ contas, onCriar, onFechar }) {
   };
   return (
     <form className="cartao" id="form-nova" onSubmit={salvar}>
-      <h3>Nova linha no plano 2027</h3>
+      <h3>{inicial?.tarefa ? `Nova conta na ação "${inicial.tarefa}"` : inicial?.edt ? `Nova ação na Meta/EDT "${inicial.edt}"` : "Nova linha no plano 2027"}</h3>
       <div className="grade">
-        <label>Meta/EDT<input value={f.edt} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
-        <label>Ação/Tarefa<input value={f.tarefa} onChange={(e) => setF({ ...f, tarefa: e.target.value })} required /></label>
+        <label>Meta/EDT<input list="lista-edts" value={f.edt} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
+        <label>Ação/Tarefa<input list="lista-tarefas" autoFocus={!!inicial} value={f.tarefa} onChange={(e) => setF({ ...f, tarefa: e.target.value })} required placeholder="Existente ou nova" /></label>
+        <datalist id="lista-edts">{edts.map((x) => <option key={x} value={x} />)}</datalist>
+        <datalist id="lista-tarefas">{tarefas.filter((t) => !f.edt || t.edt === f.edt).map((t) => <option key={t.edt + t.tarefa} value={t.tarefa} />)}</datalist>
         <label>Conta contábil<select value={f.conta} onChange={(e) => setF({ ...f, conta: e.target.value })} required>
           <option value="">Selecione…</option>
           {contas.map((c) => <option key={c.codigo} value={c.codigo}>{c.grupo} | {c.descricao}</option>)}
@@ -177,6 +179,7 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
 function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   const [nova, setNova] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [renomeando, setRenomeando] = useState(null);      // { edt, tarefa?, nome }
   const [filtro, setFiltro] = useState("todas");
   const t = d.totais;
   const trocar = async (l, corpo) => {
@@ -202,6 +205,19 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
       recarregar();
     } catch (e) { setErro(e.message); }
   };
+  const abrirNova = (inicial) => { setEditando(null); setNova(inicial || true); setTimeout(() => document.getElementById("form-nova")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
+  const renomear = async () => {
+    const r = renomeando;
+    if (!r.nome.trim() || r.nome.trim() === (r.tarefa ?? r.edt)) return setRenomeando(null);
+    try { setErro(""); await api(`/projetos/${d.projeto.orcamento}/grupo`, { method: "PATCH", body: { edt: r.edt, ...(r.tarefa !== undefined ? { tarefa: r.tarefa } : {}), novo_nome: r.nome } }); setRenomeando(null); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  const nomeGrupo = (edt, tarefa, rotulo) => (renomeando && renomeando.edt === edt && renomeando.tarefa === tarefa
+    ? <form className="renomear" onSubmit={(e) => { e.preventDefault(); renomear(); }}>
+        <input autoFocus value={renomeando.nome} maxLength={200} onChange={(e) => setRenomeando({ ...renomeando, nome: e.target.value })} aria-label="Novo nome" onKeyDown={(e) => e.key === "Escape" && setRenomeando(null)} />
+        <button className="primario">Renomear</button><button type="button" onClick={() => setRenomeando(null)}>Cancelar</button></form>
+    : <>{rotulo}</>);
+  const edtsLista = [...new Set(d.linhas.map((l) => l.edt))];
+  const tarefasLista = [...new Map(d.linhas.map((l) => [l.edt + "|" + l.tarefa, { edt: l.edt, tarefa: l.tarefa }])).values()];
   const visiveis = d.linhas.filter((l) =>
     filtro === "todas" ? true : filtro === "ajustes" ? ["ajustada", "nova"].includes(l.status)
     : filtro === "alerta" ? l.alertas.length > 0 : l.status === filtro);
@@ -223,9 +239,9 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
       <div className="filtros">{FILTROS.map(([k, n]) => (
         <button key={k} className={filtro === k ? "on" : ""} onClick={() => setFiltro(k)}>
           {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
-        <button className="destaque" onClick={() => { setEditando(null); setNova(true); setTimeout(() => document.getElementById("form-nova")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}>+ Nova linha</button>
+        <button className="destaque" onClick={() => abrirNova()}>+ Nova linha</button>
       </div>
-      <p className="legenda-icones"><span><Lapis /> editar a linha inteira</span><span className="perigo"><Lixeira /> excluir de 2027 (na linha, na ação ou na Meta/EDT inteira)</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
+      <p className="legenda-icones"><span><Lapis /> editar a linha inteira (ou renomear a Meta/EDT e a Ação/Tarefa nos cabeçalhos)</span><span><Mais /> nova ação na Meta/EDT ou nova conta na ação</span><span className="perigo"><Lixeira /> excluir de 2027 (na linha, na ação ou na Meta/EDT inteira)</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
       <div className="rolagem">
         <table className="tab grid plano-grid">
           <colgroup><col className="c-acoes" /><col className="c-conta" />{MESES.map((m) => <col key={m} />)}<col className="c-total" /></colgroup>
@@ -236,9 +252,15 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
               <React.Fragment key={k}>
                 {(gi === 0 || grupos[gi - 1][1][0].edt !== ls[0].edt) && (
                   <tr className="meta"><td className="col-acoes"><div className="barra-icones"><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir toda a Meta/EDT (todas as ações)" onClick={() => excluirGrupo(ls[0].edt)} /></div></td>
-                    <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Meta/EDT</span> {ls[0].edt}</td></tr>)}
+                    <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Meta/EDT</span> {nomeGrupo(ls[0].edt, undefined, ls[0].edt)}
+                      {!(renomeando && renomeando.edt === ls[0].edt && renomeando.tarefa === undefined) && <span className="grupo-acoes">
+                        <BotaoIcone icone={<Lapis />} dica="Renomear a Meta/EDT" onClick={() => setRenomeando({ edt: ls[0].edt, nome: ls[0].edt })} />
+                        <button type="button" className="link" onClick={() => abrirNova({ edt: ls[0].edt })}>+ Ação nesta Meta/EDT</button></span>}</td></tr>)}
                 <tr className="grupo"><td className="col-acoes"><div className="barra-icones"><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta Ação/Tarefa" onClick={() => excluirGrupo(ls[0].edt, ls[0].tarefa)} /></div></td>
-                  <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Ação/Tarefa</span> {ls[0].tarefa}</td></tr>
+                  <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Ação/Tarefa</span> {nomeGrupo(ls[0].edt, ls[0].tarefa, ls[0].tarefa)}
+                    {!(renomeando && renomeando.edt === ls[0].edt && renomeando.tarefa === ls[0].tarefa) && <span className="grupo-acoes">
+                      <BotaoIcone icone={<Lapis />} dica="Renomear a Ação/Tarefa" onClick={() => setRenomeando({ edt: ls[0].edt, tarefa: ls[0].tarefa, nome: ls[0].tarefa })} />
+                      <button type="button" className="link" onClick={() => abrirNova({ edt: ls[0].edt, tarefa: ls[0].tarefa })}>+ Conta nesta ação</button></span>}</td></tr>
                 {ls.map((l) => (
                   <React.Fragment key={l.id}>
                     <tr className={l.status}>
@@ -270,7 +292,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
         </table>
       </div>
       {editando && <EditarLinha key={editando.id} l={editando} contas={contas} onFechar={() => setEditando(null)} onSalvar={async (b) => { await api(`/linhas/${editando.id}`, { method: "PUT", body: b }); recarregar(); }} />}
-      {nova ? <NovaLinha contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${d.projeto.orcamento}/linhas`, { method: "POST", body: b }); recarregar(); }} />
+      {nova ? <NovaLinha key={JSON.stringify(nova)} inicial={nova === true ? undefined : nova} edts={edtsLista} tarefas={tarefasLista} contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${d.projeto.orcamento}/linhas`, { method: "POST", body: b }); recarregar(); }} />
             : null}
     </>
   );

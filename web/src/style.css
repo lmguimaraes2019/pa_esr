@@ -297,3 +297,8 @@ label.est-item,label.ent-check{flex-direction:row;align-items:flex-start;gap:8px
 label.est-item input,label.ent-check input{width:auto;flex:none;margin-top:4px}
 .est-corpo,.est-tit{text-transform:none}.est-det{color:#475467}.est-det i{font-style:normal;font-weight:600}
 .chip{text-transform:none;letter-spacing:0;font-weight:500}
+
+/* cabeçalhos de Meta/EDT e Ação/Tarefa: renomear e incluir */
+.grupo-acoes{display:inline-flex;align-items:center;gap:8px;margin-left:12px;vertical-align:middle;text-transform:none;letter-spacing:0;font-weight:500}
+.grupo-acoes .icone{width:26px;height:26px}.grupo-acoes .link{font-size:.8rem}
+form.renomear{display:inline-flex;gap:6px;align-items:center;margin-left:6px}form.renomear input{min-width:380px;text-transform:none;font-weight:500}

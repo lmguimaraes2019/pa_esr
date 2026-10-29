@@ -667,3 +667,21 @@ def test_replicar_para_2027(client):
     # apagar a réplica devolve a marca de migração
     assert client.delete(f"/api/projetos/{chave}").status_code == 200
     assert client.get(f"/api/projetos/{orc}").json()["projeto"]["replicado_para"] == ""
+
+
+def test_renomear_meta_e_acao(client):
+    entrar(client)
+    orc = next(p["orcamento"] for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0)
+    ls = client.get(f"/api/projetos/{orc}").json()["linhas"]
+    edt, tar = ls[0]["edt"], ls[0]["tarefa"]
+    n = sum(1 for l in ls if l["edt"] == edt and l["tarefa"] == tar)
+    r = client.patch(f"/api/projetos/{orc}/grupo", json={"edt": edt, "tarefa": tar, "novo_nome": "Ação renomeada"})
+    assert r.status_code == 200 and r.json()["linhas"] == n
+    depois = client.get(f"/api/projetos/{orc}").json()["linhas"]
+    assert sum(1 for l in depois if l["tarefa"] == "Ação renomeada" and l["edt"] == edt) == n
+    assert client.patch(f"/api/projetos/{orc}/grupo", json={"edt": edt, "novo_nome": "Meta nova"}).status_code == 200
+    assert all(l["edt"] == "Meta nova" for l in client.get(f"/api/projetos/{orc}").json()["linhas"] if l["tarefa"] == "Ação renomeada")
+    assert client.patch(f"/api/projetos/{orc}/grupo", json={"edt": "nao existe", "novo_nome": "x"}).status_code == 404
+    # nova ação dentro de uma Meta/EDT existente
+    nl = client.post(f"/api/projetos/{orc}/linhas", json={"edt": "Meta nova", "tarefa": "Segunda ação", "conta_codigo": depois[0]["conta_codigo"], "meses": [100] + [0] * 11})
+    assert nl.status_code == 201
