@@ -274,3 +274,26 @@ td.total-cel{display:table-cell;text-align:right}td.total-cel small{display:bloc
 .ent-grupo{margin:6px 0}.ent-check{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-size:14px}
 .ent-rapido{margin-top:14px;border-top:1px dashed #d9dee7;padding-top:12px}
 tr.sem-cobertura td{background:#fff6ea}
+
+/* Estratégia: seletor, vínculo e cobertura */
+.chip.diretriz{background:#efe6f8;color:#4b2a7a}.chip.re{background:#e0f2f1;color:#0b5a55}.chip.herdado{opacity:.75;border:1px dashed currentColor;background:transparent}
+.faixa-est{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 10px}.faixa-est.sem{background:#fff6ea;border:1px solid #f1d3a1;border-radius:6px;padding:6px 10px}
+.vinculo.pend{border-left:4px solid #d97706}
+.cadeias{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:8px}
+.cadeia{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}.cadeia-txt{flex:1;min-width:220px}.cadeia-pais{display:flex;gap:4px;flex-wrap:wrap}
+.est-sel{margin-top:8px}.est-busca{width:100%;box-sizing:border-box;margin-bottom:8px}
+.est-lista{max-height:440px;overflow:auto;border:1px solid #d9dee7;border-radius:6px;padding:6px}
+.est-item{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:6px;cursor:pointer}.est-item:hover{background:#f3f6fb}.est-item.marcado{background:#e8f1ff}
+.est-item.n1{margin-left:18px}.est-item.n2{margin-left:36px}.est-corpo{display:flex;flex-direction:column;gap:3px;min-width:0}
+.est-cod{font-size:12px;padding:1px 6px;border-radius:4px;background:#eef1f5}.est-cod.diretriz{background:#efe6f8}.est-cod.re{background:#e0f2f1}.est-cod.po{background:#e3f2e8}.est-cod.cg{background:#e6eefc}
+.est-det{font-size:13px;display:flex;flex-direction:column;gap:3px}.est-meta{display:flex;gap:4px;flex-wrap:wrap}
+.est-sep{font-weight:600;margin:10px 4px 4px;padding-top:8px;border-top:1px solid #d9dee7}
+tr.cob.n0 td{background:#f7f2fc;font-weight:600}tr.cob.n1 td:first-child{padding-left:22px;background:#f1faf9}tr.cob.n2 td:first-child{padding-left:44px}tr.cob.cg td{background:#f3f7ff}
+tr.cob-det td{background:#fafbfd}tr.cob-det .chip{margin:2px}
+.acoes-proj{margin:4px 0 10px}.replicar-btn{border:1px solid #1f3a63;color:#1f3a63;background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}.replicar-btn:hover{background:#eef3fb}
+.replicar{margin-top:10px;border-left:4px solid #1f3a63}.repl-leva{margin:10px 0;background:#f6f8fb;border-radius:6px;padding:8px 12px}.repl-leva ul{margin:6px 0;padding-left:20px}
+.faixa-migrado{background:#e8f1ff;border:1px solid #b9d0f5;border-radius:6px;padding:8px 12px;margin:8px 0}.faixa-migrado.de{background:#eefaf0;border-color:#bfe3c6}
+label.est-item,label.ent-check{flex-direction:row;align-items:flex-start;gap:8px;text-transform:none;letter-spacing:0;font-weight:400;font-size:.9rem;color:inherit}
+label.est-item input,label.ent-check input{width:auto;flex:none;margin-top:4px}
+.est-corpo,.est-tit{text-transform:none}.est-det{color:#475467}.est-det i{font-style:normal;font-weight:600}
+.chip{text-transform:none;letter-spacing:0;font-weight:500}

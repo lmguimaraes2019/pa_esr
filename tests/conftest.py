@@ -22,6 +22,7 @@ ADMIN_SENHA = "SenhaAdmin2027x"
 def _apontar(monkeypatch, pasta: Path):
     monkeypatch.setattr(config, "DATA_DIR", pasta)
     monkeypatch.setattr(config, "DB_PATH", pasta / "orcamento.db")
+    monkeypatch.setattr(config, "SEMEAR_PO", False)
     monkeypatch.setattr(security, "_serializer", None)
     security._falhas.clear()
     monkeypatch.setenv("ORC_SECRET", "segredo-de-teste")

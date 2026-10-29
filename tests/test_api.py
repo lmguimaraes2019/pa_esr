@@ -568,7 +568,7 @@ def test_entregas_e_conexao_estrategica(client):
     ps = [p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0]
     orc = ps[0]["orcamento"]
     d = client.get(f"/api/projetos/{orc}/entregas").json()
-    assert d["entregas"] == [] and [e["codigo"] for e in d["catalogo"]] == ["Indicador 10", "RC 6.1.2"] or len(d["catalogo"]) == 2
+    assert d["entregas"] == [] and {e["codigo"] for e in d["catalogo"]} >= {"Indicador 10", "RC 6.1.2"}
     # sem entregas: pendência do projeto
     assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["pendentes"] == 1
     po = next(e["id"] for e in d["catalogo"] if e["tipo"] == "po")
@@ -583,7 +583,7 @@ def test_entregas_e_conexao_estrategica(client):
     cob = client.get("/api/estrategia/cobertura").json()
     rc = next(i for i in cob["itens"] if i["tipo"] == "po")
     assert rc["entregas"] == 2 and rc["projetos"] == 1 and rc["plano_projetos"] > 0
-    cg = next(i for i in cob["itens"] if i["tipo"] == "cg")
+    cg = next(i for i in cob["itens"] if i["tipo"] == "cg" and i["codigo"] == "Indicador 10")
     assert cg["entregas"] == 0
     assert orc not in {x["orcamento"] for x in cob["sem_vinculo"]}
     assert client.delete(f"/api/entregas/{ent[2]['id']}").status_code == 200
@@ -593,3 +593,77 @@ def test_entregas_e_conexao_estrategica(client):
     assert client.get(f"/api/planejamento/projeto/{ctg}").json()["entregas"]["pendentes"] == 1
     client.patch(f"/api/projetos/{ctg}", json={"contingenciado": True})
     assert client.get(f"/api/planejamento/projeto/{ctg}").json()["entregas"]["pendentes"] == 0
+
+
+LINHAS_PO = [
+    ['RE 7.2 · Produtos do Hackers do Bem consolidados no portfólio da ESR'],
+    ["Líder: Fulano · Par: Ciclana"],
+    ["ID RO", "▸ Enunciado", "▸ Objetivo · para quê", "▸ Métrica", "▸ Indicador QIM", "▸ Conclusão", "▸ Responsável candidato · execução", "▸ Origem 1", "▸ Financiador / fonte da receita 1"],
+    ["SGE · não editar", "obrigatório", "obrigatório", "obrigatório", "obrigatório", "obrigatório", "desejável", "obrigatório", "se aplicável"],
+    ["7.2.1", "Hackers do Bem relançado", "Sustentar o programa", "3 desafios regionais", "", "Q3", "DPDI", "AsRNP", "Lei de Informática PPI"],
+    ["7.2.2", "Produtos incorporados ao portfólio", "Atualizar o portfólio", "4 produtos", "10. Índice de Desenvolvimento da Capacitação", "Q3", "ESR", "AsRNP", "não se aplica"],
+]
+
+
+def test_importar_planilha_do_po_e_vincular_projeto(client):
+    entrar(client)
+    r = _envia(client, "estrategia", _xlsx(LINHAS_PO), True)
+    assert r.status_code == 200 and not r.json()["erros"]
+    assert r.json()["novos"] == 5      # 2 ROs + RE 7.2 + diretriz 7 provisória + indicador 10
+    assert _envia(client, "estrategia", _xlsx(LINHAS_PO), False).status_code == 200
+    ps = [p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0]
+    orc = ps[0]["orcamento"]
+    d = client.get(f"/api/projetos/{orc}/entregas").json()
+    cat = {(e["tipo"], e["codigo"]): e for e in d["catalogo"]}
+    ro = cat[("po", "7.2.2")]
+    assert ro["indicador"] == "10" and ro["responsavel"] == "ESR" and "AsRNP" in ro["fomento"]
+    assert cat[("re", "7.2")]["descricao"].startswith("Produtos do Hackers") and "Fulano" in cat[("re", "7.2")]["lider"]
+    # sem vínculo: pendente; vincular ao RO cobre RE, diretriz e indicador do CG
+    client.post(f"/api/projetos/{orc}/entregas/lote", json={"linhas": ["Produto X no ar"]})
+    assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["motivo"] == "sem vínculo estratégico"
+    assert client.put(f"/api/projetos/{orc}/estrategia", json={"ids": [ro["id"], 99999]}).json()["vinculos"] == [ro["id"]]
+    assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["pendentes"] == 0
+    cob = {(i["tipo"], i["codigo"]): i for i in client.get("/api/estrategia/cobertura").json()["itens"]}
+    for k in (("po", "7.2.2"), ("re", "7.2"), ("diretriz", "7"), ("cg", "10")):
+        assert cob[k]["projetos"] == 1 and cob[k]["plano_projetos"] > 0
+    assert cob[("po", "7.2.1")]["projetos"] == 0
+
+
+def test_carga_inicial_do_po_2027(client):
+    from app import db, estrategia
+    with db.tx() as c:
+        assert estrategia.semear_po(c) and not estrategia.semear_po(c)
+        arv = estrategia.arvore(c)
+    cod = {(e["tipo"], e["codigo"]): e for e in arv}
+    assert sum(1 for e in arv if e["tipo"] == "po") == 9 and ("diretriz", "7") in cod and ("cg", "10") in cod
+    ro = cod[("po", "7.1.2")]
+    assert {cod[("re", "7.1")]["id"], cod[("diretriz", "7")]["id"], cod[("cg", "10")]["id"]} == set(ro["pais"])
+    assert estrategia.fecho(arv, {ro["id"]}) >= set(ro["pais"])
+
+
+def test_replicar_para_2027(client):
+    entrar(client)
+    ps = [p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0 and not p["novo"]]
+    orc, total = ps[0]["orcamento"], ps[0]["total_2027"]
+    client.post(f"/api/projetos/{orc}/entregas/lote", json={"linhas": ["Entrega que acompanha"]})
+    pre = client.get(f"/api/projetos/{orc}/replicar").json()
+    assert pre["elegivel"] and pre["contagem"]["linhas"] > 0 and pre["contagem"]["entregas"] == 1
+    origens = client.get("/api/listas").json()["origens"]
+    nova = next(o for o in origens if o != ps[0]["origem"])
+    assert client.post(f"/api/projetos/{orc}/replicar", json={"descricao": "Projeto replicado 2027", "origem": "Inexistente"}).status_code == 422
+    r = client.post(f"/api/projetos/{orc}/replicar", json={"descricao": "Projeto replicado 2027", "origem": nova})
+    assert r.status_code == 201
+    chave = r.json()["orcamento"]
+    todos = {p["orcamento"]: p for p in client.get("/api/projetos").json()}
+    a, b = todos[orc], todos[chave]
+    assert a["total_2027"] == 0 and a["n_linhas"] == 0 and a["total_2026"] > 0      # origem sem linhas de 2027, 2026 intacto
+    assert a["replicado_para"] == chave and a["replicado_nome"] == "Projeto replicado 2027" and a["replicado_origem"] == nova
+    assert b["total_2027"] == total and b["novo"] and b["replicado_de"] == orc and b["origem"] == nova and b["descricao"] == "Projeto replicado 2027"
+    assert len(client.get(f"/api/projetos/{chave}/entregas").json()["entregas"]) == 1 and client.get(f"/api/projetos/{orc}/entregas").json()["entregas"] == []
+    assert client.get(f"/api/projetos/{orc}/replicar").json()["elegivel"] is False
+    assert client.post(f"/api/projetos/{orc}/replicar", json={"descricao": "Outra vez", "origem": nova}).status_code == 409
+    assert client.get(f"/api/projetos/{chave}/replicar").json()["elegivel"] is False       # o novo orçamento não tem 2026
+    assert client.get(f"/api/projetos/{orc}").json()["projeto"]["replicado_para"] == chave
+    # apagar a réplica devolve a marca de migração
+    assert client.delete(f"/api/projetos/{chave}").status_code == 200
+    assert client.get(f"/api/projetos/{orc}").json()["projeto"]["replicado_para"] == ""

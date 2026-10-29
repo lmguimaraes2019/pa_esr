@@ -10,7 +10,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from . import config
+from . import config, estrategia
 from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
 from .db import MESES, audit, tx
 
@@ -31,7 +31,11 @@ class LoteIn(BaseModel):
 
 
 def _catalogo(c: sqlite3.Connection) -> list[dict]:
-    return [dict(r) for r in c.execute("SELECT id, tipo, codigo, descricao, meta FROM estrategia ORDER BY tipo DESC, codigo")]
+    return estrategia.arvore(c)
+
+
+class VinculoIn(BaseModel):
+    ids: list[int] = Field(default_factory=list, max_length=60)
 
 
 def _entregas(c: sqlite3.Connection, orcamento: str) -> list[dict]:
@@ -52,7 +56,21 @@ def _grava_vinculos(c: sqlite3.Connection, eid: int, ids: list[int]) -> None:
 @router.get("/projetos/{orcamento}/entregas")
 def listar(orcamento: str, u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     exige_acesso(c, u, orcamento)
-    return {"entregas": _entregas(c, orcamento), "catalogo": _catalogo(c)}
+    vinc = sorted(r[0] for r in c.execute("SELECT estrategia_id FROM projeto_estrategia WHERE orcamento=?", (orcamento,)))
+    return {"entregas": _entregas(c, orcamento), "catalogo": _catalogo(c), "vinculos": vinc}
+
+
+@router.put("/projetos/{orcamento}/estrategia")
+def vincular(orcamento: str, d: VinculoIn, u: dict = Depends(usuario_liberado)):
+    """Define a que diretriz, RE, RO do PO e indicador do CG o orçamento do projeto está ligado."""
+    with tx() as c:
+        exige_acesso(c, u, orcamento)
+        validos = {r[0] for r in c.execute("SELECT id FROM estrategia")}
+        ids = sorted(set(d.ids) & validos)
+        c.execute("DELETE FROM projeto_estrategia WHERE orcamento=?", (orcamento,))
+        c.executemany("INSERT INTO projeto_estrategia (orcamento, estrategia_id) VALUES (?,?)", [(orcamento, i) for i in ids])
+        audit(c, u["login"], "vinculou projeto à estratégia", orcamento, detalhe=f"{len(ids)} item(ns)")
+    return {"ok": True, "vinculos": ids}
 
 
 @router.post("/projetos/{orcamento}/entregas", status_code=201)
@@ -113,7 +131,8 @@ def excluir(eid: int, u: dict = Depends(usuario_liberado)):
 
 @router.get("/estrategia/cobertura")
 def cobertura(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    """Para cada RC do PO e indicador do CG: quantas entregas e projetos o atendem e quanto do plano 2027 está ligado a eles.
+    """Para cada diretriz, RE, RO e indicador do CG: quantos projetos e entregas o atendem e quanto do plano 2027 está ligado a ele.
+    Vincular um projeto a um RO cobre também o RE, a diretriz e o indicador do CG acima dele.
     O valor é o plano dos projetos vinculados (um projeto pode atender a mais de um item, por isso os valores não se somam)."""
     ids = sorted(permitidos(c, u))
     marks = ",".join("?" for _ in ids) or "''"
@@ -121,20 +140,34 @@ def cobertura(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depen
         f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='despesa') GROUP BY orcamento",
         (config.CICLO_PLANO, *ids))}
     nomes = {r["orcamento"]: r["descricao"] for r in c.execute(f"SELECT orcamento, descricao FROM projetos WHERE orcamento IN ({marks})", ids)}
-    por_item: dict[int, dict] = {}
+    cat = _catalogo(c)
+    direto: dict[str, set[int]] = {o: set() for o in ids}
+    for r in c.execute(f"SELECT orcamento, estrategia_id FROM projeto_estrategia WHERE orcamento IN ({marks})", ids):
+        direto[r[0]].add(r[1])
+    por_item: dict[int, dict] = {i["id"]: {"entregas": set(), "projetos": set()} for i in cat}
+    vinc_entrega: dict[int, set[int]] = {}
     for r in c.execute(f"""SELECT x.estrategia_id, e.id AS eid, e.orcamento FROM entrega_estrategia x JOIN entregas e ON e.id=x.entrega_id
                            WHERE e.orcamento IN ({marks})""", ids):
-        d = por_item.setdefault(r["estrategia_id"], {"entregas": set(), "projetos": set()})
-        d["entregas"].add(r["eid"]); d["projetos"].add(r["orcamento"])
+        direto[r["orcamento"]].add(r["estrategia_id"])
+        vinc_entrega.setdefault(r["eid"], set()).add(r["estrategia_id"])
+        for i in estrategia.fecho(cat, {r["estrategia_id"]}):
+            por_item[i]["entregas"].add(r["eid"])
+    ligados = set()
+    for o, ds in direto.items():
+        fe = estrategia.fecho(cat, ds)
+        if fe:
+            ligados.add(o)
+        for i in fe:
+            por_item[i]["projetos"].add(o)
     itens = []
-    for e in _catalogo(c):
-        d = por_item.get(e["id"], {"entregas": set(), "projetos": set()})
-        itens.append({**e, "entregas": len(d["entregas"]), "projetos": len(d["projetos"]),
+    for e in cat:
+        d = por_item[e["id"]]
+        itens.append({**{k: e[k] for k in ("id", "tipo", "codigo", "descricao", "meta", "objetivo", "indicador", "conclusao", "responsavel", "fomento", "lider", "pais")},
+                      "entregas": len(d["entregas"]), "projetos": len(d["projetos"]),
                       "plano_projetos": _arred(sum(plano.get(o, 0.0) for o in d["projetos"])),
-                      "lista_projetos": [{"orcamento": o, "projeto": nomes.get(o, "")} for o in sorted(d["projetos"])]})
-    # projetos de despesa com plano e sem nenhuma entrega ligada ao PO ou ao CG
-    ligados = {o for d in por_item.values() for o in d["projetos"]}
+                      "lista_projetos": [{"orcamento": o, "projeto": nomes.get(o, ""), "plano": plano.get(o, 0.0)} for o in sorted(d["projetos"])]})
     sem_entregas = {r[0] for r in c.execute(f"SELECT DISTINCT orcamento FROM entregas WHERE orcamento IN ({marks})", ids)}
     sem_vinculo = [{"orcamento": o, "projeto": nomes.get(o, ""), "plano": v, "tem_entregas": o in sem_entregas}
                    for o, v in sorted(plano.items()) if v > 0 and o not in ligados]
-    return {"itens": itens, "sem_vinculo": sem_vinculo, "catalogo_vazio": not itens}
+    return {"itens": itens, "sem_vinculo": sem_vinculo, "catalogo_vazio": not itens, "plano_total": _arred(sum(plano.values())),
+            "plano_sem_vinculo": _arred(sum(x["plano"] for x in sem_vinculo))}

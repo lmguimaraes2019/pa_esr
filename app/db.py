@@ -132,14 +132,27 @@ CREATE TABLE IF NOT EXISTS headcount (
 
 CREATE TABLE IF NOT EXISTS hc_parametros (chave TEXT PRIMARY KEY, valor REAL NOT NULL);
 
--- conexão estratégica: resultados-chave (RC) do Plano de Operação e indicadores do Contrato de Gestão, importados pelo administrador
+-- conexão estratégica: direcionadores (diretriz), resultados estratégicos (RE), resultados operacionais do PO (po) e indicadores do Contrato de Gestão (cg)
 CREATE TABLE IF NOT EXISTS estrategia (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL CHECK (tipo IN ('po','cg')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('diretriz','re','po','cg')),
     codigo TEXT NOT NULL,
     descricao TEXT NOT NULL,
     meta TEXT NOT NULL DEFAULT '',
+    objetivo TEXT NOT NULL DEFAULT '',
+    indicador TEXT NOT NULL DEFAULT '',      -- RO: código do indicador do CG (QIM) a que contribui
+    conclusao TEXT NOT NULL DEFAULT '',
+    responsavel TEXT NOT NULL DEFAULT '',
+    fomento TEXT NOT NULL DEFAULT '',
+    lider TEXT NOT NULL DEFAULT '',
     UNIQUE (tipo, codigo)
+);
+
+-- vínculo do orçamento (projeto) com a estratégia: um ou mais itens de qualquer nível
+CREATE TABLE IF NOT EXISTS projeto_estrategia (
+    orcamento TEXT NOT NULL REFERENCES projetos(orcamento),
+    estrategia_id INTEGER NOT NULL REFERENCES estrategia(id),
+    PRIMARY KEY (orcamento, estrategia_id)
 );
 
 -- entregas previstas de cada projeto em 2027, com prazo, KPI próprio e vínculo com o PO e o CG
@@ -269,7 +282,26 @@ def tx():
         conn.close()
 
 
+def _migrar_estrategia() -> None:
+    """A primeira versão da tabela só aceitava 'po' e 'cg'. Recria com a hierarquia completa, preservando os ids (as entregas apontam para eles)."""
+    conn = connect()
+    try:
+        r = conn.execute("SELECT sql FROM sqlite_master WHERE name='estrategia'").fetchone()
+        if not r or "'diretriz'" in r[0]:
+            return
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.executescript("ALTER TABLE estrategia RENAME TO estrategia_v1;")
+        conn.executescript(SCHEMA)      # cria a tabela nova (as demais já existem)
+        conn.execute("INSERT INTO estrategia (id, tipo, codigo, descricao, meta) SELECT id, tipo, codigo, descricao, meta FROM estrategia_v1")
+        conn.executescript("DROP TABLE estrategia_v1;")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
+    _migrar_estrategia()
     with tx() as c:
         nova = not c.execute("SELECT 1 FROM sqlite_master WHERE name='user_gerentes'").fetchone()
         c.executescript(SCHEMA)
@@ -306,11 +338,18 @@ def init_db() -> None:
         if "criado_por" not in {r[1] for r in c.execute("PRAGMA table_info(headcount)")}:      # migração: quem lançou a posição
             c.execute("ALTER TABLE headcount ADD COLUMN criado_por TEXT NOT NULL DEFAULT ''")
             c.execute("UPDATE headcount SET criado_por = atualizado_por")
+        pc = {r[1] for r in c.execute("PRAGMA table_info(projetos)")}      # migração: projeto replicado para 2027
+        for col in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por"):
+            if col not in pc:
+                c.execute(f"ALTER TABLE projetos ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         uc = {r[1] for r in c.execute("PRAGMA table_info(users)")}      # migração: gerência e cargo do usuário
         for col in ("gerencia", "cargo"):
             if col not in uc:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         semear_receitas(c)
+        if config.SEMEAR_PO:
+            from .estrategia import semear_po
+            semear_po(c)
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))

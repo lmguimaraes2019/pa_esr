@@ -10,6 +10,8 @@ ASSETS_DIR = ROOT / "app" / "assets"
 TEMPLATE_PATH = Path(os.environ.get("ORC_TEMPLATE", ROOT / "app" / "assets" / "template_2027.xlsx"))
 WEB_DIST = Path(os.environ.get("ORC_WEB_DIST", ROOT / "web" / "dist"))
 
+SEMEAR_PO = os.environ.get("ORC_SEMEAR_PO", "1") == "1"      # carrega o PO 2027 da ESR (Diretriz 7) uma única vez
+
 CICLO_BASE = 2026      # orçamento aprovado, usado como referência
 CICLO_PLANO = 2027     # orçamento em elaboração
 

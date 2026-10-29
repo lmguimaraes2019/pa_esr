@@ -32,7 +32,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                "viagens": {"n": 0, "total": 0.0, "pendentes": 0},
                "eventos": {"n": 0, "total": 0.0, "pendentes": 0},
                "headcount": {"n": 0, "total": 0.0, "pendentes": 0},
-               "entregas": {"n": 0, "sem_conexao": 0, "pendentes": 0}} for o in ids if o in nomes}
+               "entregas": {"n": 0, "sem_conexao": 0, "pendentes": 0, "vinculado": False, "motivo": ""}} for o in ids if o in nomes}
 
     # despesas: compara cada linha de 2027 com a de 2026
     usadas: set[int] = set()
@@ -83,6 +83,11 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                            SUM(CASE WHEN e.kpi='' AND NOT EXISTS (SELECT 1 FROM entrega_estrategia x WHERE x.entrega_id=e.id) THEN 1 ELSE 0 END) sem
                            FROM entregas e WHERE e.orcamento IN ({marks}) GROUP BY e.orcamento""", ids):
         out[r["orcamento"]]["entregas"].update(n=r["n"], sem_conexao=r["sem"] or 0)
+    catalogo_cheio = bool(c.execute("SELECT 1 FROM estrategia WHERE tipo IN ('po','cg','re') LIMIT 1").fetchone())
+    ligados = {r[0] for r in c.execute(f"SELECT orcamento FROM projeto_estrategia WHERE orcamento IN ({marks})", ids)}
+    ligados |= {r[0] for r in c.execute(f"SELECT DISTINCT e.orcamento FROM entregas e JOIN entrega_estrategia x ON x.entrega_id=e.id WHERE e.orcamento IN ({marks})", ids)}
+    for o in out:
+        out[o]["entregas"]["vinculado"] = o in ligados
 
     for o, p in out.items():
         if nomes[o]["tipo"] == "receita":      # orçamento de receita: o total das linhas é receita (resultado positivo), não despesa
@@ -94,8 +99,11 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                 if f in p[k]:
                     p[k][f] = _arred(p[k][f])
         # todo projeto de despesa com orçamento em 2027 precisa informar as entregas previstas (exceto o contingenciado)
-        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and p["despesas"]["plano"] > 0 and not p["entregas"]["n"]:
-            p["entregas"]["pendentes"] = 1
+        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and p["despesas"]["plano"] > 0:
+            if not p["entregas"]["n"]:
+                p["entregas"].update(pendentes=1, motivo="sem entregas")
+            elif catalogo_cheio and not p["entregas"]["vinculado"]:      # com o catálogo estratégico cadastrado, o orçamento precisa estar ligado a ele
+                p["entregas"].update(pendentes=1, motivo="sem vínculo estratégico")
         p["pendencias"] = (p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"] + p["entregas"]["pendentes"])
     return out
 

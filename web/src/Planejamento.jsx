@@ -43,7 +43,7 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
       `${e.eventos.n} evento(s)`, e.eventos.total, e.eventos.pendentes ? "Completar" : "Abrir eventos"],
     ["headcount", "Headcount", e.headcount.pendentes ? "pend" : "ok", e.headcount.pendentes ? `${e.headcount.pendentes} incompleta(s)` : e.headcount.n ? "em dia" : "nenhuma",
       `${e.headcount.n} posição(ões) nova(s), custo em 2027`, e.headcount.total, e.headcount.pendentes ? "Completar" : "Abrir headcount"],
-    ["entregas", "Entregas e conexão estratégica", e.entregas.pendentes ? "pend" : "ok", e.entregas.pendentes ? `${e.entregas.pendentes} projeto(s) sem entregas` : "informadas",
+    ["entregas", "Entregas e conexão estratégica", e.entregas.pendentes ? "pend" : "ok", e.entregas.pendentes ? `${e.entregas.pendentes} projeto(s) sem entregas ou sem vínculo` : "informadas",
       `${e.entregas.n} entrega(s) nos projetos${e.entregas.sem_conexao ? `, ${e.entregas.sem_conexao} sem KPI nem conexão com PO e CG` : ""}`, null,
       e.entregas.pendentes ? "Informar entregas" : "Revisar nos projetos"],
   ];
@@ -103,7 +103,7 @@ export function ResumoProjeto({ orcamento, irEtapa }) {
     ["viagens", "Viagens", fmt(d.viagens.total), `${d.viagens.n} viagem(ns)`, d.viagens.pendentes],
     ["eventos", "Eventos", fmt(d.eventos.total), `${d.eventos.n} evento(s)`, d.eventos.pendentes],
     ["headcount", "Headcount", fmt(d.headcount.total), `${d.headcount.n} posição(ões) | custo em 2027`, d.headcount.pendentes],
-    ["entregas", "Entregas", `${d.entregas.n}`, d.entregas.n ? `${d.entregas.n - d.entregas.sem_conexao} com KPI ou conexão estratégica` : "Nenhuma entrega informada", d.entregas.pendentes],
+    ["entregas", "Entregas", `${d.entregas.n}`, d.entregas.motivo === "sem vínculo estratégico" ? "Falta vincular o orçamento ao PO e ao CG" : d.entregas.n ? `${d.entregas.n - d.entregas.sem_conexao} com KPI ou conexão estratégica` : "Nenhuma entrega informada", d.entregas.pendentes],
   ];
   return (
     <section className="cartao">
@@ -113,7 +113,7 @@ export function ResumoProjeto({ orcamento, irEtapa }) {
         <div key={k} className={"resumo-card " + (p ? "pend" : "")}>
           <span className="etapa-n">{i + 1}</span><strong>{t}</strong><b>{v}</b><small className="mudo">{s}</small>
           {p > 0 && <Estado tom="pend">{k === "entregas" ? "pendente" : `${p} pendente(s)`}</Estado>}
-          <button onClick={() => irEtapa(k)}>{k === "projetos" ? "Ver as linhas" : k === "entregas" ? "Informar entregas" : "Abrir"}</button>
+          <button onClick={() => irEtapa(k)}>{k === "projetos" ? "Ver as linhas" : k === "entregas" ? (d.entregas.motivo === "sem vínculo estratégico" ? "Vincular" : "Informar entregas") : "Abrir"}</button>
         </div>))}</div>
     </section>
   );

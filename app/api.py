@@ -328,6 +328,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
             FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]), "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
+             "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
              "total_2027": _arred(r["t_plano"]) if r["tipo"] != "receita" else 0.0,
              "receitas_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else 0)),
@@ -377,6 +378,8 @@ def excluir_projeto(orcamento: str, u: dict = Depends(usuario_liberado)):
         for tabela, filtro in (("entregas", "orcamento=?"), ("linhas", "ciclo=2027 AND orcamento=?"), ("receitas", "ciclo=2027 AND orcamento=?"), ("viagens", "orcamento=?"),
                                ("eventos", "orcamento=?"), ("headcount", "orcamento=?")):
             cont[tabela] = c.execute(f"DELETE FROM {tabela} WHERE {filtro}", (orcamento,)).rowcount
+        c.execute("DELETE FROM projeto_estrategia WHERE orcamento=?", (orcamento,))
+        c.execute("UPDATE projetos SET replicado_para='', replicado_nome='', replicado_origem='', replicado_em='', replicado_por='' WHERE replicado_para=?", (orcamento,))
         c.execute("DELETE FROM user_projetos WHERE orcamento=?", (orcamento,))
         c.execute("DELETE FROM projetos WHERE orcamento=?", (orcamento,))
         audit(c, u["login"], "excluiu orçamento novo", orcamento, detalhe=f"{p['descricao']} ({p['tipo']}): {cont}")
@@ -464,6 +467,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
                    | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
+                   | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},
         "linhas": linhas, "passado": passado,
         "totais": {"plano": _arred(sum(x["total"] for x in linhas)),

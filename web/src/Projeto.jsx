@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ResumoProjeto } from "./Planejamento.jsx";
-import EntregasProjeto from "./Entregas.jsx";
+import EntregasProjeto, { fecho, rotuloEst } from "./Entregas.jsx";
+import { ReplicarProjeto, FaixaMigracao } from "./Replicar.jsx";
 import { api, fmt, fmtN, fmtI, lerNumero, MESES } from "./api.js";
 import { Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer } from "./ui.jsx";
 
@@ -275,7 +276,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   );
 }
 
-export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }) {
+export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, irProjeto }) {
   const [d, setD] = useState(null);
   const [contas, setContas] = useState([]);
   const [erro, setErro] = useState("");
@@ -293,6 +294,9 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} onSalvo={carregar} />}
       </div>
+      <FaixaMigracao p={p} irProjeto={irProjeto} />
+      <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
+      {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}
       <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["entregas", "Entregas 2027"], ["resumo", "Resumo e pendências"]]} />
       {p.tipo === "receita" && <div className="nota">Este é um orçamento de <strong>receita</strong>: o total das linhas do plano 2027 entra em Receitas como resultado positivo e não soma nas despesas.</div>}
@@ -302,6 +306,26 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa }
         : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={(k) => (k === "entregas" ? setPasso("entregas") : irEtapa(k))} />
         : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} voltar={voltar} />}
     </>
+  );
+}
+
+function FaixaEstrategia({ orcamento, abrir }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { api(`/projetos/${orcamento}/entregas`).then(setD).catch(() => {}); }, [orcamento]);
+  if (!d || !d.catalogo.length) return null;
+  const direto = d.catalogo.filter((e) => d.vinculos.includes(e.id));
+  const cobertos = fecho(d.catalogo, d.vinculos);
+  const nivel = (t) => d.catalogo.filter((e) => e.tipo === t && cobertos.has(e.id) && !d.vinculos.includes(e.id));
+  return (
+    <div className={"faixa-est " + (direto.length ? "" : "sem")}>
+      <span className="rotulo-nivel">Estratégia</span>
+      {direto.length ? (
+        <>
+          {direto.map((e) => <span key={e.id} className={"chip " + e.tipo} title={e.descricao}>{rotuloEst(e)}</span>)}
+          {["re", "diretriz", "cg"].flatMap(nivel).map((e) => <span key={e.id} className={"chip " + e.tipo + " herdado"} title={e.descricao}>{rotuloEst(e)}</span>)}
+        </>) : <span className="aviso-txt">sem vínculo com o PO e o Contrato de Gestão</span>}
+      <button className="link" onClick={abrir}>{direto.length ? "ver e alterar" : "vincular agora"}</button>
+    </div>
   );
 }
 

@@ -26,18 +26,29 @@ function Quadro({ itens, rotulo }) {
 
 function Cobertura() {
   const [c, setC] = useState(null);
+  const [aberto, setAberto] = useState(null);
   useEffect(() => { api("/estrategia/cobertura").then(setC).catch(() => setC(false)); }, []);
   if (!c) return null;
-  const grupos = [["po", "Plano de Operação"], ["cg", "Contrato de Gestão"]];
+  const rot = (i) => (/^\d/.test(i.codigo) ? ({ diretriz: "Diretriz", re: "RE", po: "RO", cg: "CG" }[i.tipo] + " " + i.codigo) : i.codigo);
+  const nivel = { diretriz: 0, re: 1, po: 2, cg: 0 };
+  const linha = (i) => (
+    <React.Fragment key={i.id}>
+      <tr className={"cob n" + nivel[i.tipo] + " " + i.tipo + (i.projetos ? "" : " sem-cobertura")} onClick={() => i.projetos && setAberto(aberto === i.id ? null : i.id)} style={{ cursor: i.projetos ? "pointer" : "default" }}>
+        <td><b>{rot(i)}</b> {i.descricao}{i.tipo === "po" && i.responsavel && <span className="chip">{i.responsavel}</span>}{i.tipo === "po" && i.conclusao && <span className="chip mes">{i.conclusao}</span>}</td>
+        <td className="n">{i.entregas || <span className="mudo">0</span>}</td><td className="n">{i.projetos || <strong className="aviso-txt">nenhum</strong>}</td><td className="n">{i.projetos ? fmt(i.plano_projetos) : <span className="mudo">-</span>}</td>
+      </tr>
+      {aberto === i.id && <tr className="cob-det"><td colSpan={4}>{i.lista_projetos.map((p) => <span key={p.orcamento} className="chip">{p.projeto} <span className="mudo">{fmt(p.plano)}</span></span>)}</td></tr>}
+    </React.Fragment>);
+  const hier = c.itens.filter((i) => i.tipo !== "cg"), cg = c.itens.filter((i) => i.tipo === "cg");
   return (
     <section className="cartao"><h3>Conexão estratégica</h3>
-      <p className="mudo">Quais resultados do PO e indicadores do Contrato de Gestão têm entregas planejadas e quanto do plano 2027 está ligado a eles.</p>
-      {c.catalogo_vazio ? <p className="mudo">Cadastre os itens em Administração, Tabelas de referência, "Plano de Operação e indicadores do Contrato de Gestão".</p> : (
+      <p className="mudo">Do direcionador ao indicador do Contrato de Gestão: quais projetos e entregas sustentam cada item e quanto do plano 2027 está ligado a ele. Clique numa linha para ver os projetos. Um projeto pode servir a mais de um item, então os valores não se somam.</p>
+      {c.catalogo_vazio ? <p className="mudo">Cadastre os itens em Administração, Tabelas de referência, "Estratégia".</p> : (
         <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th className="n">Entregas</th><th className="n">Projetos</th><th className="n">Plano 2027 dos projetos</th></tr></thead>
-          <tbody>{grupos.map(([t, nome]) => (<React.Fragment key={t}><tr><td colSpan={4}><strong>{nome}</strong></td></tr>
-            {c.itens.filter((i) => i.tipo === t).map((i) => (
-              <tr key={i.id} className={i.entregas ? "" : "sem-cobertura"}><td><b>{i.codigo}</b> {i.descricao}</td><td className="n">{i.entregas || "sem entregas"}</td><td className="n">{i.projetos}</td><td className="n">{fmt(i.plano_projetos)}</td></tr>))}</React.Fragment>))}</tbody></table></div>)}
-      {c.sem_vinculo && c.sem_vinculo.length > 0 && <p className="aviso-txt"><strong>{c.sem_vinculo.length}</strong> projeto(s) com plano 2027 e nenhuma entrega ligada ao PO ou ao CG: {c.sem_vinculo.slice(0, 12).map((p) => p.orcamento || p).join(", ")}{c.sem_vinculo.length > 12 ? "…" : ""}</p>}
+          <tbody>{hier.map(linha)}{cg.length > 0 && <tr><td colSpan={4}><strong>Indicadores do Contrato de Gestão</strong></td></tr>}{cg.map(linha)}</tbody></table></div>)}
+      {!c.catalogo_vazio && c.sem_vinculo.length > 0 && (
+        <div className="nota aviso"><strong>{c.sem_vinculo.length}</strong> projeto(s) com plano 2027 de <strong>{fmt(c.plano_sem_vinculo)}</strong> sem nenhum vínculo estratégico (de {fmt(c.plano_total)} no total):{" "}
+          {c.sem_vinculo.slice(0, 15).map((p) => p.projeto || p.orcamento).join("; ")}{c.sem_vinculo.length > 15 ? "…" : ""}</div>)}
     </section>
   );
 }

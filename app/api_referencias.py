@@ -15,7 +15,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
-from . import equipamentos, pessoal, sync, viagens as vg
+from . import equipamentos, estrategia, pessoal, sync, viagens as vg
 from .api import _conn, exige_admin
 from .db import audit, tx
 
@@ -27,13 +27,14 @@ TABELAS = {
     "viagens": {"nome": "Tarifas de viagens", "colunas": ["tipo", "origem", "destino", *vg.CAMPOS_TARIFA]},
     "equipamentos": {"nome": "Catálogo de equipamentos", "colunas": ["codigo", "tipo", "nome", "perfil", "valor"]},
     "salarios": {"nome": "Tabela salarial", "colunas": ["trajetoria", "nivel", "grupo", "inicio", "fim"]},
-    "estrategia": {"nome": "Plano de Operação e indicadores do Contrato de Gestão", "colunas": ["tipo", "codigo", "descricao", "meta"]},
+    "estrategia": {"nome": "Estratégia: diretrizes, REs, ROs do PO e indicadores do CG", "colunas": ["tipo", "codigo", "descricao", "meta", "objetivo", "indicador", "conclusao", "responsavel", "fomento", "lider"]},
 }
 ROTULOS = {
     "tipo": "Tipo", "origem": "Origem", "destino": "Destino", "passagem": "Passagem", "hospedagem": "Hospedagem", "bagagem": "Bagagem",
     "aux_transporte": "Aux. transporte", "ajuda_custo": "Ajuda de custo", "seguro": "Seguro", "codigo": "Código", "nome": "Equipamento",
     "perfil": "Perfil", "valor": "Valor", "trajetoria": "Trajetória", "nivel": "Nível", "grupo": "Grupo", "inicio": "Início da faixa (80%)",
-    "fim": "Fim da faixa (120%)", "descricao": "Descrição", "meta": "Meta ou critério",
+    "fim": "Fim da faixa (120%)", "descricao": "Descrição", "meta": "Meta ou critério", "objetivo": "Objetivo", "indicador": "Indicador do CG (código)",
+    "conclusao": "Conclusão", "responsavel": "Responsável", "fomento": "Fomento ou fonte", "lider": "Líder",
 }
 ALIAS = {
     "tipo": ["tipo", "categoria"], "origem": ["origem"], "destino": ["destino"],
@@ -43,7 +44,9 @@ ALIAS = {
     "perfil": ["perfil", "observacao", "perfil_observacao"], "valor": ["valor", "valor_r", "valor_(r$)", "preco"],
     "trajetoria": ["trajetoria"], "nivel": ["nivel"], "grupo": ["grupo"],
     "inicio": ["inicio", "inicio_da_faixa", "inicio_da_faixa_(80%)", "faixa_inicio", "minimo"], "fim": ["fim", "fim_da_faixa", "fim_da_faixa_(120%)", "faixa_fim", "maximo"],
-    "descricao": ["descricao", "resultado_chave", "indicador", "nome", "enunciado"], "meta": ["meta", "criterio", "criterios", "meta_criterio", "meta_ou_criterio"],
+    "descricao": ["descricao", "resultado_chave", "nome", "enunciado"], "meta": ["meta", "criterio", "criterios", "meta_criterio", "meta_ou_criterio"],
+    "objetivo": ["objetivo"], "indicador": ["indicador", "indicador_cg", "indicador_qim", "indicador_do_cg_(codigo)", "indicador_do_cg"], "conclusao": ["conclusao"],
+    "responsavel": ["responsavel"], "fomento": ["fomento", "fomento_ou_fonte", "fonte"], "lider": ["lider"],
     "referencia": ["referencia", "valor_100%", "ponto_medio", "salario_referencia", "100%"],
 }
 
@@ -74,8 +77,8 @@ def _numero(v) -> float | None:
         return None
 
 
-def _ler(nome: str, dados: bytes) -> list[dict]:
-    """Linhas do arquivo como dicionários com os cabeçalhos normalizados."""
+def _grades(nome: str, dados: bytes) -> list[list[list]]:
+    """Todas as abas (xlsx) ou o único bloco (csv/txt) do arquivo, como listas de linhas."""
     if len(dados) > LIMITE:
         raise HTTPException(413, "Arquivo grande demais (limite de 10 MB).")
     if dados[:2] == b"PK":
@@ -84,21 +87,75 @@ def _ler(nome: str, dados: bytes) -> list[dict]:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             wb = openpyxl.load_workbook(io.BytesIO(dados), read_only=True, data_only=True)
-        linhas = [list(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
-    elif nome.lower().endswith((".csv", ".txt")):
+        return [[list(r) for r in ws.iter_rows(values_only=True)] for ws in wb.worksheets]
+    if nome.lower().endswith((".csv", ".txt", ".tsv")):
         texto = dados.decode("utf-8-sig", errors="replace") if b"\xef\xbf\xbd" not in dados else dados.decode("latin-1")
         try:
             dialeto = csv.Sniffer().sniff(texto[:4096], delimiters=";,\t")
         except csv.Error:
             dialeto = csv.excel
-        linhas = list(csv.reader(io.StringIO(texto), dialeto))
-    else:
-        raise HTTPException(422, "Envie uma planilha .xlsx ou um arquivo .csv.")
-    linhas = [l for l in linhas if any(str(x).strip() for x in l if x is not None)]
+        return [list(csv.reader(io.StringIO(texto), dialeto))]
+    raise HTTPException(422, "Envie uma planilha .xlsx ou um arquivo .csv.")
+
+
+def _ler(nome: str, dados: bytes) -> list[dict]:
+    """Linhas do arquivo como dicionários com os cabeçalhos normalizados."""
+    linhas = [l for l in _grades(nome, dados)[0] if any(str(x).strip() for x in l if x is not None)]
     if len(linhas) < 2:
         raise HTTPException(422, "O arquivo não tem linhas de dados.")
     cab = [_chave(x) for x in linhas[0]]
     return [{cab[i]: (v if not isinstance(v, str) else v.strip()) for i, v in enumerate(l) if i < len(cab) and cab[i]} for l in linhas[1:]]
+
+
+def _n(t) -> str:
+    return re.sub(r"[^a-z0-9]", "", _sem_acento(str(t or "")).lower())
+
+
+def _ler_po(nome: str, dados: bytes) -> list[dict] | None:
+    """Lê a planilha do ateliê do Plano de Operação (coluna 'ID RO'; uma aba ou arquivo por RE). Devolve None se o arquivo não tem esse formato."""
+    saida: dict[tuple, dict] = {}
+    achou = False
+    for g in _grades(nome, dados):
+        h = next((i for i, l in enumerate(g) if any(_n(x) == "idro" for x in l)), None)
+        if h is None:
+            continue
+        achou = True
+        lider, titulos = "", {}
+        for l in g[:h]:
+            for x in l:
+                for linha in str(x or "").splitlines():
+                    m = re.match(r"\s*(RE|DIRETRIZ)\s*(\d+(?:\.\d+)?)\s*[·:\-]\s*(.+)", linha.strip(), re.I)
+                    if m:
+                        titulos[("re" if m.group(1).upper() == "RE" else "diretriz", m.group(2))] = m.group(3).strip().strip('"')
+                    elif re.match(r"\s*L[ií]der\s*:", linha, re.I):
+                        lider = linha.strip().strip('"').split("Relações")[0].strip()
+        cab = [_n(x) for x in g[h]]
+        col = lambda *nomes: next((i for i, c in enumerate(cab) if any(c.startswith(n) for n in nomes)), None)
+        ix = {"enun": col("enunciado"), "obj": col("objetivo"), "met": col("metrica"), "qim": col("indicadorqim"), "con": col("conclusao"),
+              "resp": col("responsavelcandidato"), "o1": col("origem1"), "f1": col("financiadorfontedareceita1"), "ta": col("termoaditivo")}
+        if ix["enun"] is None:
+            raise HTTPException(422, "A planilha do PO precisa da coluna 'Enunciado'.")
+        pega = lambda l, k: str(l[ix[k]]).strip() if ix[k] is not None and ix[k] < len(l) and l[ix[k]] not in (None, "") else ""
+        for l in g[h + 1:]:
+            cod = str(l[0] or "").strip() if l else ""
+            if not re.fullmatch(r"\d+\.\d+\.\d+", cod):
+                continue
+            re_cod, dir_cod = ".".join(cod.split(".")[:2]), cod.split(".")[0]
+            qim = pega(l, "qim")
+            m = re.match(r"\s*(\d+)\s*[.\-:]\s*(.+)", qim)
+            if m:
+                saida[("cg", m.group(1))] = {"tipo": "cg", "codigo": m.group(1), "descricao": m.group(2).strip(), "meta": "Indicador QIM " + m.group(1)}
+            fom = [x for x in (pega(l, "o1"), pega(l, "f1")) if x and _n(x) != "naoseaplica"]
+            if pega(l, "ta"):
+                fom.append("TA: " + pega(l, "ta"))
+            saida[("po", cod)] = {"tipo": "po", "codigo": cod, "descricao": pega(l, "enun"), "meta": pega(l, "met"), "objetivo": pega(l, "obj"),
+                                  "indicador": m.group(1) if m else "", "conclusao": pega(l, "con"), "responsavel": pega(l, "resp"), "fomento": " | ".join(fom)}
+            for tipo, k in (("re", re_cod), ("diretriz", dir_cod)):
+                if (tipo, k) in titulos:
+                    saida.setdefault((tipo, k), {"tipo": tipo, "codigo": k, "descricao": titulos[(tipo, k)], "lider": lider if tipo == "re" else ""})
+    if not achou:
+        return None
+    return list(saida.values())
 
 
 def _pega(linha: dict, campo: str):
@@ -265,8 +322,13 @@ def _preparar_salarios(c: sqlite3.Connection, linhas: list[dict]) -> dict:
             "aviso": "As faixas que não constam no arquivo saem da tabela." if ausentes else "", "_dados": novos}
 
 
-_TIPOS_ESTRATEGIA = {"po": "po", "plano_de_operacao": "po", "plano_operacao": "po", "rc": "po", "resultado-chave": "po", "resultado_chave": "po", "okr": "po",
-                     "cg": "cg", "contrato_de_gestao": "cg", "contrato_gestao": "cg", "indicador": "cg", "indicador_cg": "cg"}
+_TIPOS_ESTRATEGIA = {"po": "po", "ro": "po", "rc": "po", "plano_de_operacao": "po", "plano_operacao": "po", "resultado_operacional": "po", "resultado-chave": "po", "resultado_chave": "po", "okr": "po",
+                     "re": "re", "resultado_estrategico": "re", "diretriz": "diretriz", "direcionador": "diretriz", "direcionador_estrategico": "diretriz",
+                     "cg": "cg", "contrato_de_gestao": "cg", "contrato_gestao": "cg", "indicador": "cg", "indicador_cg": "cg", "qim": "cg"}
+
+
+def _rot(tipo: str, cod: str) -> str:
+    return f"{estrategia.ROTULO_TIPO[tipo]} {cod}"
 
 
 def _preparar_estrategia(c: sqlite3.Connection, linhas: list[dict]) -> dict:
@@ -279,35 +341,51 @@ def _preparar_estrategia(c: sqlite3.Connection, linhas: list[dict]) -> dict:
         if not (cod and desc):
             erros.append(f"Linha {n}: informe código e descrição.")
         elif not tipo:
-            erros.append(f"Linha {n} ({cod}): tipo deve ser PO (resultado-chave do Plano de Operação) ou CG (indicador do Contrato de Gestão).")
+            erros.append(f"Linha {n} ({cod}): tipo deve ser Diretriz, RE, RO (ou PO) ou CG.")
         elif (tipo, cod.upper()) in vistos:
             erros.append(f"Linha {n}: {cod} repetido.")
         else:
             vistos.add((tipo, cod.upper()))
-            novos.append({"tipo": tipo, "codigo": cod, "descricao": desc[:500], "meta": str(_pega(l, "meta") or "").strip()[:500]})
+            x = {"tipo": tipo, "codigo": cod, "descricao": desc[:500], "meta": str(_pega(l, "meta") or "").strip()[:500]}
+            x.update({k: str(_pega(l, k) or "").strip()[:1000] for k in estrategia.CAMPOS_EXTRA})
+            x["indicador"] = estrategia.numero(x["indicador"]) or x["indicador"]
+            novos.append(x)
+    # pais que o arquivo não traz e o catálogo também não tem: entram com título provisório, para a hierarquia ficar completa
+    existentes = {(k[0], estrategia.numero(k[1])) for k in atuais} | {(x["tipo"], estrategia.numero(x["codigo"])) for x in novos}
+    provisorios = []
+    for x in list(novos):
+        if x["tipo"] != "po":
+            continue
+        partes = estrategia.numero(x["codigo"]).split(".")
+        for t, k in (("re", ".".join(partes[:2])), ("diretriz", partes[0])):
+            if len(partes) >= 3 and k and (t, k) not in existentes:
+                existentes.add((t, k))
+                provisorios.append({"tipo": t, "codigo": k, "descricao": f"{'RE' if t == 're' else 'Diretriz'} {k} (informe o título)", "meta": "", **{e: "" for e in estrategia.CAMPOS_EXTRA}})
+        ind = x["indicador"]
+        if ind and ("cg", ind) not in existentes:
+            existentes.add(("cg", ind))
+            provisorios.append({"tipo": "cg", "codigo": ind, "descricao": f"Indicador {ind} (informe o nome)", "meta": "", **{e: "" for e in estrategia.CAMPOS_EXTRA}})
+    novos += provisorios
     mudancas, iguais = [], 0
     for x in novos:
         a = atuais.get((x["tipo"], x["codigo"].upper()))
-        rot = f"{'PO' if x['tipo'] == 'po' else 'CG'} {x['codigo']} | {x['descricao'][:80]}"
+        rot = f"{_rot(x['tipo'], x['codigo'])} | {x['descricao'][:80]}"
         if not a:
             mudancas.append({"item": rot, "situacao": "novo", "antes": "", "depois": x["meta"]})
-        elif a["descricao"] != x["descricao"] or a["meta"] != x["meta"]:
+        elif a["descricao"] != x["descricao"] or (x["meta"] and a["meta"] != x["meta"]) or any(x[k] and a[k] != x[k] for k in estrategia.CAMPOS_EXTRA):
             mudancas.append({"item": rot, "situacao": "alterado", "antes": f"{a['descricao'][:60]} | {a['meta'][:40]}", "depois": f"{x['descricao'][:60]} | {x['meta'][:40]}"})
         else:
             iguais += 1
-    ausentes = [f"{'PO' if k[0] == 'po' else 'CG'} {r['codigo']}" for k, r in atuais.items() if k not in vistos]
+    ausentes = [_rot(k[0], r["codigo"]) for k, r in atuais.items() if k not in vistos]
     return {"lidos": len(novos), "novos": sum(1 for m in mudancas if m["situacao"] == "novo"), "alterados": sum(1 for m in mudancas if m["situacao"] == "alterado"),
             "iguais": iguais, "ausentes": ausentes, "mudancas": mudancas, "erros": erros,
-            "aviso": "Os itens que não constam no arquivo continuam no catálogo e nas entregas já vinculadas." if ausentes else "", "_dados": novos, "_atuais": atuais}
+            "aviso": ("Os itens que não constam no arquivo continuam no catálogo e nos vínculos já feitos. " if ausentes else "")
+                     + (f"{len(provisorios)} item(ns) acima do RO não vieram no arquivo e entram com título provisório; ajuste-os em um novo arquivo." if provisorios else ""),
+            "_dados": novos, "_atuais": atuais}
 
 
 def _aplicar_estrategia(c: sqlite3.Connection, p: dict) -> None:
-    for x in p["_dados"]:
-        a = p["_atuais"].get((x["tipo"], x["codigo"].upper()))
-        if a:
-            c.execute("UPDATE estrategia SET codigo=?, descricao=?, meta=? WHERE id=?", (x["codigo"], x["descricao"], x["meta"], a["id"]))
-        else:
-            c.execute("INSERT INTO estrategia (tipo, codigo, descricao, meta) VALUES (?,?,?,?)", (x["tipo"], x["codigo"], x["descricao"], x["meta"]))
+    estrategia.gravar(c, p["_dados"])
 
 
 PREPARAR = {"estrategia": _preparar_estrategia, "viagens": _preparar_viagens, "equipamentos": _preparar_equipamentos, "salarios": _preparar_salarios}
@@ -351,7 +429,7 @@ def modelo(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = De
     elif tipo == "equipamentos":
         linhas = [[i[k] for k in cols] for i in equipamentos.catalogo()]
     elif tipo == "estrategia":
-        linhas = [[r[k] if k != "tipo" else r["tipo"].upper() for k in cols] for r in c.execute("SELECT * FROM estrategia ORDER BY tipo DESC, codigo")]
+        linhas = [[r[k] if k != "tipo" else estrategia.ROTULO_TIPO[r["tipo"]] for k in cols] for r in estrategia.arvore(c)]
     else:
         linhas = [[f[k] for k in cols] for f in pessoal.tabela_salarial()]
     wb = openpyxl.Workbook()
@@ -366,9 +444,11 @@ def modelo(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = De
         ws.column_dimensions[ws.cell(1, i).column_letter].width = 60 if k == "nome" else 26
     if tipo == "estrategia":
         aj = wb.create_sheet("Como preencher")
-        for l in (["Preencha a aba da tabela e importe o arquivo."], ["Tipo: PO para resultado-chave do Plano de Operação; CG para indicador do Contrato de Gestão."],
-                  ["Código: como o item é conhecido (ex.: RC 6.1.2 ou Indicador 10). É a chave: o mesmo código atualiza o item."],
-                  ["Descrição: o enunciado do resultado-chave ou do indicador."], ["Meta ou critério: opcional (ex.: 900 alunos capacitados até o 3º trimestre)."]):
+        for l in (["Preencha a aba da tabela e importe o arquivo. Também é aceita a planilha do ateliê do PO (coluna 'ID RO'), uma aba por RE."],
+                  ["Tipo: Diretriz (direcionador estratégico), RE (resultado estratégico), RO (resultado operacional do Plano de Operação) ou CG (indicador do Contrato de Gestão)."],
+                  ["Código: a numeração do PO (Diretriz 7, RE 7.1, RO 7.1.1) ou o número do indicador do CG (ex.: 10). É a chave: o mesmo código atualiza o item."],
+                  ["A hierarquia vem do código: o RO 7.1.1 fica sob o RE 7.1 e a Diretriz 7."],
+                  ["Indicador do CG: no RO, o código do indicador que ele move (ex.: 10). Os demais campos são opcionais."]):
             aj.append(l)
         aj.column_dimensions["A"].width = 120
     buf = io.BytesIO()
@@ -380,7 +460,8 @@ def modelo(tipo: str, _: dict = Depends(exige_admin), c: sqlite3.Connection = De
 @router.post("/{tipo}/importar")
 async def importar(tipo: str, simular: bool = True, arquivo: UploadFile = File(...), u: dict = Depends(exige_admin)):
     _tabela(tipo)
-    linhas = _ler(arquivo.filename or "", await arquivo.read())
+    conteudo = await arquivo.read()
+    linhas = (_ler_po(arquivo.filename or "", conteudo) if tipo == "estrategia" else None) or _ler(arquivo.filename or "", conteudo)
     with tx() as c:
         p = PREPARAR[tipo](c, linhas)
         limpo = {k: v for k, v in p.items() if not k.startswith("_")}
