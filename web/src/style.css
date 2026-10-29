@@ -325,3 +325,15 @@ form.renomear{display:inline-flex;gap:6px;align-items:center;margin-left:6px}for
 .mes-valor{font-size:1.05rem;font-weight:700;margin:2px 0}
 .mes-info{font-size:.78rem;line-height:1.35}
 .mes-dest{font-size:.74rem;color:var(--cinza);margin-top:4px;overflow-wrap:anywhere}
+
+.graf-viag{display:flex;flex-direction:column}
+.graf-cab{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}.graf-cab h3{margin:0}
+.graf-corpo{flex:1;min-height:320px;display:grid;grid-template-columns:repeat(12,1fr);gap:6px;padding-top:22px;
+  background:repeating-linear-gradient(to top,transparent 0,transparent calc(25% - 1px),#e6ebf2 calc(25% - 1px),#e6ebf2 25%);background-clip:content-box}
+.gm{display:flex;flex-direction:column;min-width:0}
+.gbars{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:2px;border-bottom:2px solid var(--bd)}
+.gb{position:relative;display:block;width:42%;max-width:26px;background:var(--laranja);border-radius:3px 3px 0 0;min-height:0}
+.gb.ref{background:var(--cinza-claro);width:30%}
+.gb em{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-style:normal;font-size:.66rem;color:var(--cinza);margin-bottom:3px;white-space:nowrap}
+.gm.pico .gb em{color:var(--azul);font-weight:700}.gm.pico small{color:var(--azul);font-weight:700}
+.gm small{text-align:center;padding-top:5px;color:var(--mudo);font-size:.76rem}

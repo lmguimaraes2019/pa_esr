@@ -245,6 +245,7 @@ export default function Viagens({ admin, irProjeto }) {
   if (!dados || !prem) return <p>Carregando…</p>;
   const t = dados.totais;
   const max = Math.max(1, ...dados.mensal.map((m) => Math.max(m.plano, m.ref)));
+  const pico = Math.max(...dados.mensal.map((m) => m.plano));
   const cal = dados.mensal.map((m, i) => {
     const vs = dados.viagens.filter((v) => v.mes === i + 1);
     const destinos = [...new Set(vs.map((v) => v.destino))];
@@ -261,12 +262,18 @@ export default function Viagens({ admin, irProjeto }) {
         <Kpi rotulo="Executado em 2026" valor={fmt(t.executado)} tom="f26" />
       </div>
       <div className="viag-topo">
-        <section className="cartao"><h3>Custo mensal das viagens</h3>
-          <div className="legenda"><span><i style={{ background: "var(--laranja)" }} />Plano 2027</span><span><i style={{ background: "var(--cinza-claro)" }} />Planilha 2026</span></div>
-          <div className="meses alto">{dados.mensal.map((m) => (
-            <div key={m.mes} title={`${m.mes}: ${fmt(m.plano)} (2026: ${fmt(m.ref)})`}><small className="val">{m.plano ? fmtN(m.plano / 1000) : ""}</small><div className="col" style={{ gap: 2 }}>
-              <span style={{ height: (m.ref / max) * 100 + "%", background: "var(--cinza-claro)" }} /><span style={{ height: (m.plano / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
-          <p className="mudo" style={{ margin: "6px 0 0" }}>Valores em R$ mil.</p>
+        <section className="cartao graf-viag">
+          <div className="graf-cab"><h3>Custo mensal das viagens</h3>
+            <div className="legenda" style={{ margin: 0 }}><span><i style={{ background: "var(--laranja)" }} />Plano 2027</span><span><i style={{ background: "var(--cinza-claro)" }} />Planilha 2026</span></div></div>
+          <div className="graf-corpo">{dados.mensal.map((m, i) => (
+            <div key={m.mes} className={"gm" + (m.plano === pico ? " pico" : "")} title={`${m.mes}: ${fmt(m.plano)} (2026: ${fmt(m.ref)})`}>
+              <div className="gbars">
+                <span className="gb ref" style={{ height: (m.ref / max) * 100 + "%" }} />
+                <span className="gb" style={{ height: (m.plano / max) * 100 + "%" }}>{m.plano > 0 && <em>{fmtN(m.plano / 1000)}</em>}</span>
+              </div>
+              <small>{m.mes.slice(0, 3)}</small>
+            </div>))}</div>
+          <p className="mudo" style={{ margin: "8px 0 0" }}>Valores em R$ mil. O mês de maior custo fica com o valor e o nome em destaque.</p>
         </section>
         <section className="cartao"><h3>Calendário de 2027</h3>
           <div className="calendario">{cal.map((m) => (
@@ -275,7 +282,7 @@ export default function Viagens({ admin, irProjeto }) {
               {m.n ? <>
                 <div className="mes-valor">{fmt(m.plano)}</div>
                 <div className="mes-info">{m.n} viage{m.n === 1 ? "m" : "ns"}{m.int > 0 && <> ({m.nac} nac. e {m.int} int.)</>}</div>
-                <div className="mes-info mudo">{m.ref ? <>2026: {fmt(m.ref)}</> : "sem referência em 2026"}</div>
+                <div className="mes-info mudo">{!m.ref ? "sem referência em 2026" : Math.abs(m.plano - m.ref) < 1 ? "igual à planilha de 2026" : <>2026: {fmt(m.ref)} ({m.plano > m.ref ? "+" : "-"}{fmtN(Math.abs(m.plano - m.ref))})</>}</div>
                 <div className="mes-dest">{m.destinos.slice(0, 3).join(", ")}{m.destinos.length > 3 && ` e mais ${m.destinos.length - 3}`}</div>
               </> : <div className="mes-info mudo">Sem viagens</div>}
             </div>))}</div>
