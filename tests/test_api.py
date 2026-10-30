@@ -372,8 +372,11 @@ def test_editar_tipo_e_excluir_orcamento(client):
     assert client.patch(f"/api/projetos/{orc}", json={"tipo": "xx"}).status_code == 422
     assert client.patch(f"/api/projetos/{orc}", json={"tipo": "despesa"}).status_code == 200 and tipo() == "despesa"
     client.post("/api/receitas", json={"orcamento": orc, "fonte": "Parcerias", "valor": 1000})
+    from app.db import tx
+    with tx() as c:      # sobra de outro ciclo também não pode travar a exclusão
+        c.execute("INSERT INTO receitas (ciclo, orcamento, fonte) VALUES (2026, ?, 'Antiga')", (orc,))
     d = client.delete(f"/api/projetos/{orc}")
-    assert d.status_code == 200 and d.json()["removidos"]["receitas"] == 1
+    assert d.status_code == 200 and d.json()["removidos"]["receitas"] == 2
     assert not [p for p in client.get("/api/projetos").json() if p["orcamento"] == orc]
     # orçamento que existia em 2026 não pode ser excluído
     existente = next(p["orcamento"] for p in client.get("/api/projetos").json() if not p["novo"])

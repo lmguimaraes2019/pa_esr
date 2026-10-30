@@ -375,12 +375,11 @@ def excluir_projeto(orcamento: str, u: dict = Depends(usuario_liberado)):
                                      "para tirá-lo do plano de 2027, exclua as linhas dele.")
         cont = {}
         c.execute("DELETE FROM entrega_estrategia WHERE entrega_id IN (SELECT id FROM entregas WHERE orcamento=?)", (orcamento,))
-        for tabela, filtro in (("entregas", "orcamento=?"), ("linhas", "ciclo=2027 AND orcamento=?"), ("receitas", "ciclo=2027 AND orcamento=?"), ("viagens", "orcamento=?"),
-                               ("eventos", "orcamento=?"), ("headcount", "orcamento=?")):
-            cont[tabela] = c.execute(f"DELETE FROM {tabela} WHERE {filtro}", (orcamento,)).rowcount
-        c.execute("DELETE FROM projeto_estrategia WHERE orcamento=?", (orcamento,))
+        # tudo o que aponta para o orçamento, de qualquer ciclo (inclui tabelas futuras), exceto a própria tabela de projetos
+        for (tabela,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'projetos'").fetchall():
+            if any(f["table"] == "projetos" for f in c.execute(f"PRAGMA foreign_key_list({tabela})").fetchall()):
+                cont[tabela] = c.execute(f"DELETE FROM {tabela} WHERE orcamento=?", (orcamento,)).rowcount
         c.execute("UPDATE projetos SET replicado_para='', replicado_nome='', replicado_origem='', replicado_em='', replicado_por='' WHERE replicado_para=?", (orcamento,))
-        c.execute("DELETE FROM user_projetos WHERE orcamento=?", (orcamento,))
         c.execute("DELETE FROM projetos WHERE orcamento=?", (orcamento,))
         audit(c, u["login"], "excluiu orçamento novo", orcamento, detalhe=f"{p['descricao']} ({p['tipo']}): {cont}")
     return {"ok": True, "removidos": cont}
