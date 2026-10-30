@@ -753,3 +753,25 @@ def test_relatorio_so_para_admin(client):
     entrar(client)
     gestor_liberado(client)
     assert client.get("/api/export/relatorio").status_code == 403
+
+
+def test_reparo_de_referencias_para_estrategia_v1(tmp_path, monkeypatch):
+    """Base antiga com FK para estrategia_v1: o reparo recria as tabelas e a exclusão de projeto volta a funcionar."""
+    import sqlite3
+    from app import config, db
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "x.db")
+    db.init_db()
+    c = sqlite3.connect(config.DB_PATH)
+    c.execute("PRAGMA foreign_keys=OFF")
+    c.execute("INSERT INTO projetos (orcamento, descricao, origem, gerente, novo) VALUES ('N27-009','x','FNDCT','g',1)")
+    c.execute("INSERT INTO estrategia (tipo, codigo, descricao) VALUES ('po','ZZ9','a')")
+    c.execute("INSERT INTO projeto_estrategia SELECT 'N27-009', id FROM estrategia WHERE codigo='ZZ9'")
+    c.execute("PRAGMA writable_schema=ON")
+    c.execute("UPDATE sqlite_master SET sql=replace(sql,'estrategia(id)','estrategia_v1(id)') WHERE name IN ('projeto_estrategia','entrega_estrategia')")
+    c.execute("PRAGMA writable_schema=OFF"); c.commit(); c.close()
+    db.init_db()
+    c = db.connect()
+    assert not c.execute("SELECT 1 FROM sqlite_master WHERE sql LIKE '%estrategia_v1%'").fetchone()
+    assert c.execute("SELECT COUNT(*) FROM projeto_estrategia").fetchone()[0] == 1
+    c.execute("DELETE FROM projeto_estrategia WHERE orcamento='N27-009'")
+    c.execute("DELETE FROM projetos WHERE orcamento='N27-009'")

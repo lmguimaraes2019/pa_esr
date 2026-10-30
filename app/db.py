@@ -291,6 +291,7 @@ def _migrar_estrategia() -> None:
             return
         conn.commit()
         conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA legacy_alter_table = ON")      # sem isso o SQLite reescreve as chaves estrangeiras para estrategia_v1
         conn.executescript("ALTER TABLE estrategia RENAME TO estrategia_v1;")
         conn.executescript(SCHEMA)      # cria a tabela nova (as demais já existem)
         conn.execute("INSERT INTO estrategia (id, tipo, codigo, descricao, meta) SELECT id, tipo, codigo, descricao, meta FROM estrategia_v1")
@@ -300,8 +301,31 @@ def _migrar_estrategia() -> None:
         conn.close()
 
 
+def _reparar_referencias_v1() -> None:
+    """Bases que passaram pela migração antiga ficaram com chaves estrangeiras apontando para a tabela estrategia_v1 (já apagada),
+    o que quebrava qualquer DELETE em projetos. Recria as tabelas afetadas apontando para 'estrategia', preservando os dados."""
+    conn = connect()
+    try:
+        ruins = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%estrategia_v1%'")]
+        if not ruins:
+            return
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA legacy_alter_table = ON")
+        for t in ruins:
+            conn.executescript(f"ALTER TABLE {t} RENAME TO {t}__velha;")
+        conn.executescript(SCHEMA)      # recria as tabelas corretas
+        for t in ruins:
+            conn.execute(f"INSERT OR IGNORE INTO {t} SELECT * FROM {t}__velha")
+            conn.executescript(f"DROP TABLE {t}__velha;")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     _migrar_estrategia()
+    _reparar_referencias_v1()
     with tx() as c:
         nova = not c.execute("SELECT 1 FROM sqlite_master WHERE name='user_gerentes'").fetchone()
         c.executescript(SCHEMA)
