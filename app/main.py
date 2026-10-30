@@ -1,6 +1,7 @@
 """Montagem da aplicação: API em /api, interface React servida como arquivos estáticos."""
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
@@ -49,6 +50,13 @@ async def protecoes(request: Request, call_next):
     if request.url.path.startswith("/api"):
         resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@app.exception_handler(Exception)
+async def erro_geral(request: Request, exc: Exception):
+    """Falha não prevista: registra no log do servidor e devolve o motivo em JSON para a tela mostrar."""
+    logging.getLogger("uvicorn.error").exception("Erro em %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": f"Falha interna ({type(exc).__name__}): {exc}"}, status_code=500)
 
 
 app.include_router(router)
