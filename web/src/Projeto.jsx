@@ -42,9 +42,10 @@ function EditarLinha({ l, contas, onSalvar, onFechar }) {
 function NovaLinha({ contas, onCriar, onFechar, inicial, edts = [], tarefas = [] }) {
   const [f, setF] = useState({ edt: "", tarefa: "", conta: "", total: "", ...(inicial || {}) });
   const [erro, setErro] = useState("");
+  const deViagens = (contas.find((c) => c.codigo === f.conta)?.grupo || "").startsWith("Viagens");
   const salvar = async (e) => {
     e.preventDefault();
-    const total = lerNumero(f.total);
+    const total = deViagens && !String(f.total).trim() ? 0 : lerNumero(f.total);
     if (Number.isNaN(total) || total < 0) return setErro("Informe um valor anual válido.");
     const base = Math.floor((total / 12) * 100) / 100;
     const meses = Array(12).fill(base);
@@ -53,7 +54,7 @@ function NovaLinha({ contas, onCriar, onFechar, inicial, edts = [], tarefas = []
   };
   return (
     <form className="cartao" id="form-nova" onSubmit={salvar}>
-      <h3>{inicial?.tarefa ? `Nova conta na ação "${inicial.tarefa}"` : inicial?.edt ? `Nova ação na Meta/EDT "${inicial.edt}"` : "Nova linha no plano 2027"}</h3>
+      <h3>{inicial?.viagens ? "Nova ação de viagens" : inicial?.tarefa ? `Nova conta na ação "${inicial.tarefa}"` : inicial?.edt ? `Nova ação na Meta/EDT "${inicial.edt}"` : "Nova linha no plano 2027"}</h3>
       <div className="grade">
         <label>Meta/EDT<input list="lista-edts" value={f.edt} onChange={(e) => setF({ ...f, edt: e.target.value })} required /></label>
         <label>Ação/Tarefa<input list="lista-tarefas" autoFocus={!!inicial} value={f.tarefa} onChange={(e) => setF({ ...f, tarefa: e.target.value })} required placeholder="Existente ou nova" /></label>
@@ -63,8 +64,9 @@ function NovaLinha({ contas, onCriar, onFechar, inicial, edts = [], tarefas = []
           <option value="">Selecione…</option>
           {contas.map((c) => <option key={c.codigo} value={c.codigo}>{c.grupo} | {c.descricao}</option>)}
         </select></label>
-        <label>Valor anual (dividido em 12)<input value={f.total} onChange={(e) => setF({ ...f, total: e.target.value })} required inputMode="decimal" /></label>
+        <label>{deViagens ? "Valor anual (deixe em branco)" : "Valor anual (dividido em 12)"}<input value={f.total} onChange={(e) => setF({ ...f, total: e.target.value })} required={!deViagens} inputMode="decimal" placeholder={deViagens ? "vem da página Viagens" : ""} /></label>
       </div>
+      {deViagens && <div className="nota">Para viagens não é preciso informar valor nem detalhes aqui. Crie a ação e depois registre cada viagem na página <strong>Viagens</strong>, escolhendo este projeto e esta ação: o custo calculado lá entra automaticamente nas contas de viagens desta ação, mês a mês. Se já houver valor digitado nas contas de viagens desta ação, ele será substituído pelo plano de viagens.</div>}
       {erro && <p className="erro">{erro}</p>}
       <div className="acoes"><button className="primario">Adicionar</button><button type="button" onClick={onFechar}>Cancelar</button></div>
     </form>
@@ -139,11 +141,12 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
   const p = d.projeto;
   const [listas, setListas] = useState(null);
   const [origem, setOrigem] = useState(p.origem);
+  const [gestor, setGestor] = useState(p.gerente);
   const [nome, setNome] = useState(p.descricao);
   const [tipo, setTipo] = useState(p.tipo);
   const [msg, setMsg] = useState("");
   useEffect(() => { api("/listas").then(setListas).catch(() => {}); }, []);
-  useEffect(() => { setOrigem(p.origem); setNome(p.descricao); setTipo(p.tipo); }, [p.origem, p.descricao, p.tipo]);
+  useEffect(() => { setOrigem(p.origem); setGestor(p.gerente); setNome(p.descricao); setTipo(p.tipo); }, [p.origem, p.gerente, p.descricao, p.tipo]);
   if (!listas) return null;
   const pode = admin || p.novo;
   const salvar = async (corpo, texto) => {
@@ -160,18 +163,24 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
       <div className="grade">
         <label>Origem de recursos em 2027
           <select value={origem} onChange={(e) => setOrigem(e.target.value)}>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+        <label>Gestor em 2027
+          <select value={gestor} onChange={(e) => setGestor(e.target.value)}>{[...new Set([p.gerente, ...listas.gerentes])].map((g) => <option key={g}>{g}</option>)}</select></label>
         {pode && <label>Nome do orçamento<input value={nome} onChange={(e) => setNome(e.target.value)} /></label>}
         {pode && <label>Tipo de orçamento<select value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>}
       </div>
       <div className="acoes">
         <button className="primario" disabled={origem === p.origem} onClick={() => salvar({ origem }, `Origem de 2027 alterada para ${origem}. A de 2026 continua ${p.origem_2026}.`)}>Salvar origem</button>
+        <button className="primario" disabled={gestor === p.gerente} onClick={() => {
+          if (!admin && !window.confirm(`Passar o gestor de 2027 deste orçamento para ${gestor}?\nDepois da troca, o orçamento passa a aparecer para o novo gestor e talvez deixe de aparecer para você.`)) return;
+          salvar({ gerente: gestor }, `Gestor de 2027 alterado para ${gestor}.${p.novo ? "" : ` O de 2026 continua ${p.gerente_2026}.`}`);
+        }}>Salvar gestor</button>
         {pode && <button disabled={nome.trim() === p.descricao || nome.trim().length < 3} onClick={() => salvar({ descricao: nome }, "Nome atualizado.")}>Salvar nome</button>}
         {pode && <button disabled={tipo === p.tipo} onClick={() => salvar({ tipo }, tipo === "receita" ? "Agora é um orçamento de receita: o total entra como resultado positivo." : "Agora é um orçamento de despesa.")}>Salvar tipo</button>}
         {p.novo && <button className="perigo-btn" onClick={excluir}>Excluir orçamento</button>}
         {msg && <span className="ok">{msg}</span>}
       </div>
       {!p.novo && admin && <p className="mudo">Este orçamento existe em 2026 e por isso não pode ser excluído. Para tirá-lo do plano de 2027, exclua as linhas dele.</p>}
-      <p className="mudo">A mudança vale só para o plano de 2027: define a origem enviada no Template do PMO e o grupo do resumo e das receitas em 2027. {p.novo ? "" : <>Em 2026 este orçamento continua em <strong>{p.origem_2026}</strong>, e os valores aprovados e executados de 2026 não mudam. </>}A alteração fica registrada no histórico.</p>
+      <p className="mudo">A mudança vale só para o plano de 2027: define a origem e o gestor enviados no Template do PMO e o grupo do resumo e das receitas em 2027. {p.novo ? "" : <>Em 2026 este orçamento continua em <strong>{p.origem_2026}</strong>, com gestor <strong>{p.gerente_2026}</strong>, e os valores aprovados e executados de 2026, o nome, o número do orçamento e o do projeto não mudam. </>}A alteração fica registrada no histórico.</p>
     </section>
   );
 }
@@ -239,7 +248,10 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
       <div className="filtros">{FILTROS.map(([k, n]) => (
         <button key={k} className={filtro === k ? "on" : ""} onClick={() => setFiltro(k)}>
           {n}{k === "ajustes" ? ` (${s.ajustada + s.nova})` : k === "mantida" ? ` (${s.mantida})` : k === "viagens" ? ` (${s.viagens})` : k === "alerta" ? ` (${t.alertas})` : ""}</button>))}</div>
-        <button className="destaque" onClick={() => abrirNova()}>+ Nova linha</button>
+        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => abrirNova({ viagens: true, edt: edtsLista.length === 1 ? edtsLista[0] : "", tarefa: "Viagens nacionais", conta: "51030504" })} title="Cria a ação sem valor; o custo vem da página Viagens">+ Ação de viagens nacionais</button>
+          <button onClick={() => abrirNova({ viagens: true, edt: edtsLista.length === 1 ? edtsLista[0] : "", tarefa: "Viagens internacionais", conta: "51030513" })} title="Cria a ação sem valor; o custo vem da página Viagens">+ Ação de viagens internacionais</button>
+          <button className="destaque" onClick={() => abrirNova()}>+ Nova linha</button></span>
       </div>
       <p className="legenda-icones"><span><Lapis /> editar a linha inteira (ou renomear a Meta/EDT e a Ação/Tarefa nos cabeçalhos)</span><span><Mais /> nova ação na Meta/EDT ou nova conta na ação</span><span className="perigo"><Lixeira /> excluir de 2027 (na linha, na ação ou na Meta/EDT inteira)</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
       <div className="rolagem">
@@ -313,6 +325,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
         <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>}{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p>
+          {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} onSalvo={carregar} />}
       </div>

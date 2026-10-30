@@ -195,7 +195,7 @@ function LigacaoOrcamento({ dados, admin, recarregar, irProjeto }) {
   const t = dados.totais;
   return (
     <>
-      <div className="nota">Quando o plano estiver pronto, "aplicar ao orçamento" calcula cada viagem e lança os valores, mês a mês, nas contas de passagens, hospedagem, diárias e transporte da tarefa escolhida em cada projeto. Essas linhas passam a vir do plano de viagens (ficam travadas na tela do orçamento) e podem ser reaplicadas sempre que o plano mudar.</div>
+      <div className="nota">Cada viagem registrada aqui já é lançada automaticamente, mês a mês, nas contas de passagens, hospedagem, diárias e transporte da ação escolhida no projeto (crie a ação no plano 2027 do projeto, sem valor, em "+ Ação de viagens nacionais"). Essas linhas ficam travadas na tela do orçamento e acompanham qualquer mudança no plano. O administrador também pode aplicar o plano de todos os projetos de uma vez, em "Aplicar ao orçamento".</div>
       <div className="kpis">
         <Kpi rotulo="Aprovado em 2026 (viagens)" valor={fmt(t.aprovado)} tom="f26" />
         <Kpi rotulo="Executado em 2026" valor={fmt(t.executado)} tom="f26" />

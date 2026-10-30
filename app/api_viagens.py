@@ -169,6 +169,7 @@ def criar(d: ViagemIn, u: dict = Depends(usuario_liberado)):
                         " orcamento, edt, tarefa, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (config.CICLO_PLANO, *_grava(c, d), u["login"]))
         audit(c, u["login"], "incluiu viagem", d.orcamento, detalhe=f"{d.origem} para {d.destino}, mês {d.mes}")
+        sync.sincronizar_viagens(c, d.orcamento or "", u["login"], True)
     return {"id": cur.lastrowid}
 
 
@@ -181,6 +182,8 @@ def editar(vid: int, d: ViagemIn, u: dict = Depends(usuario_liberado)):
                   " orcamento=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
                   (*_grava(c, d), u["login"], vid))
         audit(c, u["login"], "editou viagem", d.orcamento or v["orcamento"], detalhe=f"id {vid}: {d.origem} para {d.destino}")
+        for o in {d.orcamento or "", v["orcamento"] or ""}:      # o projeto novo recebe o valor e o antigo deixa de receber
+            sync.sincronizar_viagens(c, o, u["login"], True)
     return {"ok": True}
 
 
@@ -190,6 +193,7 @@ def excluir(vid: int, u: dict = Depends(usuario_liberado)):
         v = _viagem_do_usuario(c, u, vid)
         c.execute("DELETE FROM viagens WHERE id=?", (vid,))
         audit(c, u["login"], "excluiu viagem", v["orcamento"], detalhe=f"id {vid}: {v['origem']} para {v['destino']}")
+        sync.sincronizar_viagens(c, v["orcamento"] or "", u["login"], True)
     return {"ok": True}
 
 

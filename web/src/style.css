@@ -2,6 +2,7 @@
 :root{
   --laranja:#FF8000; --azul:#003366; --cinza:#666666; --cinza-claro:#C6C6C6;
   --bg:#F4F6F9; --card:#fff; --tx:#16202c; --mudo:#666666; --bd:#DDE2E9; --ref:#F1F3F6;
+  color-scheme:light;
   --azul-claro:#E6EDF5; --laranja-claro:#FFF1E0; --erro:#B42318; --ok:#067647; --aviso:#9A5200;
 }
 *{box-sizing:border-box}
@@ -337,3 +338,17 @@ form.renomear{display:inline-flex;gap:6px;align-items:center;margin-left:6px}for
 .gb em{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-style:normal;font-size:.66rem;color:var(--cinza);margin-bottom:3px;white-space:nowrap}
 .gm.pico .gb em{color:var(--azul);font-weight:700}.gm.pico small{color:var(--azul);font-weight:700}
 .gm small{text-align:center;padding-top:5px;color:var(--mudo);font-size:.76rem}
+
+/* Caixas de formulário com aparência estável: o fundo e a cor do texto não mudam com mouse, foco, seleção ou modo escuro do sistema */
+input,select,textarea{color-scheme:light;-webkit-text-fill-color:var(--tx);opacity:1}
+input:hover,input:focus,input:active,select:hover,select:focus,select:active,textarea:hover,textarea:focus,textarea:active{
+  background-color:#fff;color:var(--tx);-webkit-text-fill-color:var(--tx)}
+input:focus,select:focus,textarea:focus{border-color:var(--laranja)}
+select option,select optgroup{background:#fff;color:var(--tx)}
+input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{-webkit-text-fill-color:var(--tx);box-shadow:0 0 0 40px #fff inset}
+input:disabled,select:disabled,textarea:disabled{background-color:#f1f3f6;color:#475467;-webkit-text-fill-color:#475467;opacity:1;cursor:not-allowed}
+input::placeholder,textarea::placeholder{color:#8a94a3;-webkit-text-fill-color:#8a94a3;opacity:1}
+.cel:focus,.cel:hover{-webkit-text-fill-color:var(--tx)}
+.cel:hover{background-color:transparent}.cel:focus{background-color:#fff}
+.grade-edit td.alterado input:hover,.grade-edit td.alterado input:focus,.grade-edit td.alterado select:hover,.grade-edit td.alterado select:focus{background-color:#fff3d6}
+button{-webkit-text-fill-color:currentColor}

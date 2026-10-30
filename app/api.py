@@ -328,6 +328,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
             FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]), "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
+             "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
              "total_2027": _arred(r["t_plano"]) if r["tipo"] != "receita" else 0.0,
@@ -394,9 +395,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             if u["perfil"] != "admin":
                 raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
             campos["contingenciado"] = int(campos["contingenciado"])
-        if u["perfil"] != "admin" and ("n_projeto" in campos or "gerente" in campos
-                                       or ("descricao" in campos and not p["novo"])):
-            raise HTTPException(403, "Apenas o administrador altera o Nº do Projeto, o gerente e o nome de orçamentos existentes.")
+        if u["perfil"] != "admin" and ("n_projeto" in campos or ("descricao" in campos and not p["novo"])):
+            raise HTTPException(403, "Apenas o administrador altera o Nº do Projeto e o nome de orçamentos existentes.")
         if "tipo" in campos and u["perfil"] != "admin" and not p["novo"]:
             raise HTTPException(403, "Apenas o administrador altera o tipo de um orçamento que já existia em 2026.")
         if "origem" in campos or "gerente" in campos:
@@ -413,6 +413,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             campos["origem_2027"] = campos.pop("origem")
             if p["novo"]:
                 campos["origem"] = campos["origem_2027"]
+        if "gerente" in campos and not p["novo"] and not p["gerente_2026"]:
+            campos["gerente_2026"] = p["gerente"]      # o gestor de 2026 fica guardado; a mudança vale só para 2027
         if campos:
             c.execute(f"UPDATE projetos SET {', '.join(k + '=?' for k in campos)} WHERE orcamento=?", (*campos.values(), orcamento))
             antes = {k: p[k] for k in campos if k in p.keys()}
@@ -465,7 +467,8 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"]}
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                      "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},
         "linhas": linhas, "passado": passado,

@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS projetos (
     original_2026 REAL NOT NULL DEFAULT 0,
     novo INTEGER NOT NULL DEFAULT 0,
     tipo TEXT NOT NULL DEFAULT 'despesa',
-    origem_2027 TEXT NOT NULL DEFAULT ''
+    origem_2027 TEXT NOT NULL DEFAULT '',
+    gerente_2026 TEXT NOT NULL DEFAULT ''     -- gestor de 2026; a coluna "gerente" passa a ser o gestor vigente em 2027
 );
 
 CREATE TABLE IF NOT EXISTS user_gerentes (
@@ -340,6 +341,9 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
         if "detalhe" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: descrição do projeto escrita pelo gestor
             c.execute("ALTER TABLE projetos ADD COLUMN detalhe TEXT NOT NULL DEFAULT ''")
+        if "gerente_2026" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: gestor de 2027 editável, o de 2026 fica guardado
+            c.execute("ALTER TABLE projetos ADD COLUMN gerente_2026 TEXT NOT NULL DEFAULT ''")
+        c.execute("UPDATE projetos SET gerente_2026=gerente WHERE gerente_2026='' AND novo=0")
         if "origem_2027" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:   # migração: origem de recursos só do plano 2027
             c.execute("ALTER TABLE projetos ADD COLUMN origem_2027 TEXT NOT NULL DEFAULT ''")
         cols = {r[1] for r in c.execute("PRAGMA table_info(linhas)")}

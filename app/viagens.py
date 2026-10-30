@@ -192,20 +192,32 @@ def plano_por_linha(c: sqlite3.Connection, ciclo: int = config.CICLO_PLANO):
     return plano, pend
 
 
-def aplicar_ao_orcamento(c: sqlite3.Connection, usuario: str, simular: bool = True) -> dict:
+def aplicar_ao_orcamento(c: sqlite3.Connection, usuario: str, simular: bool = True,
+                         orcamento: str | None = None, tolerante: bool = False) -> dict:
+    """Leva o plano de viagens para as linhas do orçamento 2027.
+
+    Com `orcamento`, só aquele projeto. Com `tolerante` (uso automático, a cada alteração na página Viagens), viagens sem
+    projeto, tarifa ou tarefa existente ficam de fora em vez de bloquear tudo."""
     plano, pend = plano_por_linha(c)
+    if orcamento:
+        plano = {k: v for k, v in plano.items() if k[0] == orcamento}
+    filtro_o, args_o = (" AND orcamento=?", (orcamento,)) if orcamento else ("", ())
     tarefas = {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
-        "SELECT DISTINCT orcamento, edt, tarefa FROM viagens WHERE orcamento IS NOT NULL AND edt IS NOT NULL "
-        "AND tarefa IS NOT NULL")}
+        "SELECT DISTINCT orcamento, edt, tarefa FROM viagens WHERE ciclo=? AND orcamento IS NOT NULL AND edt IS NOT NULL "
+        "AND tarefa IS NOT NULL" + filtro_o, (config.CICLO_PLANO, *args_o))}
     tarefas |= {k[:3] for k in plano}
     tarefas |= {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
-        "SELECT DISTINCT orcamento, edt, tarefa FROM linhas WHERE ciclo=? AND fonte='viagens'", (config.CICLO_PLANO,))}
-    erros = list(pend)
+        "SELECT DISTINCT orcamento, edt, tarefa FROM linhas WHERE ciclo=? AND fonte='viagens'" + filtro_o, (config.CICLO_PLANO, *args_o))}
+    erros = [] if tolerante else list(pend)
     existentes = {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
-        "SELECT DISTINCT orcamento, edt, tarefa FROM linhas")}
+        "SELECT DISTINCT orcamento, edt, tarefa FROM linhas WHERE ciclo=?", (config.CICLO_PLANO,))}
     for t in sorted(tarefas):
         if t not in existentes:
-            erros.append(f"A tarefa {t[2]} do orçamento {t[0]} não existe no projeto.")
+            if tolerante:      # a tarefa foi excluída do projeto: esse trecho do plano espera uma tarefa nova
+                tarefas.discard(t)
+                plano = {k: v for k, v in plano.items() if k[:3] != t}
+            else:
+                erros.append(f"A tarefa {t[2]} do orçamento {t[0]} não existe no projeto.")
     if erros:
         return {"bloqueado": True, "erros": erros, "itens": [], "total_antes": 0, "total_depois": 0}
 
@@ -233,7 +245,13 @@ def aplicar_ao_orcamento(c: sqlite3.Connection, usuario: str, simular: bool = Tr
                 continue
             if atual:
                 if depois == 0 and atual["base_id"] is None:
-                    c.execute("DELETE FROM linhas WHERE id=?", (atual["id"],))
+                    outras = c.execute("SELECT COUNT(*) FROM linhas WHERE ciclo=? AND orcamento=? AND edt=? AND tarefa=? AND id<>?",
+                                       (config.CICLO_PLANO, o, edt, tarefa, atual["id"])).fetchone()[0]
+                    if outras:
+                        c.execute("DELETE FROM linhas WHERE id=?", (atual["id"],))
+                    else:      # é a única conta da ação: fica zerada e livre, para a ação continuar existindo no projeto
+                        c.execute(f"UPDATE linhas SET {', '.join(m + '=0' for m in MESES)}, fonte='manual', editada=1, "
+                                  "atualizado_por=?, atualizado_em=datetime('now') WHERE id=?", (usuario, atual["id"]))
                 else:
                     c.execute(f"UPDATE linhas SET {', '.join(m + '=?' for m in MESES)}, fonte='viagens', editada=0, "
                               "atualizado_por=?, atualizado_em=datetime('now') WHERE id=?", (*novo, usuario, atual["id"]))
@@ -241,7 +259,7 @@ def aplicar_ao_orcamento(c: sqlite3.Connection, usuario: str, simular: bool = Tr
                 c.execute(f"INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, {', '.join(MESES)}, fonte, "
                           "atualizado_por) VALUES (?,?,?,?,?,%s,'viagens',?)" % ",".join("?" for _ in MESES),
                           (config.CICLO_PLANO, o, edt, tarefa, conta, *novo, usuario))
-    if not simular:
+    if not simular and not tolerante:
         audit(c, usuario, "aplicou plano de viagens ao orçamento",
               detalhe=f"{len(itens)} linhas; de {round(total_antes, 2)} para {round(total_depois, 2)}")
     return {"bloqueado": False, "erros": [], "itens": itens, "total_antes": round(total_antes, 2),

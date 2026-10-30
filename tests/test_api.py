@@ -775,3 +775,40 @@ def test_reparo_de_referencias_para_estrategia_v1(tmp_path, monkeypatch):
     assert c.execute("SELECT COUNT(*) FROM projeto_estrategia").fetchone()[0] == 1
     c.execute("DELETE FROM projeto_estrategia WHERE orcamento='N27-009'")
     c.execute("DELETE FROM projetos WHERE orcamento='N27-009'")
+
+
+def test_viagens_lancam_valor_na_acao_do_projeto_sem_detalhes(client):
+    """A ação "Viagens nacionais" nasce vazia no projeto; o valor entra pela página Viagens e a ação sobrevive se as viagens saírem."""
+    entrar(client)
+    r0 = client.get("/api/receitas").json()
+    orc = client.post("/api/projetos", json={"descricao": "Projeto com viagens", "origem": r0["origens"][0], "gerente": r0["gerentes"][0]}).json()["orcamento"]
+    vazia = {"edt": "Meta 1", "tarefa": "Viagens nacionais", "conta_codigo": "51030504", "meses": [0] * 12}
+    assert client.post(f"/api/projetos/{orc}/linhas", json=vazia).status_code == 201
+    t = next(x for x in client.get("/api/viagens").json()["opcoes"]["tarifas"] if x["tipo"] == "nac")
+    corpo = {"tipo": "nac", "mes": 3, "origem": t["origem"], "destino": t["destino"], "n_viagens": 2, "dias": 3, "pernoites": None,
+             "objetivo": "teste", "area": "", "orcamento": orc, "edt": "Meta 1", "tarefa": "Viagens nacionais"}
+    vid = client.post("/api/viagens", json=corpo)
+    assert vid.status_code == 201, vid.text
+    linhas = client.get(f"/api/projetos/{orc}").json()["linhas"]
+    assert sum(l["total"] for l in linhas) > 0 and all(l["fonte"] == "viagens" for l in linhas if l["total"] > 0)
+    assert client.put(f"/api/viagens/{vid.json()['id']}", json={**corpo, "n_viagens": 4}).status_code == 200
+    dobro = sum(l["total"] for l in client.get(f"/api/projetos/{orc}").json()["linhas"])
+    assert dobro > sum(l["total"] for l in linhas)
+    assert client.delete(f"/api/viagens/{vid.json()['id']}").status_code == 200
+    depois = client.get(f"/api/projetos/{orc}").json()["linhas"]
+    assert depois and sum(l["total"] for l in depois) == 0          # a ação continua no projeto, zerada
+    assert all(l["tarefa"] == "Viagens nacionais" for l in depois)
+
+
+def test_gestor_de_2027_editavel_e_2026_preservado(client):
+    entrar(client)
+    r0 = client.get("/api/receitas").json()
+    p = next(x for x in client.get("/api/projetos").json() if not x["novo"])
+    antigo = p["gerente"]
+    outro = next(g for g in r0["gerentes"] if g != antigo)
+    assert client.patch(f"/api/projetos/{p['orcamento']}", json={"gerente": outro}).status_code == 200
+    d = client.get(f"/api/projetos/{p['orcamento']}").json()["projeto"]
+    assert d["gerente"] == outro and d["gerente_2026"] == antigo and d["descricao"] == p["descricao"] and d["n_projeto"] == p["n_projeto"]
+    assert client.patch(f"/api/projetos/{p['orcamento']}", json={"gerente": "Fulano Inexistente"}).status_code == 422
+    assert client.patch(f"/api/projetos/{p['orcamento']}", json={"gerente": antigo}).status_code == 200
+    assert client.get(f"/api/projetos/{p['orcamento']}").json()["projeto"]["gerente_2026"] == antigo

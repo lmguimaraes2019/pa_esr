@@ -86,11 +86,25 @@ def sincronizar(c: sqlite3.Connection, orcamento: str, usuario: str) -> None:
         c.execute(f"INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, {', '.join(MESES)}, fonte, atualizado_por) "
                   f"VALUES (?,?,?,?,?,{','.join('?' for _ in MESES)},?,?)",
                   (config.CICLO_PLANO, orcamento, edt, tarefa, conta, *meses, fonte, usuario))
+    sincronizar_viagens(c, orcamento, usuario)
+
+
+def sincronizar_viagens(c: sqlite3.Connection, orcamento: str, usuario: str, forcar: bool = False) -> None:
+    """Lança no orçamento do projeto, na tarefa escolhida em cada viagem, os custos calculados na página Viagens.
+
+    Alterar uma viagem sempre atualiza o projeto (forcar). Já as mudanças gerais (tarifas, câmbio, eventos, headcount) só
+    atualizam projetos que já recebem valores de viagens; os demais esperam o administrador aplicar o plano."""
+    if not orcamento:
+        return
+    if not forcar and not c.execute("SELECT 1 FROM linhas WHERE ciclo=? AND orcamento=? AND fonte='viagens' LIMIT 1",
+                                    (config.CICLO_PLANO, orcamento)).fetchone():
+        return
+    vg.aplicar_ao_orcamento(c, usuario, False, orcamento=orcamento, tolerante=True)
 
 
 def sincronizar_todos(c: sqlite3.Connection, usuario: str = "sistema") -> int:
     ids = {r[0] for r in c.execute("SELECT orcamento FROM eventos UNION SELECT orcamento FROM headcount")}
-    ids |= {r[0] for r in c.execute("SELECT DISTINCT orcamento FROM linhas WHERE fonte IN ('eventos','headcount')")}
+    ids |= {r[0] for r in c.execute("SELECT DISTINCT orcamento FROM linhas WHERE fonte IN ('eventos','headcount','viagens')")}
     for o in sorted(ids):
         sincronizar(c, o, usuario)
     return len(ids)
