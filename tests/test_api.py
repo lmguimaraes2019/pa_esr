@@ -284,10 +284,17 @@ def test_eventos_calculam_viagem(client):
                                                   "pessoas": ["Ana", "Bia"], "justificativa": "Divulgação"})
     assert r2.json()["completo"] is True
     p = client.get(f"/api/projetos/{orc}").json()
-    bloq = [x for x in p["linhas"] if x["fonte"] == "eventos"]
+    bloq = [x for x in p["linhas"] if x["fonte"] in ("eventos", "viagens")]
     assert abs(sum(x["total"] for x in bloq) - d["total"]) < 0.05 and any(x["conta_codigo"] == "51040104" for x in bloq)
+    assert sum(x["total"] for x in bloq if x["fonte"] == "eventos") == 2000      # só a inscrição; a viagem vem da aba Viagens
+    # a viagem do evento aparece na aba Viagens, ligada ao evento, e não pode ser alterada por lá
+    vs = [v for v in client.get("/api/viagens").json()["viagens"] if v["evento_id"] == d["id"]]
+    assert len(vs) == 1 and vs[0]["n_viagens"] == 2 and vs[0]["orcamento"] == orc and abs(vs[0]["custo"]["total"] - d["viagem"]["total"]) < 0.05
+    assert client.delete(f"/api/viagens/{vs[0]['id']}").status_code == 409
     assert client.get("/api/eventos").json()["totais"]["eventos"] == 1
     assert client.delete(f"/api/eventos/{d['id']}").status_code == 200
+    assert not [v for v in client.get("/api/viagens").json()["viagens"] if v["evento_id"] == d["id"]]
+    assert not [x for x in client.get(f"/api/projetos/{orc}").json()["linhas"] if x["fonte"] in ("eventos", "viagens")]
 
 
 def test_planejamento_resumo_e_conclusao(client):
@@ -825,5 +832,5 @@ def test_evento_sem_tarefa_vai_para_acao_propria_e_guarda_site(client):
     assert r.status_code == 201, r.text
     assert r.json()["site"] == "https://www.congressox.com.br" and "tarefa do orçamento que recebe o valor" not in r.json()["faltando"]
     linhas = client.get(f"/api/projetos/{orc}").json()["linhas"]
-    assert linhas and all(l["fonte"] == "eventos" and l["edt"] == "Eventos" for l in linhas) and sum(l["total"] for l in linhas) >= 1000
+    assert linhas and all(l["fonte"] in ("eventos", "viagens") and l["edt"] == "Eventos" for l in linhas) and sum(l["total"] for l in linhas) >= 1000
     assert client.post("/api/eventos", json={**corpo, "site": "texto sem endereco"}).status_code == 422

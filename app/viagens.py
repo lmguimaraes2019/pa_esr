@@ -167,13 +167,14 @@ def importar(c: sqlite3.Connection, caminho: Path, reset: bool = False) -> dict:
 
 # ---------------------------------------------------------------- plano -> orçamento
 
-def plano_por_linha(c: sqlite3.Connection, ciclo: int = config.CICLO_PLANO):
+def plano_por_linha(c: sqlite3.Connection, ciclo: int = config.CICLO_PLANO, so_evento: bool = False):
     """Soma o plano de viagens por (orçamento, edt, tarefa, conta) e mês. Devolve (plano, pendências)."""
     tar = tarifas_map(c)
     bvezes = bagagem_vezes(c)
     plano: dict[tuple[str, str, str, str], list[float]] = {}
     pend: list[str] = []
-    for v in c.execute("SELECT * FROM viagens WHERE ciclo=? ORDER BY id", (ciclo,)):
+    filtro = " AND evento_id IS NOT NULL" if so_evento else ""
+    for v in c.execute("SELECT * FROM viagens WHERE ciclo=?" + filtro + " ORDER BY id", (ciclo,)):
         t = tar.get((v["tipo"], v["origem"], v["destino"]))
         custo = calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bvezes)
         if t is None and v["dias"] >= 1:
@@ -193,26 +194,31 @@ def plano_por_linha(c: sqlite3.Connection, ciclo: int = config.CICLO_PLANO):
 
 
 def aplicar_ao_orcamento(c: sqlite3.Connection, usuario: str, simular: bool = True,
-                         orcamento: str | None = None, tolerante: bool = False) -> dict:
+                         orcamento: str | None = None, tolerante: bool = False, so_evento: bool = False) -> dict:
     """Leva o plano de viagens para as linhas do orçamento 2027.
 
     Com `orcamento`, só aquele projeto. Com `tolerante` (uso automático, a cada alteração na página Viagens), viagens sem
     projeto, tarifa ou tarefa existente ficam de fora em vez de bloquear tudo."""
-    plano, pend = plano_por_linha(c)
+    plano, pend = plano_por_linha(c, so_evento=so_evento)
     if orcamento:
         plano = {k: v for k, v in plano.items() if k[0] == orcamento}
     filtro_o, args_o = (" AND orcamento=?", (orcamento,)) if orcamento else ("", ())
+    so_ev = " AND evento_id IS NOT NULL" if so_evento else ""
     tarefas = {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
         "SELECT DISTINCT orcamento, edt, tarefa FROM viagens WHERE ciclo=? AND orcamento IS NOT NULL AND edt IS NOT NULL "
-        "AND tarefa IS NOT NULL" + filtro_o, (config.CICLO_PLANO, *args_o))}
+        "AND tarefa IS NOT NULL" + filtro_o + so_ev, (config.CICLO_PLANO, *args_o))}
+    de_evento = {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
+        "SELECT DISTINCT orcamento, edt, tarefa FROM viagens WHERE ciclo=? AND evento_id IS NOT NULL AND edt IS NOT NULL"
+        " AND tarefa IS NOT NULL" + filtro_o, (config.CICLO_PLANO, *args_o))}
     tarefas |= {k[:3] for k in plano}
-    tarefas |= {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
-        "SELECT DISTINCT orcamento, edt, tarefa FROM linhas WHERE ciclo=? AND fonte='viagens'" + filtro_o, (config.CICLO_PLANO, *args_o))}
+    if not so_evento:
+        tarefas |= {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
+            "SELECT DISTINCT orcamento, edt, tarefa FROM linhas WHERE ciclo=? AND fonte='viagens'" + filtro_o, (config.CICLO_PLANO, *args_o))}
     erros = [] if tolerante else list(pend)
     existentes = {(r["orcamento"], r["edt"], r["tarefa"]) for r in c.execute(
         "SELECT DISTINCT orcamento, edt, tarefa FROM linhas WHERE ciclo=?", (config.CICLO_PLANO,))}
     for t in sorted(tarefas):
-        if t not in existentes:
+        if t not in existentes and t not in de_evento:      # a tarefa dos eventos nasce junto com a primeira linha
             if tolerante:      # a tarefa foi excluída do projeto: esse trecho do plano espera uma tarefa nova
                 tarefas.discard(t)
                 plano = {k: v for k, v in plano.items() if k[:3] != t}

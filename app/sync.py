@@ -55,14 +55,12 @@ def _soma(dest: dict, chave: tuple, mes: int, valor: float) -> None:
 
 def linhas_de_eventos(c: sqlite3.Connection, orcamento: str) -> dict:
     from .api_eventos import _dolar
-    tarifas, bv, dolar = vg.tarifas_map(c), vg.bagagem_vezes(c), _dolar(c)
+    dolar = _dolar(c)
     out: dict[tuple, list[float]] = {}
     padrao = destino_eventos(c, orcamento)
     for r in c.execute("SELECT * FROM eventos WHERE orcamento=?", (orcamento,)):
         edt, tarefa = (r["edt"], r["tarefa"]) if (r["edt"] and r["tarefa"]) else padrao      # eventos antigos mantêm a tarefa já escolhida
-        custo = vg.calcular(r["tipo"], tarifas.get((r["tipo"], r["origem"], r["destino"])), r["n_pessoas"], r["dias"], r["pernoites"], bv)
-        for comp, conta in vg.CONTAS[r["tipo"]].items():
-            _soma(out, (edt, tarefa, conta, "eventos"), r["mes"], custo[comp])
+        # a viagem do evento fica na aba Viagens (linha ligada ao evento) e entra no orçamento por lá; aqui só a inscrição
         insc = (r["inscricao"] or 0.0) * (dolar if r["moeda"] == "USD" else 1.0) * r["n_pessoas"]
         _soma(out, (edt, tarefa, CONTA_INSCRICAO, "eventos"), r["mes"], round(insc, 2))
     return out
@@ -86,10 +84,40 @@ def linhas_de_headcount(c: sqlite3.Connection, orcamento: str) -> dict:
     return out
 
 
+def vincular_viagens_de_eventos(c: sqlite3.Connection, orcamento: str) -> bool:
+    """Garante, na aba Viagens, uma viagem para cada evento do projeto (com os mesmos dados do evento) e remove as que ficaram órfãs.
+    Devolve True se o projeto tem alguma viagem de evento."""
+    c.execute("DELETE FROM viagens WHERE ciclo=? AND evento_id IS NOT NULL AND evento_id NOT IN (SELECT id FROM eventos)", (config.CICLO_PLANO,))
+    tarifas = vg.tarifas_map(c)
+    padrao = destino_eventos(c, orcamento)
+    ativos: list[int] = []
+    for e in c.execute("SELECT * FROM eventos WHERE orcamento=?", (orcamento,)).fetchall():
+        if (e["tipo"], e["origem"], e["destino"]) not in tarifas:
+            continue      # sem trecho com tarifa não há viagem a calcular
+        edt, tarefa = (e["edt"], e["tarefa"]) if (e["edt"] and e["tarefa"]) else padrao
+        dados = (e["tipo"], e["mes"], e["origem"], e["destino"], e["n_pessoas"], e["dias"], e["pernoites"],
+                 f"Evento: {e['nome']}"[:300], "", orcamento, edt, tarefa)
+        atual = c.execute("SELECT id FROM viagens WHERE ciclo=? AND evento_id=?", (config.CICLO_PLANO, e["id"])).fetchone()
+        if atual:
+            c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?,"
+                      " orcamento=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?", (*dados, e["atualizado_por"], atual["id"]))
+            ativos.append(atual["id"])
+        else:
+            cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area,"
+                            " orcamento, edt, tarefa, evento_id, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (config.CICLO_PLANO, *dados, e["id"], e["atualizado_por"]))
+            ativos.append(cur.lastrowid)
+    marks = ",".join("?" for _ in ativos) or "-1"
+    c.execute(f"DELETE FROM viagens WHERE ciclo=? AND orcamento=? AND evento_id IS NOT NULL AND id NOT IN ({marks})",
+              (config.CICLO_PLANO, orcamento, *ativos))
+    return bool(ativos)
+
+
 def sincronizar(c: sqlite3.Connection, orcamento: str, usuario: str) -> None:
-    """Recria no plano 2027 as linhas de eventos e de headcount do projeto."""
+    """Recria no plano 2027 as linhas de eventos e de headcount do projeto, e a viagem de cada evento na aba Viagens."""
     if not orcamento:
         return
+    com_viagem_de_evento = vincular_viagens_de_eventos(c, orcamento)
     c.execute("DELETE FROM linhas WHERE ciclo=? AND orcamento=? AND fonte IN ('eventos','headcount')", (config.CICLO_PLANO, orcamento))
     novas = {**linhas_de_eventos(c, orcamento), **linhas_de_headcount(c, orcamento)}
     existe = {r[0] for r in c.execute("SELECT codigo FROM contas")}
@@ -99,10 +127,10 @@ def sincronizar(c: sqlite3.Connection, orcamento: str, usuario: str) -> None:
         c.execute(f"INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, {', '.join(MESES)}, fonte, atualizado_por) "
                   f"VALUES (?,?,?,?,?,{','.join('?' for _ in MESES)},?,?)",
                   (config.CICLO_PLANO, orcamento, edt, tarefa, conta, *meses, fonte, usuario))
-    sincronizar_viagens(c, orcamento, usuario)
+    sincronizar_viagens(c, orcamento, usuario, forcar=com_viagem_de_evento, so_evento=com_viagem_de_evento)
 
 
-def sincronizar_viagens(c: sqlite3.Connection, orcamento: str, usuario: str, forcar: bool = False) -> None:
+def sincronizar_viagens(c: sqlite3.Connection, orcamento: str, usuario: str, forcar: bool = False, so_evento: bool = False) -> None:
     """Lança no orçamento do projeto, na tarefa escolhida em cada viagem, os custos calculados na página Viagens.
 
     Alterar uma viagem sempre atualiza o projeto (forcar). Já as mudanças gerais (tarifas, câmbio, eventos, headcount) só
@@ -112,7 +140,9 @@ def sincronizar_viagens(c: sqlite3.Connection, orcamento: str, usuario: str, for
     if not forcar and not c.execute("SELECT 1 FROM linhas WHERE ciclo=? AND orcamento=? AND fonte='viagens' LIMIT 1",
                                     (config.CICLO_PLANO, orcamento)).fetchone():
         return
-    vg.aplicar_ao_orcamento(c, usuario, False, orcamento=orcamento, tolerante=True)
+    tem_plano = c.execute("SELECT 1 FROM linhas WHERE ciclo=? AND orcamento=? AND fonte='viagens' LIMIT 1", (config.CICLO_PLANO, orcamento)).fetchone()
+    # sem viagens do plano já aplicadas, só as viagens dos eventos entram; com plano aplicado, entra tudo
+    vg.aplicar_ao_orcamento(c, usuario, False, orcamento=orcamento, tolerante=True, so_evento=so_evento and not tem_plano)
 
 
 def sincronizar_todos(c: sqlite3.Connection, usuario: str = "sistema") -> int:

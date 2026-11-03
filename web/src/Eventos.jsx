@@ -57,7 +57,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label><span>Valor por pessoa <Obrig /></span><input value={f.inscricao} inputMode="decimal" onChange={(e) => set("inscricao", e.target.value)} placeholder="0 se for gratuito" /></label>
         <label>Moeda<select value={f.moeda} onChange={(e) => set("moeda", e.target.value)}><option value="BRL">Real (R$)</option><option value="USD">Dólar (US$, câmbio {fmtN(dados.dolar)})</option></select></label>
       </div>
-      <h4 className="sub">Viagem <span className="mudo">calculada com as tarifas da aba Viagens</span></h4>
+      <h4 className="sub">Viagem <span className="mudo">calculada com as tarifas da aba Viagens e lançada lá automaticamente, sem duplicar o valor</span></h4>
       <div className="grade">
         <label><span>Origem <Obrig /></span><select value={f.origem} onChange={(e) => setF((x) => ({ ...x, origem: e.target.value, destino: "" }))}><option value="">Selecione…</option>{origens.map((o) => <option key={o}>{o}</option>)}</select></label>
         <label><span>Destino <Obrig /></span><select value={f.destino} onChange={(e) => set("destino", e.target.value)}><option value="">Selecione…</option>{destinos.map((o) => <option key={o}>{o}</option>)}</select></label>

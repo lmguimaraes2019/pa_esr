@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS viagens (
     edt TEXT,                                -- tarefa do orçamento que recebe o valor
     tarefa TEXT,
     base_id INTEGER,
+    evento_id INTEGER,                       -- viagem criada a partir de um evento (a página Eventos é a dona dos dados)
     atualizado_por TEXT NOT NULL DEFAULT '',
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -355,6 +356,8 @@ def init_db() -> None:
             for col in ("edt", "tarefa"):
                 if col not in tc:
                     c.execute(f"ALTER TABLE {tabela} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if "evento_id" not in {r[1] for r in c.execute("PRAGMA table_info(viagens)")}:      # migração: viagens vindas de eventos
+            c.execute("ALTER TABLE viagens ADD COLUMN evento_id INTEGER")
         if "site" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: site do evento
             c.execute("ALTER TABLE eventos ADD COLUMN site TEXT NOT NULL DEFAULT ''")
         rc = {r[1] for r in c.execute("PRAGMA table_info(receitas)")}      # migração: transferência intercompany
@@ -384,6 +387,11 @@ def init_db() -> None:
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))
+        if not c.execute("SELECT 1 FROM meta WHERE chave='viagens_de_eventos'").fetchone():      # uma vez: eventos já cadastrados ganham a viagem na aba Viagens
+            if c.execute("SELECT 1 FROM eventos LIMIT 1").fetchone():
+                from . import sync
+                sync.sincronizar_todos(c, "sistema")
+            c.execute("INSERT INTO meta (chave, valor) VALUES ('viagens_de_eventos', '1')")
 
 
 def semear_receitas(c: sqlite3.Connection) -> bool:

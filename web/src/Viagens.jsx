@@ -106,12 +106,12 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
                 <td>{MESES_N[v.mes - 1].slice(0, 3)}</td>
                 <td>{v.origem} <span className="mudo">para</span> {v.destino} {v.tipo === "int" && <span className="tag nova bloco">int.</span>}</td>
                 <td className="n">{v.n_viagens}</td><td className="n">{v.dias}</td>
-                <td className="obj">{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}</td>
+                <td className="obj">{v.evento_id && <span className="tag nova bloco">evento</span>}{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}</td>
                 <td>{v.orcamento ? <>{v.orcamento} | {v.projeto}<br /><span className="mudo">{v.tarefa || <span className="up">tarefa pendente</span>}</span></> : <span className="tag aviso">sem projeto</span>}</td>
                 <td><div className="custos">{COMP.filter(([k]) => v.custo[k] > 0).map(([k, n]) => <span key={k}>{n} {fmtN(v.custo[k])}</span>)}</div>{!v.tem_tarifa && <span className="erro">sem tarifa</span>}</td>
                 <td className="n"><strong>{fmtN(v.custo.total)}</strong></td>
                 <td className="n mudo">{v.ref_2026 == null ? "nova" : fmtN(v.ref_2026)}</td>
-                <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => abrir({ ...v, pernoites: v.pernoites })}>editar</button><button className="link" onClick={() => excluir(v)}>✕</button></td>
+                <td style={{ whiteSpace: "nowrap" }}>{v.evento_id ? <span className="mudo" title="Altere ou exclua o evento na página Eventos">via Eventos</span> : <><button className="link" onClick={() => abrir({ ...v, pernoites: v.pernoites })}>editar</button><button className="link" onClick={() => excluir(v)}>✕</button></>}</td>
               </tr>))}
           </tbody>
           <tfoot><tr><td colSpan={7}>Total do filtro</td><td className="n">{fmtN(total)}</td><td className="n">{fmtN(lista.reduce((a, v) => a + (v.ref_2026 || 0), 0))}</td><td /></tr></tfoot>

@@ -67,7 +67,7 @@ def _json(v: sqlite3.Row, tar, bvezes: float, base: sqlite3.Row | None, nomes: d
             "n_viagens": v["n_viagens"], "dias": v["dias"], "pernoites": v["pernoites"], "objetivo": v["objetivo"],
             "area": v["area"], "orcamento": v["orcamento"], "projeto": nomes.get(v["orcamento"] or "", ""),
             "edt": v["edt"], "tarefa": v["tarefa"], "tem_tarifa": t is not None, "custo": custo,
-            "ref_2026": ref, "atualizado_por": v["atualizado_por"]}
+            "ref_2026": ref, "evento_id": v["evento_id"], "atualizado_por": v["atualizado_por"]}
 
 
 def _visiveis(c: sqlite3.Connection, u: dict, ciclo: int):
@@ -161,6 +161,11 @@ def _viagem_do_usuario(c: sqlite3.Connection, u: dict, vid: int) -> sqlite3.Row:
     return v
 
 
+def _so_pelo_evento(v: sqlite3.Row) -> None:
+    if v["evento_id"]:
+        raise HTTPException(409, "Esta viagem pertence a um evento. Altere ou exclua o evento na página Eventos.")
+
+
 @router.post("", status_code=201)
 def criar(d: ViagemIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:
@@ -177,6 +182,7 @@ def criar(d: ViagemIn, u: dict = Depends(usuario_liberado)):
 def editar(vid: int, d: ViagemIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         v = _viagem_do_usuario(c, u, vid)
+        _so_pelo_evento(v)
         _validar(c, u, d)
         c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?,"
                   " orcamento=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
@@ -191,6 +197,7 @@ def editar(vid: int, d: ViagemIn, u: dict = Depends(usuario_liberado)):
 def excluir(vid: int, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         v = _viagem_do_usuario(c, u, vid)
+        _so_pelo_evento(v)
         c.execute("DELETE FROM viagens WHERE id=?", (vid,))
         audit(c, u["login"], "excluiu viagem", v["orcamento"], detalhe=f"id {vid}: {v['origem']} para {v['destino']}")
         sync.sincronizar_viagens(c, v["orcamento"] or "", u["login"], True)
