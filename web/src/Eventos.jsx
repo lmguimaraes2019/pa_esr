@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
-import { TarefaOrc, Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
@@ -31,7 +31,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
     try {
       await onSalvar({ orcamento: f.orcamento, nome: f.nome, local: f.local, tipo: f.tipo, mes: Number(f.mes), n_pessoas: n, dias: Number(f.dias),
         pernoites: f.pernoites === "" ? null : Number(f.pernoites), inscricao: f.inscricao === "" ? null : insc, moeda: f.moeda,
-        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "" });
+        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "", site: f.site || "" });
       onFechar();
     } catch (x) { setErro(x.message); }
   };
@@ -40,10 +40,10 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       <h3>{f.id ? "Editar evento" : "Novo evento 2027"}</h3>
       <p className="mudo">Campos com <Obrig /> são necessários para o evento ser considerado completo. Você pode salvar agora e completar depois.</p>
       <div className="grade">
-        <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "" }))} required>
+        <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
-        <TarefaOrc dados={dados} orcamento={f.orcamento} edt={f.edt} tarefa={f.tarefa} onChange={(a, b) => setF((x) => ({ ...x, edt: a, tarefa: b }))} />
         <label><span>Nome do evento <Obrig /></span><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
+        <label>Site do evento<input inputMode="url" value={f.site || ""} onChange={(e) => set("site", e.target.value)} placeholder="https://www.evento.com.br" /></label>
         <label><span>Local (cidade e país) <Obrig /></span><input value={f.local} onChange={(e) => set("local", e.target.value)} placeholder="ex.: Recife, Brasil" /></label>
         <label><span>Abrangência <Obrig /></span><select value={f.tipo} onChange={(e) => setF((x) => ({ ...x, tipo: e.target.value, origem: "", destino: "" }))}>
           <option value="nac">Nacional</option><option value="int">Internacional</option></select></label>
@@ -86,7 +86,7 @@ export default function Eventos({ irProjeto }) {
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "" };
+  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "", site: "" };
   const lista = dados.itens.filter((e) => (proj === "todos" || e.orcamento === proj) && (!soPend || !e.completo));
   const abrir = (e) => { setForm(e); setTimeout(() => document.getElementById("form-evento")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/eventos/${form.id}`, { method: "PUT", body: b }); else await api("/eventos", { method: "POST", body: b }); carregar(); };
@@ -124,9 +124,9 @@ export default function Eventos({ irProjeto }) {
             <tr key={e.id}>
               <td style={{ whiteSpace: "nowrap" }}><div className="barra-icones"><BotaoIcone icone={<Lapis />} dica="Editar o evento" onClick={() => abrir(e)} /><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir o evento" onClick={() => excluir(e)} /></div></td>
               <td>{MESES_N[e.mes - 1].slice(0, 3)}</td>
-              <td><strong>{e.nome || <span className="up">sem nome</span>}</strong> <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span><br /><span className="mudo">{e.local || "local não informado"}</span>
+              <td><strong>{e.nome || <span className="up">sem nome</span>}</strong>{e.site && <> <a href={e.site} target="_blank" rel="noopener noreferrer" title={e.site}>site</a></>} <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span><br /><span className="mudo">{e.local || "local não informado"}</span>
                 {e.justificativa && <><br /><span className="mudo" title={e.justificativa}>{e.justificativa.length > 90 ? e.justificativa.slice(0, 90) + "…" : e.justificativa}</span></>}</td>
-              <td><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button><br /><span className="mudo">{e.projeto}</span>{e.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {e.tarefa}</span></>}</td>
+              <td><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button><br /><span className="mudo">{e.projeto}</span></td>
               <td className="n">{e.n_pessoas}<br /><span className="mudo" style={{ fontSize: ".75rem" }}>{e.pessoas.join(", ")}</span></td>
               <td className="n">{e.dias}</td>
               <td className="n">{fmtN(e.inscricao_total)}{e.moeda === "USD" && <><br /><span className="mudo">US$ {fmtN(e.inscricao)} por pessoa</span></>}</td>

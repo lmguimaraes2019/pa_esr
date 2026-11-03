@@ -34,6 +34,19 @@ def sugerir_tarefa(tarefas: list[dict], tipo: str) -> dict | None:
     return achadas[0] if len(achadas) == 1 else None
 
 
+# destino dos eventos quando o projeto não tem uma tarefa de eventos reconhecível
+EDT_EVENTOS, TAREFA_EVENTOS = "Eventos", "Participação em eventos"
+
+
+def destino_eventos(c: sqlite3.Connection, orcamento: str) -> tuple[str, str]:
+    """Tarefa do projeto que recebe o custo dos eventos: a única que combina com eventos pelo nome, ou uma ação própria."""
+    lista = [{"edt": r["edt"], "tarefa": r["tarefa"]} for r in c.execute(
+        "SELECT DISTINCT edt, tarefa FROM linhas WHERE ciclo=? AND orcamento=? AND fonte NOT IN ('eventos','headcount')",
+        (config.CICLO_PLANO, orcamento))]
+    achada = sugerir_tarefa(lista, "eventos")
+    return (achada["edt"], achada["tarefa"]) if achada else (EDT_EVENTOS, TAREFA_EVENTOS)
+
+
 def _soma(dest: dict, chave: tuple, mes: int, valor: float) -> None:
     if valor:
         linha = dest.setdefault(chave, [0.0] * 12)
@@ -44,14 +57,14 @@ def linhas_de_eventos(c: sqlite3.Connection, orcamento: str) -> dict:
     from .api_eventos import _dolar
     tarifas, bv, dolar = vg.tarifas_map(c), vg.bagagem_vezes(c), _dolar(c)
     out: dict[tuple, list[float]] = {}
+    padrao = destino_eventos(c, orcamento)
     for r in c.execute("SELECT * FROM eventos WHERE orcamento=?", (orcamento,)):
-        if not (r["edt"] and r["tarefa"]):
-            continue
+        edt, tarefa = (r["edt"], r["tarefa"]) if (r["edt"] and r["tarefa"]) else padrao      # eventos antigos mantêm a tarefa já escolhida
         custo = vg.calcular(r["tipo"], tarifas.get((r["tipo"], r["origem"], r["destino"])), r["n_pessoas"], r["dias"], r["pernoites"], bv)
         for comp, conta in vg.CONTAS[r["tipo"]].items():
-            _soma(out, (r["edt"], r["tarefa"], conta, "eventos"), r["mes"], custo[comp])
+            _soma(out, (edt, tarefa, conta, "eventos"), r["mes"], custo[comp])
         insc = (r["inscricao"] or 0.0) * (dolar if r["moeda"] == "USD" else 1.0) * r["n_pessoas"]
-        _soma(out, (r["edt"], r["tarefa"], CONTA_INSCRICAO, "eventos"), r["mes"], round(insc, 2))
+        _soma(out, (edt, tarefa, CONTA_INSCRICAO, "eventos"), r["mes"], round(insc, 2))
     return out
 
 

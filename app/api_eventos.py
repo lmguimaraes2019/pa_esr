@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,6 +32,17 @@ class EventoIn(BaseModel):
     justificativa: str = Field(default="", max_length=2000)
     edt: str = Field(default="", max_length=200)
     tarefa: str = Field(default="", max_length=200)
+    site: str = Field(default="", max_length=300)
+
+    @field_validator("site")
+    @classmethod
+    def _s(cls, v):
+        v = v.strip()
+        if v and not re.match(r"^https?://", v, re.I):
+            v = "https://" + v
+        if v and (" " in v or "." not in v):
+            raise ValueError("Informe o endereço do site do evento, por exemplo https://www.evento.com.br.")
+        return v
 
     @field_validator("pessoas")
     @classmethod
@@ -56,11 +68,10 @@ def _calc(r: sqlite3.Row, tarifas: dict, bv: float, dolar: float) -> dict:
     if t is None: falta.append("trecho da viagem (origem e destino)")
     if len(pessoas) < r["n_pessoas"]: falta.append(f"nome das pessoas ({len(pessoas)} de {r['n_pessoas']})")
     if not r["justificativa"].strip(): falta.append("justificativa")
-    if not (r["edt"] and r["tarefa"]): falta.append("tarefa do orçamento que recebe o valor")
     return {"id": r["id"], "orcamento": r["orcamento"], "nome": r["nome"], "local": r["local"], "tipo": r["tipo"], "mes": r["mes"],
             "n_pessoas": r["n_pessoas"], "dias": r["dias"], "pernoites": r["pernoites"], "inscricao": r["inscricao"], "moeda": r["moeda"],
             "origem": r["origem"], "destino": r["destino"], "pessoas": pessoas, "justificativa": r["justificativa"],
-            "edt": r["edt"], "tarefa": r["tarefa"],
+            "edt": r["edt"], "tarefa": r["tarefa"], "site": r["site"],
             "atualizado_por": r["atualizado_por"], "viagem": viagem, "inscricao_unitaria_brl": round(insc_un, 2),
             "inscricao_total": insc, "total": _arred(insc + viagem["total"]), "faltando": falta, "completo": not falta}
 
@@ -114,7 +125,7 @@ def _uma(c: sqlite3.Connection, eid: int) -> dict:
 
 def _valores(d: EventoIn, u: dict):
     return (d.orcamento, d.nome.strip(), d.local.strip(), d.tipo, d.mes, d.n_pessoas, d.dias, d.pernoites, d.inscricao, d.moeda,
-            d.origem, d.destino, json.dumps(d.pessoas, ensure_ascii=False), d.justificativa.strip(), d.edt, d.tarefa, u["login"])
+            d.origem, d.destino, json.dumps(d.pessoas, ensure_ascii=False), d.justificativa.strip(), d.edt, d.tarefa, d.site, u["login"])
 
 
 def _confere_tarefa(c: sqlite3.Connection, d: EventoIn) -> None:
@@ -129,7 +140,7 @@ def criar(d: EventoIn, u: dict = Depends(usuario_liberado)):
         exige_acesso(c, u, d.orcamento)
         _confere_tarefa(c, d)
         cur = c.execute("INSERT INTO eventos (orcamento, nome, local, tipo, mes, n_pessoas, dias, pernoites, inscricao, moeda, origem, destino, "
-                        "pessoas, justificativa, edt, tarefa, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", _valores(d, u))
+                        "pessoas, justificativa, edt, tarefa, site, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", _valores(d, u))
         audit(c, u["login"], "incluiu evento", d.orcamento, detalhe=d.nome)
         sync.sincronizar(c, d.orcamento, u["login"])
         return _uma(c, cur.lastrowid)
@@ -144,7 +155,7 @@ def editar(eid: int, d: EventoIn, u: dict = Depends(usuario_liberado)):
         exige_acesso(c, u, atual["orcamento"]); exige_acesso(c, u, d.orcamento)
         _confere_tarefa(c, d)
         c.execute("UPDATE eventos SET orcamento=?, nome=?, local=?, tipo=?, mes=?, n_pessoas=?, dias=?, pernoites=?, inscricao=?, moeda=?, "
-                  "origem=?, destino=?, pessoas=?, justificativa=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
+                  "origem=?, destino=?, pessoas=?, justificativa=?, edt=?, tarefa=?, site=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
                   (*_valores(d, u), eid))
         audit(c, u["login"], "editou evento", d.orcamento, detalhe=f"id {eid}: {d.nome}")
         for o in {atual["orcamento"], d.orcamento}:

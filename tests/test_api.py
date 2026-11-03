@@ -812,3 +812,18 @@ def test_gestor_de_2027_editavel_e_2026_preservado(client):
     assert client.patch(f"/api/projetos/{p['orcamento']}", json={"gerente": "Fulano Inexistente"}).status_code == 422
     assert client.patch(f"/api/projetos/{p['orcamento']}", json={"gerente": antigo}).status_code == 200
     assert client.get(f"/api/projetos/{p['orcamento']}").json()["projeto"]["gerente_2026"] == antigo
+
+
+def test_evento_sem_tarefa_vai_para_acao_propria_e_guarda_site(client):
+    entrar(client)
+    r0 = client.get("/api/receitas").json()
+    orc = client.post("/api/projetos", json={"descricao": "Projeto com eventos", "origem": r0["origens"][0], "gerente": r0["gerentes"][0]}).json()["orcamento"]
+    t = next(x for x in client.get("/api/viagens").json()["opcoes"]["tarifas"] if x["tipo"] == "nac")
+    corpo = {"orcamento": orc, "nome": "Congresso X", "local": "Recife, Brasil", "tipo": "nac", "mes": 5, "n_pessoas": 1, "dias": 2, "inscricao": 1000,
+             "origem": t["origem"], "destino": t["destino"], "pessoas": ["Ana"], "justificativa": "teste", "site": "www.congressox.com.br"}
+    r = client.post("/api/eventos", json=corpo)
+    assert r.status_code == 201, r.text
+    assert r.json()["site"] == "https://www.congressox.com.br" and "tarefa do orçamento que recebe o valor" not in r.json()["faltando"]
+    linhas = client.get(f"/api/projetos/{orc}").json()["linhas"]
+    assert linhas and all(l["fonte"] == "eventos" and l["edt"] == "Eventos" for l in linhas) and sum(l["total"] for l in linhas) >= 1000
+    assert client.post("/api/eventos", json={**corpo, "site": "texto sem endereco"}).status_code == 422
