@@ -876,3 +876,20 @@ def test_apagar_usuario_so_considera_o_papel_de_gestor(client):
     assert r.status_code == 200 and r.json()["projetos_reatribuidos"] == n
     assert not any(p["gerente"] == ger for p in client.get("/api/usuarios").json()["projetos"])
     assert client.delete(f"/api/usuarios/{_uid('leandro')}").status_code == 400
+
+
+def test_pendencia_de_entregas_so_para_o_gestor_do_projeto(client):
+    entrar(client)
+    d = client.get("/api/usuarios").json()
+    ger = next(p["gerente"] for p in d["projetos"])
+    alheio = next(p["orcamento"] for p in d["projetos"] if p["gerente"] != ger)
+    client.post("/api/usuarios", json={"login": "coord.t4", "nome": "Coord T4", "perfil": "gestor", "gerencia": "Gerência T4", "cargo": "coordenador", "projetos": [alheio]})
+    with db.tx() as c:
+        c.execute("DELETE FROM entregas WHERE orcamento=?", (alheio,))
+        c.execute("UPDATE linhas SET m01=1000 WHERE id=(SELECT id FROM linhas WHERE ciclo=2027 AND orcamento=? LIMIT 1)", (alheio,))
+    assert client.get(f"/api/planejamento/projeto/{alheio}").json()["entregas"]["pendentes"] == 1      # para o administrador segue pendente
+    r = client.post(f"/api/usuarios/{_uid('coord.t4')}/reset-senha").json()["senha_temporaria"]
+    client.post("/api/logout")
+    entrar(client, "coord.t4", r)
+    client.post("/api/me/senha", json={"atual": r, "nova": "NovaSenha2027x"})
+    assert client.get("/api/planejamento").json()["pendencias"] == 0      # o projeto sem entregas é de outro gestor

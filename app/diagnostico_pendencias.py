@@ -25,7 +25,7 @@ def main(login: str) -> int:
     print(f"  por projeto : {', '.join(via_projeto) or '-'}")
     print()
     total = 0
-    for p in pl.resumir(c, ids).values():
+    for p in pl._situacao(c, u)["projetos"]:
         motivos = []
         for k in ("viagens", "eventos", "headcount"):
             if p[k]["pendentes"]:
