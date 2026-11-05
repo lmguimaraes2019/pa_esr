@@ -85,11 +85,11 @@ export default function Projetos({ abrir }) {
         <tbody>{grupos.map((g) => (
           <React.Fragment key={g.chave}>
             <tr className="grupo-ger" onClick={() => alterna(g.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(g.chave))} aria-expanded={!fechado[g.chave]}>
-              <td colSpan={4}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="mudo">{g.ps.length} projeto(s)</span></td>{subtotal(g.ps)}</tr>
+              <td colSpan={4}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
             {!fechado[g.chave] && g.origens.map((o) => (
               <React.Fragment key={o.chave}>
                 <tr className="grupo-org" onClick={() => alterna(o.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(o.chave))} aria-expanded={!fechado[o.chave]}>
-                  <td colSpan={4}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="mudo">{o.ps.length}</span></td>{subtotal(o.ps)}</tr>
+                  <td colSpan={4}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="contagem">{o.ps.length} {o.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(o.ps)}</tr>
                 {!fechado[o.chave] && o.ps.map(linhaProjeto)}
               </React.Fragment>))}
           </React.Fragment>))}</tbody>

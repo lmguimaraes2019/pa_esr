@@ -373,3 +373,6 @@ button{-webkit-text-fill-color:currentColor}
 .tab.clic tr.grupo-org:hover td{background:var(--azul-claro);color:var(--azul)}
 .tab.clic tr.proj td:first-child{padding-left:28px}
 .seta{display:inline-block;width:14px}
+.contagem{margin-left:8px;font-size:11px;font-weight:500;padding:1px 8px;border-radius:10px;background:rgba(0,0,0,.08);color:inherit;opacity:.85;white-space:nowrap}
+.tab.clic tr.grupo-ger .contagem{background:rgba(255,255,255,.18);color:#fff}
+.tab.clic tr.grupo-ger .up,.tab.clic tr.grupo-ger .down,.tab.clic tr.grupo-ger .mudo{color:#fff}
