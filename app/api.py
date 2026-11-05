@@ -311,6 +311,16 @@ def _linha(r: sqlite3.Row) -> dict:
             "atualizado_por": r["atualizado_por"], "atualizado_em": r["atualizado_em"]}
 
 
+def _gerencia_do(gerente: str | None, ger_de: dict[str, str]) -> str:
+    """Gerência do projeto: a do usuário que é o gerente dele; Leandro e Célia são da Diretoria Adjunta."""
+    k = _chave_nome(gerente)
+    if k in ger_de:
+        return ger_de[k]
+    if k.split(" ")[0] in ("leandro", "celia"):
+        return "Diretoria Adjunta"
+    return "Sem gerência definida"
+
+
 @router.get("/projetos")
 def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     ids = sorted(permitidos(c, u))
@@ -330,8 +340,9 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
     concluidos = {g[0] for g in c.execute(
         "SELECT DISTINCT ug.gerente FROM user_gerentes ug JOIN users us ON us.id=ug.user_id JOIN conclusoes cn ON cn.login=us.login "
         "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
+    ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
-             "planejamento_concluido": r["gerente"] in concluidos, "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
+             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],

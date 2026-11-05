@@ -363,3 +363,13 @@ button{-webkit-text-fill-color:currentColor}
 .rolagem.fixa{max-height:calc(100vh - 150px);overflow:auto}
 .rolagem.fixa .plano-grid thead th{position:sticky;top:0;z-index:5;background:var(--azul);color:#fff}
 .rolagem.fixa .plano-grid thead th.col-acoes,.rolagem.fixa .plano-grid thead th.col-conta{z-index:6}
+
+/* PA 2027 por projeto: grupos por gerência e origem de recursos, recolhíveis */
+.tab.clic tr.grupo-ger td{background:var(--azul);color:#fff;font-size:14px;cursor:pointer;border-top:2px solid #fff}
+.tab.clic tr.grupo-ger:hover td{background:var(--azul);color:#fff}
+.tab.clic tr.grupo-ger .mudo{color:#C9D6E8;font-weight:400}
+.tab.clic tr.grupo-ger .res-pos,.tab.clic tr.grupo-ger .res-neg{color:#fff}
+.tab.clic tr.grupo-org td{background:var(--azul-claro);color:var(--azul);font-weight:600;cursor:pointer}
+.tab.clic tr.grupo-org:hover td{background:var(--azul-claro);color:var(--azul)}
+.tab.clic tr.proj td:first-child{padding-left:28px}
+.seta{display:inline-block;width:14px}
