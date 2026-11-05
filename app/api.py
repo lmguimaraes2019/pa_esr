@@ -847,6 +847,37 @@ def editar_usuario(uid: int, dados: UsuarioPatch, u: dict = Depends(exige_admin)
         return _usuario_row(c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(), c)
 
 
+@router.delete("/usuarios/{uid}")
+def excluir_usuario(uid: int, novo_gerente: str | None = None, u: dict = Depends(exige_admin)):
+    """Apaga o usuário. Se ele for o gestor (gerente) de projetos, é preciso indicar quem assume: os projetos passam ao novo gerente."""
+    with tx() as c:
+        alvo = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+        if not alvo:
+            raise HTTPException(404, "Usuário não encontrado.")
+        if uid == u["id"]:
+            raise HTTPException(400, "Você não pode apagar o próprio usuário.")
+        if alvo["perfil"] == "admin" and c.execute("SELECT COUNT(*) FROM users WHERE perfil='admin' AND ativo=1 AND id<>?", (uid,)).fetchone()[0] == 0:
+            raise HTTPException(400, "Este é o único administrador ativo; não pode ser apagado.")
+        meus = [x[0] for x in c.execute("SELECT gerente FROM user_gerentes WHERE user_id=?", (uid,))]
+        marks = ",".join("?" for _ in meus) or "''"
+        projetos = c.execute(f"SELECT orcamento, gerente, novo, gerente_2026 FROM projetos WHERE gerente IN ({marks})", meus).fetchall() if meus else []
+        reatribuidos = 0
+        if projetos:
+            novo = (novo_gerente or "").strip()
+            if not novo:
+                raise HTTPException(409, f"{alvo['nome']} é o gestor de {len(projetos)} projeto(s). Indique o novo gestor para apagar o usuário.")
+            if novo in meus:
+                raise HTTPException(422, "O novo gestor precisa ser outra pessoa.")
+            for p in projetos:
+                c.execute("UPDATE projetos SET gerente=?, gerente_2026=? WHERE orcamento=?",
+                          (novo, p["gerente_2026"] or ("" if p["novo"] else p["gerente"]), p["orcamento"]))
+            reatribuidos = len(projetos)
+        c.execute("DELETE FROM conclusoes WHERE login=?", (alvo["login"],))
+        c.execute("DELETE FROM users WHERE id=?", (uid,))      # acessos (user_gerentes e user_projetos) saem em cascata
+        audit(c, u["login"], "apagou usuário", detalhe=f"{alvo['login']}" + (f"; {reatribuidos} projeto(s) para {novo_gerente}" if reatribuidos else ""))
+    return {"ok": True, "projetos_reatribuidos": reatribuidos}
+
+
 @router.post("/usuarios/{uid}/reset-senha")
 def resetar_senha(uid: int, u: dict = Depends(exige_admin)):
     temp = security.senha_temporaria()

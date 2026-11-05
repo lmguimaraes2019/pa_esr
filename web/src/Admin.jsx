@@ -160,9 +160,24 @@ export function Usuarios() {
   const [temp, setTemp] = useState(null);
   const [erro, setErro] = useState("");
   const [msg, setMsg] = useState("");
+  const [apagar, setApagar] = useState(null);      // { u, projetos, novo }
+  const [nomes, setNomes] = useState([]);
   const carregar = () => api("/usuarios").then(setD);
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { carregar(); api("/listas").then((r) => setNomes(r.gerentes || [])).catch(() => {}); }, []);
   if (!d) return <p>Carregando…</p>;
+  const pedirExclusao = (u) => {
+    setErro(""); setMsg("");
+    const projetos = d.projetos.filter((p) => u.gerentes.includes(p.gerente));
+    if (!projetos.length && !window.confirm(`Apagar o usuário ${u.nome} (${u.login})? Não há como desfazer.`)) return;
+    if (projetos.length) setApagar({ u, projetos, novo: "" }); else confirmarExclusao(u, "");
+  };
+  const confirmarExclusao = async (u, novo) => {
+    try {
+      const r = await api(`/usuarios/${u.id}` + (novo ? `?novo_gerente=${encodeURIComponent(novo)}` : ""), { method: "DELETE" });
+      setMsg(`Usuário ${u.login} apagado.` + (r.projetos_reatribuidos ? ` ${r.projetos_reatribuidos} projeto(s) passaram para ${novo}.` : ""));
+      setApagar(null); carregar();
+    } catch (x) { setErro(x.message); }
+  };
   const criar = async (e) => {
     e.preventDefault(); setErro(""); setMsg("");
     try { const r = await api("/usuarios", { method: "POST", body: novo }); setTemp({ login: r.login, senha: r.senha_temporaria }); setNovo(vazio); carregar(); }
@@ -186,7 +201,19 @@ export function Usuarios() {
         <tbody>{d.usuarios.map((u) => (<tr key={u.id}><td>{u.login}</td><td>{u.nome}</td><td>{u.perfil === "admin" ? "administrador (todos)" : "gestor"}</td><td>{u.gerencia || <span className="mudo">sem gerência</span>}{u.cargo ? <span className="mudo"> | {CARGOS[u.cargo]}</span> : <span className="mudo"> | sem cargo</span>}</td>
           <td>{u.perfil === "admin" ? <span className="mudo">todos os projetos</span> : <>{u.gerentes.join(", ") || <span className="mudo">nenhum gerente</span>}{u.projetos.length > 0 && <><br /><span className="mudo">+ projetos {u.projetos.join(", ")}</span></>}</>}</td>
           <td>{u.ativo ? (u.trocar_senha ? "aguardando 1º acesso" : "ativo") : "desativado"}</td>
-          <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => { setErro(""); setMsg(""); setEd({ id: u.id, login: u.login, nome: u.nome, perfil: u.perfil, gerencia: u.gerencia, cargo: u.cargo, gerentes: u.gerentes, projetos: u.projetos }); }}>Editar</button> <button className="link" onClick={() => reset(u)}>Nova senha</button> <button className="link" onClick={() => alternar(u)}>{u.ativo ? "Desativar" : "Reativar"}</button></td></tr>))}</tbody></table></div>
+          <td style={{ whiteSpace: "nowrap" }}><button className="link" onClick={() => { setErro(""); setMsg(""); setEd({ id: u.id, login: u.login, nome: u.nome, perfil: u.perfil, gerencia: u.gerencia, cargo: u.cargo, gerentes: u.gerentes, projetos: u.projetos }); }}>Editar</button> <button className="link" onClick={() => reset(u)}>Nova senha</button> <button className="link" onClick={() => alternar(u)}>{u.ativo ? "Desativar" : "Reativar"}</button> <button className="link" style={{ color: "#B42318" }} onClick={() => pedirExclusao(u)}>Apagar</button></td></tr>))}</tbody></table></div>
+      {apagar && (
+        <form className="cartao pend" onSubmit={(e) => { e.preventDefault(); confirmarExclusao(apagar.u, apagar.novo); }}>
+          <h3>Apagar {apagar.u.nome}</h3>
+          <p>Este usuário é o gestor de {apagar.projetos.length} projeto(s). Indique quem passa a ser o gestor deles em 2027:</p>
+          <ul className="mudo">{apagar.projetos.map((p) => <li key={p.orcamento}>{p.orcamento} | {p.descricao}</li>)}</ul>
+          <label>Novo gestor
+            <select value={apagar.novo} onChange={(e) => setApagar({ ...apagar, novo: e.target.value })} required>
+              <option value="">Selecione…</option>
+              {[...new Set([...nomes, ...d.gerentes])].filter((g) => !apagar.u.gerentes.includes(g)).sort((a, b) => a.localeCompare(b)).map((g) => <option key={g} value={g}>{g}</option>)}
+            </select></label>
+          <p className="mudo">O gestor de 2026 continua registrado no projeto. O acesso dos demais usuários aos projetos segue o novo gestor.</p>
+          <div className="acoes"><button className="primario" disabled={!apagar.novo}>Apagar usuário e passar os projetos</button><button type="button" onClick={() => setApagar(null)}>Cancelar</button></div></form>)}
       {ed && (
         <form className="cartao" onSubmit={salvar}><h3>Editar {ed.login}</h3>
           <div className="grade">
