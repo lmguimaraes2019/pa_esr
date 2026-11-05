@@ -847,6 +847,11 @@ def editar_usuario(uid: int, dados: UsuarioPatch, u: dict = Depends(exige_admin)
         return _usuario_row(c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(), c)
 
 
+def _chave_nome(t: str | None) -> str:
+    import unicodedata
+    return " ".join("".join(ch for ch in unicodedata.normalize("NFD", t or "") if unicodedata.category(ch) != "Mn").lower().split())
+
+
 @router.delete("/usuarios/{uid}")
 def excluir_usuario(uid: int, novo_gerente: str | None = None, u: dict = Depends(exige_admin)):
     """Apaga o usuário. Se ele for o gestor (gerente) de projetos, é preciso indicar quem assume: os projetos passam ao novo gerente."""
@@ -858,9 +863,10 @@ def excluir_usuario(uid: int, novo_gerente: str | None = None, u: dict = Depends
             raise HTTPException(400, "Você não pode apagar o próprio usuário.")
         if alvo["perfil"] == "admin" and c.execute("SELECT COUNT(*) FROM users WHERE perfil='admin' AND ativo=1 AND id<>?", (uid,)).fetchone()[0] == 0:
             raise HTTPException(400, "Este é o único administrador ativo; não pode ser apagado.")
-        meus = [x[0] for x in c.execute("SELECT gerente FROM user_gerentes WHERE user_id=?", (uid,))]
-        marks = ",".join("?" for _ in meus) or "''"
-        projetos = c.execute(f"SELECT orcamento, gerente, novo, gerente_2026 FROM projetos WHERE gerente IN ({marks})", meus).fetchall() if meus else []
+        # gestor = quem consta como gerente do projeto (pelo nome); ver projetos de outro gerente não conta
+        chave = _chave_nome(alvo["nome"])
+        projetos = [p for p in c.execute("SELECT orcamento, gerente, novo, gerente_2026 FROM projetos") if _chave_nome(p["gerente"]) == chave]
+        meus = sorted({p["gerente"] for p in projetos})
         reatribuidos = 0
         if projetos:
             novo = (novo_gerente or "").strip()

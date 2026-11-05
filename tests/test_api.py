@@ -856,22 +856,23 @@ def test_coordenador_sem_valores_e_projetos_concluidos_em_verde(client):
     assert g["concluido"] is True      # a conclusão da gerência depende do gerente, não do coordenador
 
 
-def test_apagar_usuario_exige_novo_gestor_quando_ha_projetos(client):
+def test_apagar_usuario_so_considera_o_papel_de_gestor(client):
     entrar(client)
     d = client.get("/api/usuarios").json()
     ger = next(p["gerente"] for p in d["projetos"])
     outro = next(g for g in d["gerentes"] if g != ger)
-    r = client.post("/api/usuarios", json={"login": "apaga.me", "nome": "Apaga Me", "perfil": "gestor", "gerencia": "Gerência T3", "cargo": "gerente", "gerentes": [ger]})
-    uid = r.json()["id"]
     n = sum(1 for p in d["projetos"] if p["gerente"] == ger)
-    r = client.delete(f"/api/usuarios/{uid}")
-    assert r.status_code == 409 and "novo gestor" in r.json()["detail"]
+    # quem só enxerga projetos de um gerente (visibilidade) apaga direto, sem afetar projeto algum
+    r = client.post("/api/usuarios", json={"login": "so.ve", "nome": "Fulano Visitante", "perfil": "gestor", "gerencia": "Gerência T3", "cargo": "coordenador", "gerentes": [ger]})
+    r = client.delete(f"/api/usuarios/{r.json()['id']}")
+    assert r.status_code == 200 and r.json()["projetos_reatribuidos"] == 0
+    assert sum(1 for p in client.get("/api/usuarios").json()["projetos"] if p["gerente"] == ger) == n
+    # quem é o gerente cadastrado nos projetos precisa indicar o novo gestor
+    r = client.post("/api/usuarios", json={"login": "apaga.me", "nome": ger, "perfil": "gestor", "gerencia": "Gerência T3", "cargo": "gerente", "gerentes": [ger]})
+    uid = r.json()["id"]
+    assert client.delete(f"/api/usuarios/{uid}").status_code == 409
     assert client.delete(f"/api/usuarios/{uid}?novo_gerente={ger}").status_code == 422
     r = client.delete(f"/api/usuarios/{uid}?novo_gerente={outro}")
     assert r.status_code == 200 and r.json()["projetos_reatribuidos"] == n
-    d2 = client.get("/api/usuarios").json()
-    assert not any(u["login"] == "apaga.me" for u in d2["usuarios"]) and not any(p["gerente"] == ger for p in d2["projetos"])
-    # sem projetos: apaga direto; a si mesmo não
-    r = client.post("/api/usuarios", json={"login": "sem.proj", "nome": "Sem Proj", "perfil": "gestor", "gerencia": "Gerência T3", "cargo": "coordenador", "projetos": [d["projetos"][0]["orcamento"]]})
-    assert client.delete(f"/api/usuarios/{r.json()['id']}").status_code == 200
+    assert not any(p["gerente"] == ger for p in client.get("/api/usuarios").json()["projetos"])
     assert client.delete(f"/api/usuarios/{_uid('leandro')}").status_code == 400

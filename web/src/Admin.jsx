@@ -167,7 +167,8 @@ export function Usuarios() {
   if (!d) return <p>Carregando…</p>;
   const pedirExclusao = (u) => {
     setErro(""); setMsg("");
-    const projetos = d.projetos.filter((p) => u.gerentes.includes(p.gerente));
+    const chave = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+    const projetos = d.projetos.filter((p) => chave(p.gerente) === chave(u.nome));      // só o papel de gestor, não a visibilidade
     if (!projetos.length && !window.confirm(`Apagar o usuário ${u.nome} (${u.login})? Não há como desfazer.`)) return;
     if (projetos.length) setApagar({ u, projetos, novo: "" }); else confirmarExclusao(u, "");
   };
@@ -210,9 +211,9 @@ export function Usuarios() {
           <label>Novo gestor
             <select value={apagar.novo} onChange={(e) => setApagar({ ...apagar, novo: e.target.value })} required>
               <option value="">Selecione…</option>
-              {[...new Set([...nomes, ...d.gerentes])].filter((g) => !apagar.u.gerentes.includes(g)).sort((a, b) => a.localeCompare(b)).map((g) => <option key={g} value={g}>{g}</option>)}
+              {[...new Set([...nomes, ...d.gerentes])].filter((g) => g.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() !== apagar.u.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()).sort((a, b) => a.localeCompare(b)).map((g) => <option key={g} value={g}>{g}</option>)}
             </select></label>
-          <p className="mudo">O gestor de 2026 continua registrado no projeto. O acesso dos demais usuários aos projetos segue o novo gestor.</p>
+          <p className="mudo">O gestor de 2026 continua registrado no projeto.</p>
           <div className="acoes"><button className="primario" disabled={!apagar.novo}>Apagar usuário e passar os projetos</button><button type="button" onClick={() => setApagar(null)}>Cancelar</button></div></form>)}
       {ed && (
         <form className="cartao" onSubmit={salvar}><h3>Editar {ed.login}</h3>
