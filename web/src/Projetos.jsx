@@ -34,12 +34,12 @@ export default function Projetos({ abrir }) {
   const [erro, setErro] = useState("");
   const [novo, setNovo] = useState(false);
   const [listas, setListas] = useState(null);
+  const [fechado, setFechado] = useState({});      // grupos recolhidos (hook antes dos retornos antecipados)
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!ps) return <p>Carregando…</p>;
   const soma = (k) => ps.filter((p) => p.tipo !== "receita").reduce((a, p) => a + p[k], 0);
   const somaT = (k) => ps.reduce((a, p) => a + p[k], 0);
-  const [fechado, setFechado] = useState({});
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
   const ordem = (a, b) => a.localeCompare(b, "pt-BR");
   const gm = {};
