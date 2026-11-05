@@ -83,7 +83,6 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                            SUM(CASE WHEN e.kpi='' AND NOT EXISTS (SELECT 1 FROM entrega_estrategia x WHERE x.entrega_id=e.id) THEN 1 ELSE 0 END) sem
                            FROM entregas e WHERE e.orcamento IN ({marks}) GROUP BY e.orcamento""", ids):
         out[r["orcamento"]]["entregas"].update(n=r["n"], sem_conexao=r["sem"] or 0)
-    catalogo_cheio = bool(c.execute("SELECT 1 FROM estrategia WHERE tipo IN ('po','cg','re') LIMIT 1").fetchone())
     ligados = {r[0] for r in c.execute(f"SELECT orcamento FROM projeto_estrategia WHERE orcamento IN ({marks})", ids)}
     ligados |= {r[0] for r in c.execute(f"SELECT DISTINCT e.orcamento FROM entregas e JOIN entrega_estrategia x ON x.entrega_id=e.id WHERE e.orcamento IN ({marks})", ids)}
     for o in out:
@@ -102,8 +101,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
         if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and p["despesas"]["plano"] > 0:
             if not p["entregas"]["n"]:
                 p["entregas"].update(pendentes=1, motivo="sem entregas")
-            elif catalogo_cheio and not p["entregas"]["vinculado"]:      # com o catálogo estratégico cadastrado, o orçamento precisa estar ligado a ele
-                p["entregas"].update(pendentes=1, motivo="sem vínculo estratégico")
+            # a falta de vínculo com o PO e o CG não é pendência (há projetos sem vínculo); só o relatório da diretoria executiva a lista
         p["pendencias"] = (p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"] + p["entregas"]["pendentes"])
     return out
 

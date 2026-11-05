@@ -24,7 +24,7 @@ function Quadro({ itens, rotulo }) {
   );
 }
 
-function Cobertura() {
+function Cobertura({ admin }) {
   const [c, setC] = useState(null);
   const [aberto, setAberto] = useState(null);
   useEffect(() => { api("/estrategia/cobertura").then(setC).catch(() => setC(false)); }, []);
@@ -46,7 +46,7 @@ function Cobertura() {
       {c.catalogo_vazio ? <p className="mudo">Cadastre os itens em Administração, Tabelas de referência, "Estratégia".</p> : (
         <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th className="n">Entregas</th><th className="n">Projetos</th><th className="n">Plano 2027 dos projetos</th></tr></thead>
           <tbody>{hier.map(linha)}{cg.length > 0 && <tr><td colSpan={4}><strong>Indicadores do Contrato de Gestão</strong></td></tr>}{cg.map(linha)}</tbody></table></div>)}
-      {!c.catalogo_vazio && c.sem_vinculo.length > 0 && (
+      {admin && !c.catalogo_vazio && c.sem_vinculo.length > 0 && (
         <div className="nota aviso"><strong>{c.sem_vinculo.length}</strong> projeto(s) com plano 2027 de <strong>{fmt(c.plano_sem_vinculo)}</strong> sem nenhum vínculo estratégico (de {fmt(c.plano_total)} no total):{" "}
           {c.sem_vinculo.slice(0, 15).map((p) => p.projeto || p.orcamento).join("; ")}{c.sem_vinculo.length > 15 ? "…" : ""}</div>)}
     </section>
@@ -93,7 +93,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
           </div>
         </section>
       </div>
-      <Cobertura />
+      <Cobertura admin={admin} />
       <section className="cartao"><h3>Por origem de recurso</h3><Quadro itens={r.por_origem} rotulo="Origem" /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>

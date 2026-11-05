@@ -628,9 +628,9 @@ def test_importar_planilha_do_po_e_vincular_projeto(client):
     ro = cat[("po", "7.2.2")]
     assert ro["indicador"] == "10" and ro["responsavel"] == "ESR" and "AsRNP" in ro["fomento"]
     assert cat[("re", "7.2")]["descricao"].startswith("Produtos do Hackers") and "Fulano" in cat[("re", "7.2")]["lider"]
-    # sem vínculo: pendente; vincular ao RO cobre RE, diretriz e indicador do CG
+    # sem vínculo não é pendência (só aparece no relatório da diretoria); vincular ao RO cobre RE, diretriz e indicador do CG
     client.post(f"/api/projetos/{orc}/entregas/lote", json={"linhas": ["Produto X no ar"]})
-    assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["motivo"] == "sem vínculo estratégico"
+    assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["pendentes"] == 0
     assert client.put(f"/api/projetos/{orc}/estrategia", json={"ids": [ro["id"], 99999]}).json()["vinculos"] == [ro["id"]]
     assert client.get(f"/api/planejamento/projeto/{orc}").json()["entregas"]["pendentes"] == 0
     cob = {(i["tipo"], i["codigo"]): i for i in client.get("/api/estrategia/cobertura").json()["itens"]}
