@@ -376,3 +376,24 @@ button{-webkit-text-fill-color:currentColor}
 .contagem{margin-left:8px;font-size:11px;font-weight:500;padding:1px 8px;border-radius:10px;background:rgba(0,0,0,.08);color:inherit;opacity:.85;white-space:nowrap}
 .tab.clic tr.grupo-ger .contagem{background:rgba(255,255,255,.18);color:#fff}
 .tab.clic tr.grupo-ger .up,.tab.clic tr.grupo-ger .down,.tab.clic tr.grupo-ger .mudo{color:#fff}
+
+/* PA 2027 por projeto: tabela compacta para caber inteira na janela */
+.tab.pa{font-size:.78rem;table-layout:auto}
+.tab.pa th,.tab.pa td{padding:6px 6px}
+.tab.pa th{font-size:.62rem;letter-spacing:.02em}
+.tab.pa td.n,.tab.pa th.n{white-space:nowrap}
+.tab.pa tr.proj td:nth-child(1){width:64px;padding-left:22px}
+.tab.pa tr.proj td:nth-child(2){min-width:150px}
+.tab.pa tr.proj td:nth-child(3){width:96px;min-width:80px}
+.tab.pa tr.grupo-ger td,.tab.pa tr.grupo-org td{font-size:.78rem}
+.tab.pa tr.grupo-ger td,.tab.pa tr.grupo-org td{vertical-align:middle}
+.tab.pa tr.grupo-ger td:first-child,.tab.pa tr.grupo-org td:first-child{white-space:nowrap}
+.rolagem:has(.tab.pa){overflow-x:auto}
+@media (max-width:1500px){
+  .tab.pa{font-size:.72rem}
+  .tab.pa th,.tab.pa td{padding:5px 4px}
+  .tab.pa th{font-size:.56rem;letter-spacing:0}
+  .tab.pa tr.grupo-ger td,.tab.pa tr.grupo-org td{font-size:.72rem}
+  .tab.pa tr.proj td:nth-child(1){padding-left:16px}
+  main:has(.tab.pa){padding-left:12px;padding-right:12px}
+}

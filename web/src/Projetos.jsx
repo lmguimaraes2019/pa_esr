@@ -60,7 +60,7 @@ export default function Projetos({ abrir }) {
           <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido ? "concluido" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
             <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
             <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
-            <td>{p.origem}</td><td>{p.gerente}</td>
+            <td>{p.gerente}</td>
             <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.empenhado_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className={"n " + (p.total_2026 - p.realizado_2026 - p.empenhado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026 - p.empenhado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
             {p.tipo === "receita"
               ? <><td className="n mudo">-</td><td className="n mudo">receita</td></>
@@ -77,23 +77,23 @@ export default function Projetos({ abrir }) {
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}
       {!ps.length && <p className="mudo">Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima.</p>}
-      <div className="rolagem"><table className="tab clic">
+      <div className="rolagem"><table className="tab clic pa">
         <thead>
-          <tr className="grupos"><th colSpan={4} style={{ background: "#fff" }} /><th colSpan={5} className="g26"><Selo ano={2026} /></th><th colSpan={4} className="g27"><Selo ano={2027} /></th></tr>
-          <tr><th>Orçamento</th><th>Projeto</th><th>Origem</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Planejado</th><th className="n g26" title="Valor já empenhado, ainda não realizado">Empenhado</th><th className="n g26" title="Valor realizado em 2026, sem o empenhado">Executado</th><th className="n g26" title="Planejado menos executado e empenhado">Saldo</th><th className="n g26" title="Executado dividido pelo planejado">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ vs aprovado</th><th className="n g27" title="Receitas lançadas no projeto (previsão, transferências intercompany e orçamentos de receita)">Receitas 2027</th><th className="n g27" title="Receitas menos despesas do plano 2027">Resultado</th></tr>
+          <tr className="grupos"><th colSpan={3} style={{ background: "#fff" }} /><th colSpan={5} className="g26"><Selo ano={2026} /></th><th colSpan={4} className="g27"><Selo ano={2027} /></th></tr>
+          <tr><th>Orçamento</th><th>Projeto</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Planejado</th><th className="n g26" title="Valor já empenhado, ainda não realizado">Empenhado</th><th className="n g26" title="Valor realizado em 2026, sem o empenhado">Executado</th><th className="n g26" title="Planejado menos executado e empenhado">Saldo</th><th className="n g26" title="Executado dividido pelo planejado">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ vs aprovado</th><th className="n g27" title="Receitas lançadas no projeto (previsão, transferências intercompany e orçamentos de receita)">Receitas 2027</th><th className="n g27" title="Receitas menos despesas do plano 2027">Resultado</th></tr>
         </thead>
         <tbody>{grupos.map((g) => (
           <React.Fragment key={g.chave}>
             <tr className="grupo-ger" onClick={() => alterna(g.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(g.chave))} aria-expanded={!fechado[g.chave]}>
-              <td colSpan={4}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
+              <td colSpan={3}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
             {!fechado[g.chave] && g.origens.map((o) => (
               <React.Fragment key={o.chave}>
                 <tr className="grupo-org" onClick={() => alterna(o.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(o.chave))} aria-expanded={!fechado[o.chave]}>
-                  <td colSpan={4}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="contagem">{o.ps.length} {o.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(o.ps)}</tr>
+                  <td colSpan={3}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="contagem">{o.ps.length} {o.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(o.ps)}</tr>
                 {!fechado[o.chave] && o.ps.map(linhaProjeto)}
               </React.Fragment>))}
           </React.Fragment>))}</tbody>
-        <tfoot><tr><td colSpan={4}>Total</td><td className="n">{fmt(soma("total_2026"))}</td><td className="n">{fmt(soma("empenhado_2026"))}</td><td className="n">{fmt(soma("realizado_2026"))}</td><td className="n">{fmt(soma("total_2026") - soma("realizado_2026") - soma("empenhado_2026"))}</td><td className="n">{pct(soma("realizado_2026"), soma("total_2026"))}</td><td className="n">{fmt(soma("total_2027"))}</td><td className="n"><Delta de={soma("total_2026")} para={soma("total_2027")} /></td><td className="n"><span className="res-pos">+{fmt(somaT("receitas_2027"))}</span></td><td className="n"><strong className={somaT("resultado_2027") < 0 ? "res-neg" : "res-pos"}>{fmt(somaT("resultado_2027"))}</strong></td></tr></tfoot>
+        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma("total_2026"))}</td><td className="n">{fmt(soma("empenhado_2026"))}</td><td className="n">{fmt(soma("realizado_2026"))}</td><td className="n">{fmt(soma("total_2026") - soma("realizado_2026") - soma("empenhado_2026"))}</td><td className="n">{pct(soma("realizado_2026"), soma("total_2026"))}</td><td className="n">{fmt(soma("total_2027"))}</td><td className="n"><Delta de={soma("total_2026")} para={soma("total_2027")} /></td><td className="n"><span className="res-pos">+{fmt(somaT("receitas_2027"))}</span></td><td className="n"><strong className={somaT("resultado_2027") < 0 ? "res-neg" : "res-pos"}>{fmt(somaT("resultado_2027"))}</strong></td></tr></tfoot>
       </table></div>
     </>
   );
