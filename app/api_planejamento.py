@@ -186,7 +186,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
         if nv == "diretoria" and not membros and not todos_ids:
             continue
         ids: set[str] = set()
-        pessoas, pend, todos_concluidos, conc_em = [], 0, True, None
+        pessoas, pend, todos_concluidos, conc_em, responsaveis = [], 0, True, None, 0
         for m in membros:
             cu = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (m["login"],)).fetchone()
             base = {"login": m["login"], "nome": m["nome"], "cargo": m["cargo"], "projetos": None, "plano": None, "pendencias": 0,
@@ -198,20 +198,28 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
                 base.update(projetos=a["projetos"], plano=a["plano"], pendencias=a["pendencias"], aprovado=a["aprovado"], executado=a["executado"], receitas=a["receitas"])
             elif m["perfil"] != "admin" and nv == "gerencia":
                 ids |= set(permitidos(c, m))
-                su = _situacao(c, m)
-                pend += su["pendencias"]
+                if m["cargo"] == "coordenador":      # coordenadores não têm projetos sob sua responsabilidade: ficam sem valores
+                    base["coordenador"] = True
+                    pessoas.append(base)
+                    continue
+                # projetos do gestor: os que têm o nome dele como gerente (os demais que ele acompanha pertencem a outros gestores)
+                proprios = [r[0] for r in c.execute(
+                    "SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (m["id"],))]
+                a = _agrega(c, proprios)
+                responsaveis += 1
+                pend += a["pendencias"]
                 todos_concluidos = todos_concluidos and bool(cu)
                 if cu and (conc_em is None or cu["concluido_em"] > conc_em):
                     conc_em = cu["concluido_em"]
-                base.update(projetos=len(su["projetos"]), plano=su["etapas"]["despesas"]["plano"], receitas=su["etapas"]["receitas"]["total"], pendencias=su["pendencias"])
+                base.update(projetos=a["projetos"], plano=a["plano"], aprovado=a["aprovado"], executado=a["executado"],
+                            receitas=a["receitas"], pendencias=a["pendencias"])
             pessoas.append(base)
         pessoas.sort(key=lambda p: (ORDEM_CARGO.get(p["cargo"], 9), p["nome"].lower()))
         if nv in ("dss", "diretoria"):      # a DSS repete a Diretoria Adjunta: ambas somam todos os projetos da ESR
             a = _agrega(c, todos_ids)
         else:
             a = _agrega(c, ids)
-            a["pendencias"] = pend
-        out.append({"gerencia": nome, "nivel": nv, **a, "concluido": nv == "gerencia" and todos_concluidos and bool(membros),
+        out.append({"gerencia": nome, "nivel": nv, **a, "concluido": nv == "gerencia" and todos_concluidos and responsaveis > 0,
                     "concluido_em": conc_em if todos_concluidos else None, "pessoas": pessoas})
     return out
 

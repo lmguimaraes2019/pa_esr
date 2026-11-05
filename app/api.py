@@ -326,7 +326,12 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
             (SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=p.orcamento) AS realizado,
             (SELECT COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=p.orcamento) AS empenhado
             FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
-    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]), "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
+    # gestor que já marcou o planejamento como concluído (usuário ligado ao gerente do projeto, que não seja coordenador)
+    concluidos = {g[0] for g in c.execute(
+        "SELECT DISTINCT ug.gerente FROM user_gerentes ug JOIN users us ON us.id=ug.user_id JOIN conclusoes cn ON cn.login=us.login "
+        "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
+    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
+             "planejamento_concluido": r["gerente"] in concluidos, "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],

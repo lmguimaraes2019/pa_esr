@@ -834,3 +834,23 @@ def test_evento_sem_tarefa_vai_para_acao_propria_e_guarda_site(client):
     linhas = client.get(f"/api/projetos/{orc}").json()["linhas"]
     assert linhas and all(l["fonte"] in ("eventos", "viagens") and l["edt"] == "Eventos" for l in linhas) and sum(l["total"] for l in linhas) >= 1000
     assert client.post("/api/eventos", json={**corpo, "site": "texto sem endereco"}).status_code == 422
+
+
+def test_coordenador_sem_valores_e_projetos_concluidos_em_verde(client):
+    entrar(client)
+    ger = client.get("/api/usuarios").json()["gerentes"][0]
+    base = {"perfil": "gestor", "gerencia": "Gerência T2", "gerentes": [ger]}
+    assert client.post("/api/usuarios", json={**base, "login": "ger.t2", "nome": "Gerente T2", "cargo": "gerente"}).status_code == 201
+    assert client.post("/api/usuarios", json={**base, "login": "coord.t2", "nome": "Coord T2", "cargo": "coordenador"}).status_code == 201
+    g = next(x for x in client.get("/api/planejamento").json()["gerencias"] if x["gerencia"] == "Gerência T2")
+    pes = {p["login"]: p for p in g["pessoas"]}
+    assert pes["coord.t2"]["projetos"] is None and pes["coord.t2"]["plano"] is None      # coordenador sem projetos: valores vazios
+    assert pes["ger.t2"]["projetos"] >= 1 and g["concluido"] is False
+    assert not any(p["planejamento_concluido"] for p in client.get("/api/projetos").json())
+    with db.tx() as c:
+        c.execute("INSERT INTO conclusoes (login, obs) VALUES ('ger.t2', '')")
+    ps = client.get("/api/projetos").json()
+    assert all(p["planejamento_concluido"] for p in ps if p["gerente"] == ger)
+    assert not any(p["planejamento_concluido"] for p in ps if p["gerente"] != ger)
+    g = next(x for x in client.get("/api/planejamento").json()["gerencias"] if x["gerencia"] == "Gerência T2")
+    assert g["concluido"] is True      # a conclusão da gerência depende do gerente, não do coordenador

@@ -254,7 +254,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
           <button className="destaque" onClick={() => abrirNova()}>+ Nova linha</button></span>
       </div>
       <p className="legenda-icones"><span><Lapis /> editar a linha inteira (ou renomear a Meta/EDT e a Ação/Tarefa nos cabeçalhos)</span><span><Mais /> nova ação na Meta/EDT ou nova conta na ação</span><span className="perigo"><Lixeira /> excluir de 2027 (na linha, na ação ou na Meta/EDT inteira)</span><span><Desfazer /> voltar ao aprovado de 2026</span><span className="mudo">Os meses também podem ser editados direto na tabela (Enter para salvar).</span></p>
-      <div className="rolagem">
+      <div className="rolagem fixa">
         <table className="tab grid plano-grid">
           <colgroup><col className="c-acoes" /><col className="c-conta" />{MESES.map((m) => <col key={m} />)}<col className="c-total" /></colgroup>
           <thead><tr><th className="col-acoes">Ações</th><th className="col-conta">Conta</th>{MESES.map((m) => <th key={m} className="n">{m}</th>)}<th className="n">Total 2027</th></tr></thead>

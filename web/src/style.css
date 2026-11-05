@@ -136,8 +136,8 @@ button.icone:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
 .grid .ref .col-acoes,.grid .ref .col-conta{background:var(--ref)}
 .grid tfoot .col-acoes,.grid tfoot .col-conta{background:#F3F5F8}
 .grid tr.viagens .col-acoes,.grid tr.viagens .col-conta{background:#F3F7FB}
-.grid tbody tr:not(.grupo):not(.ref):hover td{background:#FFF8F0}
-.grid tbody tr:not(.grupo):not(.ref):hover .col-acoes,.grid tbody tr:not(.grupo):not(.ref):hover .col-conta{background:#FFF8F0}
+.grid tbody tr:not(.grupo):not(.ref):not(.meta):hover td{background:#FFF8F0}
+.grid tbody tr:not(.grupo):not(.ref):not(.meta):hover .col-acoes,.grid tbody tr:not(.grupo):not(.ref):not(.meta):hover .col-conta{background:#FFF8F0}
 .barra-icones{display:flex;gap:4px}
 .grid td.col-conta{min-width:250px}
 
@@ -352,3 +352,14 @@ input::placeholder,textarea::placeholder{color:#8a94a3;-webkit-text-fill-color:#
 .cel:hover{background-color:transparent}.cel:focus{background-color:#fff}
 .grade-edit td.alterado input:hover,.grade-edit td.alterado input:focus,.grade-edit td.alterado select:hover,.grade-edit td.alterado select:focus{background-color:#fff3d6}
 button{-webkit-text-fill-color:currentColor}
+
+/* projetos com planejamento concluído pelo gestor: verde claro, sem perder a leitura no hover */
+.tab.clic tbody tr.concluido td{background:#E6F6EC}
+.tab.clic tbody tr.concluido:hover td{background:#D3EEDC}
+/* títulos de Meta/EDT e Ação/Tarefa mantêm cor e contraste sempre, inclusive no hover */
+.tab tr.meta:hover td,.tab tr.meta:hover .col-acoes,.tab tr.meta:hover .col-conta{background:var(--azul);color:#fff}
+.tab tr.grupo:hover td,.tab tr.grupo:hover .col-acoes,.tab tr.grupo:hover .col-conta{background:var(--azul-claro);color:var(--azul)}
+/* plano do projeto: área própria de rolagem para o cabeçalho (meses) ficar fixo no topo */
+.rolagem.fixa{max-height:calc(100vh - 150px);overflow:auto}
+.rolagem.fixa .plano-grid thead th{position:sticky;top:0;z-index:5;background:var(--azul);color:#fff}
+.rolagem.fixa .plano-grid thead th.col-acoes,.rolagem.fixa .plano-grid thead th.col-conta{z-index:6}
