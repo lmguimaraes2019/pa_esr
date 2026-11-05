@@ -363,7 +363,9 @@ def _parte1(doc: Doc, d: dict) -> None:
     doc.tabela(["Premissa", "Valor", "Descrição"], [[p["chave"], str(p["valor"]).replace(".", ","), p["descricao"]] for p in d["premissas"]],
                [2700, 1100, 5838], alin=["left", "right", "left"], legenda="Premissas do planejamento.")
     esp = [("Projetos novos em 2027", [p for p in P if p["novo"]]), ("Projetos contingenciados (sem exportação para o PMO)", [p for p in P if p["contingenciado"]]),
-           ("Projetos replicados de 2026 para 2027", [p for p in P if p["replicado_para"]])]
+           ("Projetos replicados de 2026 para 2027", [p for p in P if p["replicado_para"]]),
+           ("Projetos de despesa sem nenhum valor em 2027 (constam neste relatório, mas não vão na planilha do PMO)",
+            [p for p in P if p["tipo"] == "despesa" and not p["contingenciado"] and abs(p["total_2027"]) < 0.005])]
     for nome, lista in esp:
         if lista:
             doc.p(f"**{nome}:** " + "; ".join(f"{p['orcamento']} ({corta(p['descricao'], 50)})" for p in lista) + ".")

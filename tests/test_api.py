@@ -914,3 +914,15 @@ def test_conclusao_dispensada_para_diretoria_pmo_e_coordenador_de_gerente_conclu
         c.execute("INSERT INTO conclusoes (login, obs) VALUES ('ger.t5', '')")
     assert vê("co.t5") and "subordinado" in vê("co.t5")
     assert vê("ger.t5") is None      # o gerente, ao concluir, vê o estado de concluído (dispensado só vale sem conclusão própria)
+
+
+def test_projeto_sem_valor_em_2027_fica_no_relatorio_e_fora_da_planilha(client):
+    import io, zipfile
+    entrar(client)
+    L = client.get("/api/listas").json()
+    o = client.post("/api/projetos", json={"descricao": "Projeto Sem Valor ZZ", "origem": L["origens"][0], "gerente": L["gerentes"][0]}).json()["orcamento"]
+    xml = zipfile.ZipFile(io.BytesIO(client.get("/api/export/relatorio").content)).read("word/document.xml").decode("utf-8")
+    assert o in xml and "sem nenhum valor em 2027" in xml
+    pre = client.get("/api/export/preflight").json()
+    meus = [a for a in pre["avisos"] if o == (a["orcamento"] or "")]
+    assert meus and all(a["nivel"] == "aviso" for a in meus)      # só informa: não entra na planilha e não bloqueia a exportação
