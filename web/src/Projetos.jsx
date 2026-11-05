@@ -15,7 +15,7 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
       <div className="passos" role="tablist" style={{ marginTop: 0 }}>
         {[["despesa", "Orçamento de despesa"], ["receita", "Orçamento de receita"]].map(([k, t]) => <button type="button" key={k} role="tab" aria-selected={f.tipo === k} className={f.tipo === k ? "on" : ""} onClick={() => setF({ ...f, tipo: k })}>{t}</button>)}</div>
       <p className="mudo">{f.tipo === "receita" ? "O total deste orçamento entra como receita e gera resultado positivo. Ele não conta como despesa e não vai no Template de despesas do PMO." : "Orçamento de despesa: segue a jornada completa, com passado 2026, plano 2027, viagens, eventos e headcount."}</p>
-      <p className="mudo">Não precisa de número agora: o orçamento nasce marcado como <span className="tag ok">novo</span>. O Nº do Projeto, exigido na exportação ao PMO, pode ser informado depois pelo administrador.</p>
+      <p className="mudo">Não precisa de número agora: o orçamento nasce marcado como <span className="tag ok">novo</span>. Na exportação ao PMO ele segue como NOVO; depois do lançamento no PCO o administrador informa o Nº do Projeto.</p>
       <div className="grade">
         <label>Nome do orçamento<input value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} required minLength={3} placeholder="ex.: DSS-ESR-ASSOCIACAO-NOVO PROGRAMA" /></label>
         <label>Origem de recursos<select value={f.origem} onChange={(e) => setF({ ...f, origem: e.target.value })} required>

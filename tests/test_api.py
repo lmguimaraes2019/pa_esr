@@ -215,7 +215,7 @@ def test_orcamento_novo_e_mudanca_de_origem(client):
     assert client.get(f"/api/projetos/{o}").json()["projeto"]["origem"] == "Fomento"
     assert client.patch(f"/api/projetos/{o}", json={"origem": "Xis"}).status_code == 422
     seg = client.get("/api/export/preflight").json()
-    assert seg["bloqueado"] and any(o in (a["orcamento"] or "") for a in seg["avisos"])
+    assert not any(a["nivel"] == "erro" and o == (a["orcamento"] or "") for a in seg["avisos"])      # novo sem Nº segue como NOVO, não bloqueia
 
 
 def test_origem_2027_nao_altera_2026(client):

@@ -51,7 +51,7 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
     cols = ", ".join(f"l.{m}" for m in MESES)
     rows = conn.execute(
         f"SELECT l.id, l.orcamento, l.edt, l.tarefa, l.conta_codigo, {cols}, "
-        "p.n_projeto, p.contingenciado, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
+        "p.n_projeto, p.novo, p.contingenciado, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
         "FROM linhas l JOIN projetos p USING (orcamento) JOIN contas k ON k.codigo = l.conta_codigo "
         "WHERE l.ciclo = ? AND p.tipo = 'despesa' ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
 
@@ -67,10 +67,11 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         com_linha.add(r["orcamento"])
         if any(v < 0 for v in meses):
             res.avisos.append(Aviso("aviso", f"Linha {r['tarefa']} / {r['conta_desc']} tem valor negativo.", r["orcamento"]))
-        if not r["n_projeto"]:
+        n_proj = r["n_projeto"] or ("NOVO" if r["novo"] else "")      # orçamento novo ou replicado ainda não está no PCO: segue como NOVO
+        if not n_proj:
             (cont_num if r["contingenciado"] else pend_num).add(r["orcamento"])
         res.linhas.append({
-            "diretoria": r["diretoria"], "n_projeto": r["n_projeto"], "descricao": r["descricao"],
+            "diretoria": r["diretoria"], "n_projeto": n_proj, "descricao": r["descricao"],
             "origem": r["origem"], "gerente": r["gerente"], "edt": r["edt"], "tarefa": r["tarefa"],
             "grupo": r["grupo"], "conta_desc": r["conta_desc"], "conta_cod": r["conta_codigo"], "meses": meses,
         })

@@ -352,7 +352,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
              "resultado_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
              "realizado_2026": _arred(r["realizado"]),
              "empenhado_2026": _arred(r["empenhado"]),
-             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] else [])} for r in rows]
+             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] else [])} for r in rows]
 
 
 @router.get("/listas")

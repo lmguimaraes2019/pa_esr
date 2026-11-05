@@ -324,10 +324,10 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>}{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || "sem número"} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>}{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
-        {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} onSalvo={carregar} />}
+        {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} novo={p.novo} onSalvo={carregar} />}
       </div>
       <FaixaMigracao p={p} irProjeto={irProjeto} />
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
@@ -364,16 +364,16 @@ function FaixaEstrategia({ orcamento, abrir }) {
   );
 }
 
-function NumeroProjeto({ orcamento, atual, contingenciado, onSalvo }) {
+function NumeroProjeto({ orcamento, atual, contingenciado, novo, onSalvo }) {
   const [v, setV] = useState(atual || "");
   const [erro, setErro] = useState("");
   useEffect(() => { setV(atual || ""); }, [atual]);
   const enviar = async (body) => { setErro(""); try { await api(`/projetos/${orcamento}`, { method: "PATCH", body }); onSalvo(); } catch (e) { setErro(e.message); } };
   const apagar = () => { if (window.confirm("Apagar o Nº do Projeto deste orçamento?")) { setV(""); enviar({ n_projeto: "" }); } };
-  const pendente = !atual && !contingenciado;
+  const pendente = !atual && !contingenciado && !novo;      // orçamento novo ou replicado não tem número até entrar no PCO
   return (
     <div className={"cartao " + (pendente ? "pend" : "")} style={{ margin: 0 }}>
-      <strong>{pendente ? "Nº do Projeto pendente" : "Nº do Projeto"}</strong>
+      <strong>{pendente ? "Nº do Projeto pendente" : novo && !atual ? "Nº do Projeto: NOVO" : "Nº do Projeto"}</strong>{novo && !atual && <p className="mudo" style={{ margin: "4px 0 8px" }}>Segue como NOVO na exportação. Depois do lançamento no PCO, informe o número aqui.</p>}
       <div className="acoes"><input style={{ width: 140 }} value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" />
         <button className="primario" onClick={() => enviar({ n_projeto: v })} disabled={!v || v === atual}>Salvar</button>
         {atual && <button onClick={apagar}>Apagar número</button>}</div>
