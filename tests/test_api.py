@@ -893,3 +893,24 @@ def test_pendencia_de_entregas_so_para_o_gestor_do_projeto(client):
     entrar(client, "coord.t4", r)
     client.post("/api/me/senha", json={"atual": r, "nova": "NovaSenha2027x"})
     assert client.get("/api/planejamento").json()["pendencias"] == 0      # o projeto sem entregas é de outro gestor
+
+
+def test_conclusao_dispensada_para_diretoria_pmo_e_coordenador_de_gerente_concluido(client):
+    entrar(client)
+    ger = client.get("/api/usuarios").json()["gerentes"][0]
+    mk = lambda login, cargo: client.post("/api/usuarios", json={"login": login, "nome": login, "perfil": "gestor", "gerencia": "G T5", "cargo": cargo, "gerentes": [ger]})
+    for login, cargo in (("pmo.t5", "pmo"), ("de.t5", "diretor_executivo"), ("ger.t5", "gerente"), ("co.t5", "coordenador")):
+        assert mk(login, cargo).status_code == 201
+    def vê(login):
+        senha = client.post(f"/api/usuarios/{_uid(login)}/reset-senha").json()["senha_temporaria"]
+        client.post("/api/logout"); entrar(client, login, senha)
+        client.post("/api/me/senha", json={"atual": senha, "nova": "NovaSenha2027x"})
+        d = client.get("/api/planejamento").json()["dispensado"]
+        client.post("/api/logout"); entrar(client)
+        return d
+    assert vê("pmo.t5") and vê("de.t5")
+    assert vê("ger.t5") is None and vê("co.t5") is None      # gerente ainda não concluiu
+    with db.tx() as c:
+        c.execute("INSERT INTO conclusoes (login, obs) VALUES ('ger.t5', '')")
+    assert vê("co.t5") and "subordinado" in vê("co.t5")
+    assert vê("ger.t5") is None      # o gerente, ao concluir, vê o estado de concluído (dispensado só vale sem conclusão própria)

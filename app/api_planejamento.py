@@ -229,11 +229,26 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
     return out
 
 
+def _dispensa(c: sqlite3.Connection, u: dict) -> str | None:
+    """Motivo pelo qual o usuário não precisa marcar o planejamento como concluído (ou None se precisa)."""
+    if u.get("cargo") in ("diretor_executivo", "pmo"):
+        return "Pelo seu cargo, você não precisa marcar o planejamento como concluído."
+    if u.get("cargo") == "coordenador":
+        gerente_concluiu = c.execute(
+            "SELECT 1 FROM users g JOIN user_gerentes a ON a.user_id=g.id JOIN user_gerentes b ON b.gerente=a.gerente "
+            "JOIN conclusoes cn ON cn.login=g.login WHERE b.user_id=? AND g.cargo='gerente' AND g.ativo=1 AND g.id<>? LIMIT 1",
+            (u["id"], u["id"])).fetchone()
+        if gerente_concluiu:
+            return "O gerente a quem você está subordinado já concluiu o planejamento; você não precisa marcar o seu."
+    return None
+
+
 @router.get("")
 def planejamento(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     s = _situacao(c, u)
     conc = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (u["login"],)).fetchone()
     s["concluido"] = dict(conc) if conc else None
+    s["dispensado"] = None if conc else _dispensa(c, u)
     if u["perfil"] == "admin":
         s["gerencias"] = _por_gerencia(c)
     return s

@@ -60,6 +60,8 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
         {plano.concluido ? (
           <><p><Estado tom="ok">concluído</Estado> Você marcou o planejamento como concluído em {quando(plano.concluido.concluido_em)}.{plano.concluido.obs && ` Observação: ${plano.concluido.obs}`}</p>
             <button onClick={() => concluir(false)}>Reabrir para ajustar</button></>
+        ) : plano.dispensado ? (
+          <p><Estado tom="neutro">dispensado</Estado> {plano.dispensado}</p>
         ) : (
           <><div><strong>Terminou?</strong> <span className="mudo">{pend ? `Resolva as ${pend} pendência(s) acima para poder concluir.` : "Avise o administrador de que o seu planejamento está pronto para ir ao PMO."}</span>
             <input className="obs-conc" value={obs} onChange={(x) => setObs(x.target.value)} placeholder="Observação para o administrador (opcional)" maxLength={500} /></div>
