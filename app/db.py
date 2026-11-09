@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS exposicao_cambial (
     descricao TEXT NOT NULL DEFAULT '',
     fabricante TEXT NOT NULL DEFAULT '',
     canal TEXT NOT NULL DEFAULT '',
-    moeda TEXT NOT NULL DEFAULT 'USD' CHECK (moeda IN ('USD','EUR')),
+    moeda TEXT NOT NULL DEFAULT 'USD' CHECK (moeda IN ('USD','EUR','GBP')),
     valor REAL NOT NULL DEFAULT 0,
     pais_origem TEXT NOT NULL DEFAULT '',
     trimestre INTEGER NOT NULL DEFAULT 1 CHECK (trimestre BETWEEN 1 AND 4),
@@ -284,6 +284,7 @@ PREMISSAS_PADRAO = [
     ("viagens_bagagem_vezes", 1.0, "Quantas vezes a franquia de bagagem entra no custo da viagem (a planilha de 2026 contou 2 no consolidado)"),
     ("dolar", 5.5, "Câmbio USD/BRL usado nas calculadoras (a planilha de parcerias usa 5,50)"),
     ("euro", 6.4, "Câmbio EUR/BRL usado para converter a exposição cambial em euro para reais"),
+    ("libra", 7.3, "Câmbio GBP/BRL usado para converter a exposição cambial em libra para reais"),
 ]
 
 
@@ -356,7 +357,14 @@ def init_db() -> None:
     _reparar_referencias_v1()
     with tx() as c:
         nova = not c.execute("SELECT 1 FROM sqlite_master WHERE name='user_gerentes'").fetchone()
+        antiga = c.execute("SELECT sql FROM sqlite_master WHERE name='exposicao_cambial'").fetchone()
+        recriar = bool(antiga) and "GBP" not in antiga[0]      # migração: a exposição cambial passa a aceitar libra
+        if recriar:
+            c.execute("ALTER TABLE exposicao_cambial RENAME TO exposicao_cambial_old")
         c.executescript(SCHEMA)
+        if recriar:
+            c.execute("INSERT INTO exposicao_cambial SELECT * FROM exposicao_cambial_old")
+            c.execute("DROP TABLE exposicao_cambial_old")
         if nova:      # migração: o gerente único de cada usuário vira a primeira entrada da lista
             c.execute("INSERT OR IGNORE INTO user_gerentes (user_id, gerente) "
                       "SELECT id, gerente FROM users WHERE gerente IS NOT NULL AND gerente <> ''")

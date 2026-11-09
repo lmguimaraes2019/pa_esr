@@ -1,4 +1,4 @@
-"""Exposição ao dólar (e ao euro) em 2027: compras previstas em moeda estrangeira, por projeto, no formato da planilha de exposição cambial."""
+"""Exposição ao dólar, ao euro e à libra em 2027: compras previstas em moeda estrangeira, por projeto, no formato da planilha de exposição cambial."""
 from __future__ import annotations
 
 import io
@@ -18,7 +18,7 @@ TIPOS = ["HW", "SW", "SV", "Licenças", "CAPACITAÇÕES E INSCRIÇÕES EM EVENTO
 TRIMESTRES = {1: "1º TRIMESTRE 2027", 2: "2º TRIMESTRE 2027", 3: "3º TRIMESTRE 2027", 4: "4º TRIMESTRE 2027"}
 CABECALHO = ["SC em andamento?", "Diretoria", "Gerência", "Ponto Focal (Pessoa Responsável)", "Tipo", "Processo (ADC ou SC de referência)",
              "Descrição do produto ou serviço", "CC/Projeto", "Fabricante/Fornecedor", "Canal/Distribuidor", "Moeda", "Valor total USD",
-             "Valor total EUR", "Pais de Origem", "TRIMESTRE", "Referente ao Programa CONECTA?", "Previsão de abertura de SC"]
+             "Valor total EUR", "Valor total GBP", "Pais de Origem", "TRIMESTRE", "Referente ao Programa CONECTA?", "Previsão de abertura de SC"]
 
 
 class ExposicaoIn(BaseModel):
@@ -32,7 +32,7 @@ class ExposicaoIn(BaseModel):
     descricao: str = Field(default="", max_length=400)
     fabricante: str = Field(default="", max_length=120)
     canal: str = Field(default="", max_length=120)
-    moeda: str = Field(default="USD", pattern="^(USD|EUR)$")
+    moeda: str = Field(default="USD", pattern="^(USD|EUR|GBP)$")
     valor: float = Field(default=0, ge=0, le=1e10)
     pais_origem: str = Field(default="", max_length=60)
     trimestre: int = Field(default=1, ge=1, le=4)
@@ -41,8 +41,8 @@ class ExposicaoIn(BaseModel):
 
 
 def _cambio(c: sqlite3.Connection) -> dict:
-    p = {r["chave"]: float(r["valor"]) for r in c.execute("SELECT chave, valor FROM premissas WHERE chave IN ('dolar','euro')")}
-    return {"USD": p.get("dolar", 5.5), "EUR": p.get("euro", 0.0)}
+    p = {r["chave"]: float(r["valor"]) for r in c.execute("SELECT chave, valor FROM premissas WHERE chave IN ('dolar','euro','libra')")}
+    return {"USD": p.get("dolar", 5.5), "EUR": p.get("euro", 0.0), "GBP": p.get("libra", 0.0)}
 
 
 def _item(r: sqlite3.Row, projetos: dict) -> dict:
@@ -69,12 +69,14 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     cam = _cambio(c)
     usd = sum(i["valor"] for i in itens if i["moeda"] == "USD")
     eur = sum(i["valor"] for i in itens if i["moeda"] == "EUR")
+    gbp = sum(i["valor"] for i in itens if i["moeda"] == "GBP")
     por_tri = [{"trimestre": q, "nome": TRIMESTRES[q], "usd": _arred(sum(i["valor"] for i in itens if i["trimestre"] == q and i["moeda"] == "USD")),
-                "eur": _arred(sum(i["valor"] for i in itens if i["trimestre"] == q and i["moeda"] == "EUR")), "itens": sum(1 for i in itens if i["trimestre"] == q)}
+                "eur": _arred(sum(i["valor"] for i in itens if i["trimestre"] == q and i["moeda"] == "EUR")),
+                "gbp": _arred(sum(i["valor"] for i in itens if i["trimestre"] == q and i["moeda"] == "GBP")), "itens": sum(1 for i in itens if i["trimestre"] == q)}
                for q in TRIMESTRES]
     return {"itens": itens, "cambio": cam, "tipos": TIPOS, "trimestres": [{"n": k, "nome": v} for k, v in TRIMESTRES.items()],
             "por_trimestre": por_tri,
-            "totais": {"usd": _arred(usd), "eur": _arred(eur), "brl_usd": _arred(usd * cam["USD"]), "brl_eur": _arred(eur * cam["EUR"]),
+            "totais": {"usd": _arred(usd), "eur": _arred(eur), "brl_usd": _arred(usd * cam["USD"]), "brl_eur": _arred(eur * cam["EUR"]), "gbp": _arred(gbp), "brl_gbp": _arred(gbp * cam["GBP"]),
                        "itens": len(itens), "incompletos": sum(1 for i in itens if not i["completo"])},
             "projetos": [{"orcamento": o, "descricao": p["descricao"], "gerente": p["gerente"], "finalidade": p["finalidade"]} for o, p in projetos.items()]}
 
@@ -141,11 +143,11 @@ def planilha(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
     for i in itens:
         ws.append([i["sc_andamento"].upper(), i["diretoria"], i["gerencia"], i["ponto_focal"], i["tipo"], i["processo"], i["descricao"],
                    f"{i['orcamento']} - {i['projeto']}", i["fabricante"], i["canal"], i["moeda"],
-                   i["valor"] if i["moeda"] == "USD" else None, i["valor"] if i["moeda"] == "EUR" else None,
+                   i["valor"] if i["moeda"] == "USD" else None, i["valor"] if i["moeda"] == "EUR" else None, i["valor"] if i["moeda"] == "GBP" else None,
                    i["pais_origem"], TRIMESTRES[i["trimestre"]], i["conecta"].upper(), i["previsao_sc"]])
     for linha in ws.iter_rows(min_row=2):
-        linha[11].number_format = linha[12].number_format = '#,##0.00'
-    for letra, larg in zip("ABCDEFGHIJKLMNOPQ", (12, 10, 12, 24, 12, 24, 40, 44, 22, 22, 8, 16, 16, 14, 20, 16, 18)):
+        linha[11].number_format = linha[12].number_format = linha[13].number_format = '#,##0.00'
+    for letra, larg in zip("ABCDEFGHIJKLMNOPQR", (12, 10, 12, 24, 12, 24, 40, 44, 22, 22, 8, 16, 16, 16, 14, 20, 16, 18)):
         ws.column_dimensions[letra].width = larg
     ws.row_dimensions[1].height = 42; ws.freeze_panes = "A2"
     buf = io.BytesIO(); wb.save(buf)

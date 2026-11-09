@@ -29,7 +29,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label>Descrição do produto ou serviço<input value={f.descricao} onChange={(e) => set("descricao", e.target.value)} placeholder="ex.: Hardware diversos" /></label>
         <label>Tipo<input list="tipos-exp" value={f.tipo} onChange={(e) => set("tipo", e.target.value)} placeholder="HW, SW, SV…" /><datalist id="tipos-exp">{dados.tipos.map((t) => <option key={t}>{t}</option>)}</datalist></label>
         <label>Ponto focal (pessoa responsável)<input value={f.ponto_focal} onChange={(e) => set("ponto_focal", e.target.value)} /></label>
-        <label>Moeda<select value={f.moeda} onChange={(e) => set("moeda", e.target.value)}><option value="USD">Dólar (USD)</option><option value="EUR">Euro (EUR)</option></select></label>
+        <label>Moeda<select value={f.moeda} onChange={(e) => set("moeda", e.target.value)}><option value="USD">Dólar (USD)</option><option value="EUR">Euro (EUR)</option><option value="GBP">Libra (GBP)</option></select></label>
         <label>Valor total {f.moeda}<input inputMode="decimal" value={f.valor} onChange={(e) => set("valor", e.target.value)} placeholder="ex.: 3.000,00" required />
           {brl > 0 && <small className="mudo">≈ R$ {fmtN(brl)} no câmbio de {fmtN(dados.cambio[f.moeda])}</small>}</label>
         <label>País de origem<input value={f.pais_origem} onChange={(e) => set("pais_origem", e.target.value)} placeholder="ex.: EUA" /></label>
@@ -68,15 +68,16 @@ export default function Exposicao({ irProjeto }) {
   return (
     <>
       <h2>Exposição ao dólar 2027</h2>
-      <div className="nota">Cadastre as compras previstas em moeda estrangeira (dólar ou euro), indicando o projeto, o tipo, o valor, o país de origem e o trimestre. A planilha gerada segue o formato da área responsável pela exposição cambial.</div>
+      <div className="nota">Cadastre as compras previstas em moeda estrangeira (dólar, euro ou libra), indicando o projeto, o tipo, o valor, o país de origem e o trimestre. A planilha gerada segue o formato da área responsável pela exposição cambial.</div>
       <div className="kpis">
         <Kpi rotulo="Total em dólar" valor={"US$ " + fmtN(t.usd)} sub={`≈ R$ ${fmtN(t.brl_usd)} (câmbio ${fmtN(dados.cambio.USD)})`} tom="f27" />
         <Kpi rotulo="Total em euro" valor={"€ " + fmtN(t.eur)} sub={dados.cambio.EUR ? `≈ R$ ${fmtN(t.brl_eur)} (câmbio ${fmtN(dados.cambio.EUR)})` : ""} tom="f27" />
+        <Kpi rotulo="Total em libra" valor={"£ " + fmtN(t.gbp)} sub={dados.cambio.GBP ? `≈ R$ ${fmtN(t.brl_gbp)} (câmbio ${fmtN(dados.cambio.GBP)})` : ""} tom="f27" />
         <Kpi rotulo="Itens" valor={t.itens} sub={t.incompletos ? `${t.incompletos} com informações pendentes` : "todos completos"} tom="f27" />
       </div>
       <section className="cartao"><h3>Por trimestre</h3><div className="rolagem"><table className="tab">
-        <thead><tr><th>Trimestre</th><th className="n">Itens</th><th className="n">USD</th><th className="n">EUR</th></tr></thead>
-        <tbody>{dados.por_trimestre.map((q) => <tr key={q.trimestre}><td>{q.nome}</td><td className="n">{q.itens}</td><td className="n">{q.usd ? fmtN(q.usd) : "-"}</td><td className="n">{q.eur ? fmtN(q.eur) : "-"}</td></tr>)}</tbody></table></div></section>
+        <thead><tr><th>Trimestre</th><th className="n">Itens</th><th className="n">USD</th><th className="n">EUR</th><th className="n">GBP</th></tr></thead>
+        <tbody>{dados.por_trimestre.map((q) => <tr key={q.trimestre}><td>{q.nome}</td><td className="n">{q.itens}</td><td className="n">{q.usd ? fmtN(q.usd) : "-"}</td><td className="n">{q.eur ? fmtN(q.eur) : "-"}</td><td className="n">{q.gbp ? fmtN(q.gbp) : "-"}</td></tr>)}</tbody></table></div></section>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="barra-ferramentas">
         <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>

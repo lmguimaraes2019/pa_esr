@@ -947,13 +947,18 @@ def test_finalidade_do_projeto_e_exposicao_cambial(client):
     d = client.get("/api/exposicao").json()
     assert d["totais"]["usd"] == 3000 and d["totais"]["eur"] == 100 and d["totais"]["itens"] == 2
     assert client.put(f"/api/exposicao/{xid}", json={**corpo, "valor": 3500}).json()["valor"] == 3500
+    assert client.post("/api/exposicao", json={**corpo, "moeda": "GBP", "valor": 50, "trimestre": 3}).status_code == 201
+    g = client.get("/api/exposicao").json()
+    assert g["totais"]["gbp"] == 50 and g["cambio"]["GBP"] > 0 and g["por_trimestre"][2]["gbp"] == 50
+    gid = next(i["id"] for i in g["itens"] if i["moeda"] == "GBP")
+    assert client.delete(f"/api/exposicao/{gid}").status_code == 200
     x = client.get("/api/exposicao/xlsx")
     assert x.status_code == 200 and x.content[:2] == b"PK"
     from openpyxl import load_workbook
     import io as _io
     ws = load_workbook(_io.BytesIO(x.content)).active
-    assert ws["L1"].value == "Valor total USD" and ws["M2"].value == 100 and ws["O2"].value == "1º TRIMESTRE 2027"      # ordenado por trimestre
-    assert ws["L3"].value == 3500 and ws["K3"].value == "USD" and ws["A3"].value == "NÃO" and ws["O3"].value == "2º TRIMESTRE 2027"
+    assert ws["L1"].value == "Valor total USD" and ws["M2"].value == 100 and ws["P2"].value == "1º TRIMESTRE 2027"      # ordenado por trimestre
+    assert ws["L3"].value == 3500 and ws["K3"].value == "USD" and ws["A3"].value == "NÃO" and ws["P3"].value == "2º TRIMESTRE 2027"
     assert client.delete(f"/api/exposicao/{xid}").status_code == 200
     assert client.get("/api/exposicao").json()["totais"]["itens"] == 1
 
