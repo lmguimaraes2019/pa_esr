@@ -989,3 +989,13 @@ def test_projeto_de_gestao_da_area_nao_exige_entregas(client):
     assert client.patch(f"/api/projetos/{o}", json={"finalidade": "gestao"}).status_code == 200
     depois = next(x for x in client.get("/api/planejamento").json()["projetos"] if x["orcamento"] == o)
     assert depois["entregas"]["pendentes"] == 0
+
+
+def test_projeto_de_headcount_nao_exige_entregas(client):
+    entrar(client)
+    pend = [x for x in client.get("/api/planejamento").json()["projetos"] if x["entregas"]["pendentes"]]
+    assert pend
+    o = pend[0]["orcamento"]
+    assert client.patch(f"/api/projetos/{o}", json={"finalidade": "headcount"}).status_code == 200
+    depois = next(x for x in client.get("/api/planejamento").json()["projetos"] if x["orcamento"] == o)
+    assert depois["entregas"]["pendentes"] == 0

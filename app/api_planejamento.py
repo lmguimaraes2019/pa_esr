@@ -98,8 +98,8 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                 if f in p[k]:
                     p[k][f] = _arred(p[k][f])
         # todo projeto de despesa com orçamento em 2027 precisa informar as entregas previstas (exceto o contingenciado)
-        # projeto de gestão da área não tem entregas: fica fora dessa pendência
-        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and nomes[o]["finalidade"] != "gestao" and p["despesas"]["plano"] > 0:
+        # projetos de gestão da área e de headcount não têm entregas: ficam fora dessa pendência
+        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and nomes[o]["finalidade"] not in ("gestao", "headcount") and p["despesas"]["plano"] > 0:
             if not p["entregas"]["n"]:
                 p["entregas"].update(pendentes=1, motivo="sem entregas")
             # a falta de vínculo com o PO e o CG não é pendência (há projetos sem vínculo); só o relatório da diretoria executiva a lista
