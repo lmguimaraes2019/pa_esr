@@ -5,27 +5,28 @@ import { MeuPlanejamento } from "./Planejamento.jsx";
 
 function Quadro({ itens, rotulo, aninhado }) {
   const [fechado, setFechado] = useState({});
-  const max = Math.max(1, ...itens.map((i) => Math.max(i.plano, i.base)));
+  const varp = (de, para) => (de ? ((para - de) / de) * 100 : null);
+  const Vp = ({ de, para }) => { const v = varp(de, para); return v == null ? <span className="mudo">-</span> : <span className={v > 0 ? "up" : v < 0 ? "down" : "mudo"}>{(v > 0 ? "+" : "") + v.toFixed(0)}%</span>; };
   const linha = (i, filho, tem) => (
     <tr key={(filho ? "f-" : "") + i.nome + (filho || "")} className={filho ? "filho" : tem ? "pai" : ""} onClick={tem ? () => setFechado({ ...fechado, [i.nome]: !fechado[i.nome] }) : undefined} style={tem ? { cursor: "pointer" } : undefined}>
       <td style={filho ? { paddingLeft: 28 } : undefined}>{tem && <span className="mudo" style={{ marginRight: 6 }}>{fechado[i.nome] ? "▸" : "▾"}</span>}{filho ? <span className="mudo">{i.nome}</span> : i.nome}</td>
       <td className="n">{fmt(i.base)}</td><td className="n">{fmt(i.executado)}</td><td className="n">{pct(i.executado, i.base)}</td>
       <td className="n"><strong>{fmt(i.plano)}</strong></td><td className="n"><Delta de={i.base} para={i.plano} /></td>
-      <td><div className="barra"><span className="b26" style={{ width: (i.base / max) * 100 + "%" }} /><span className="b27" style={{ width: (i.plano / max) * 100 + "%" }} /></div></td>
+      <td className="n"><Vp de={i.base} para={i.plano} /></td>
     </tr>);
   return (
     <table className="tab">
       <thead>
-        <tr className="grupos"><th rowSpan={2} style={{ background: "#fff" }} />
-          <th colSpan={3} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th><th rowSpan={2} style={{ background: "#fff", width: "18%" }} /></tr>
-        <tr><th>{rotulo}</th><th className="n g26">Aprovado</th><th className="n g26">Executado</th><th className="n g26">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ vs aprovado</th><th /></tr>
+        <tr className="grupos"><th style={{ background: "#fff" }} />
+          <th colSpan={3} className="g26"><Selo ano={2026} /></th><th colSpan={3} className="g27"><Selo ano={2027} /></th></tr>
+        <tr><th>{rotulo}</th><th className="n g26">Aprovado 2026</th><th className="n g26">Executado</th><th className="n g26">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ R$</th><th className="n g27">Δ %</th></tr>
       </thead>
       <tbody>{itens.map((i) => {
         const fs = aninhado ? i.finalidades || [] : [];
         return [linha(i, null, fs.length > 0), ...(fechado[i.nome] ? [] : fs.map((f) => linha(f, i.nome, false)))];
       })}</tbody>
       <tfoot><tr><td>Total</td><td className="n">{fmt(itens.reduce((a, i) => a + i.base, 0))}</td><td className="n">{fmt(itens.reduce((a, i) => a + i.executado, 0))}</td><td />
-        <td className="n">{fmt(itens.reduce((a, i) => a + i.plano, 0))}</td><td className="n"><Delta de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td><td /></tr></tfoot>
+        <td className="n">{fmt(itens.reduce((a, i) => a + i.plano, 0))}</td><td className="n"><Delta de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td><td className="n"><Vp de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td></tr></tfoot>
     </table>
   );
 }
