@@ -30,7 +30,7 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
   );
 }
 
-export default function Projetos({ abrir }) {
+export default function Projetos({ abrir, semEntregas, limparFiltro }) {
   const [todos, setPs] = useState(null);
   const [fFin, setFFin] = useState("");
   const [erro, setErro] = useState("");
@@ -40,7 +40,7 @@ export default function Projetos({ abrir }) {
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
-  const ps = todos.filter((p) => !fFin || p.finalidade === fFin);
+  const ps = todos.filter((p) => (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)));
   const soma = (k) => ps.filter((p) => p.tipo !== "receita").reduce((a, p) => a + p[k], 0);
   const somaT = (k) => ps.reduce((a, p) => a + p[k], 0);
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
@@ -79,6 +79,9 @@ export default function Projetos({ abrir }) {
         <div className="acoes"><button type="button" onClick={() => setFechado({})}>Expandir tudo</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => !k.includes("|")).map((k) => [k, true])))}>Recolher gerências</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => k.includes("|")).map((k) => [k, true])))}>Recolher origens</button></div>
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}
+      {semEntregas && <div className="nota" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+        <span>{ps.length ? <>Mostrando só os <strong>{ps.length}</strong> projeto(s) que ainda não têm entregas informadas. Abra cada um e use a aba "Entregas 2027". Projetos de gestão da área não precisam de entregas.</> : "Todos os projetos já têm entregas informadas."}</span>
+        <button type="button" onClick={limparFiltro}>Ver todos os projetos</button></div>}
       <div className="filtros" style={{ margin: "8px 0" }}>
         <select value={fFin} onChange={(e) => setFFin(e.target.value)} aria-label="Filtrar por finalidade"><option value="">Todas as finalidades</option>{FINALIDADES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
       </div>

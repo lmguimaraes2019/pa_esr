@@ -979,3 +979,13 @@ def test_finalidades_do_projeto_e_resumo(client):
     assert abs(sum(x["plano"] for x in r["por_finalidade"]) - sum(x["plano"] for x in r["por_origem"])) < 0.05
     for o in r["por_origem"]:                                          # a quebra por finalidade fecha com o total da origem
         assert abs(sum(f["plano"] for f in o["finalidades"]) - o["plano"]) < 0.05 and abs(sum(f["base"] for f in o["finalidades"]) - o["base"]) < 0.05
+
+
+def test_projeto_de_gestao_da_area_nao_exige_entregas(client):
+    entrar(client)
+    pend = [x for x in client.get("/api/planejamento").json()["projetos"] if x["entregas"]["pendentes"]]
+    assert pend, "o seed deve ter projeto com orçamento 2027 e sem entregas"
+    o = pend[0]["orcamento"]
+    assert client.patch(f"/api/projetos/{o}", json={"finalidade": "gestao"}).status_code == 200
+    depois = next(x for x in client.get("/api/planejamento").json()["projetos"] if x["orcamento"] == o)
+    assert depois["entregas"]["pendentes"] == 0

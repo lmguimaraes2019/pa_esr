@@ -56,7 +56,7 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
         <div className="progresso" title={`${feitas} de ${itens.length} etapas sem pendência`}><span style={{ width: (feitas / itens.length) * 100 + "%" }} /><small>{feitas} de {itens.length} em dia</small></div>
       </div>
       <div className="legenda-etapas"><span><i style={{ background: "#D96A00" }} />Precisa de ajuste</span><span><i style={{ background: "#1E8E3E" }} />Em dia</span></div>
-      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => ir(k === "entregas" ? "projetos" : k)} />)}</ol>
+      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => (k === "entregas" ? ir("projetos", null, e.entregas.pendentes > 0) : ir(k))} />)}</ol>
       <div className="concluir">
         {plano.concluido ? (
           <><p><Estado tom="ok">concluído</Estado> Você marcou o planejamento como concluído em {quando(plano.concluido.concluido_em)}.{plano.concluido.obs && ` Observação: ${plano.concluido.obs}`}</p>

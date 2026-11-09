@@ -25,7 +25,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
     """Situação de cada projeto nas cinco etapas do plano 2027."""
     ids = sorted(ids)
     marks = ",".join("?" for _ in ids) or "''"
-    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo, contingenciado FROM projetos WHERE orcamento IN ({marks})", ids)}
+    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo, contingenciado, finalidade FROM projetos WHERE orcamento IN ({marks})", ids)}
     out = {o: {"orcamento": o, "projeto": nomes[o]["descricao"], "gerente": nomes[o]["gerente"], "novo": bool(nomes[o]["novo"]),
                "despesas": {"aprovado": 0.0, "plano": 0.0, "linhas": 0, "ajustadas": 0, "novas": 0, "excluidas": 0, "bloqueadas": 0},
                "receitas": {"n": 0, "total": 0.0},
@@ -98,7 +98,8 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                 if f in p[k]:
                     p[k][f] = _arred(p[k][f])
         # todo projeto de despesa com orçamento em 2027 precisa informar as entregas previstas (exceto o contingenciado)
-        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and p["despesas"]["plano"] > 0:
+        # projeto de gestão da área não tem entregas: fica fora dessa pendência
+        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and nomes[o]["finalidade"] != "gestao" and p["despesas"]["plano"] > 0:
             if not p["entregas"]["n"]:
                 p["entregas"].update(pendentes=1, motivo="sem entregas")
             # a falta de vínculo com o PO e o CG não é pendência (há projetos sem vínculo); só o relatório da diretoria executiva a lista

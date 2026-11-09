@@ -16,6 +16,7 @@ export default function App() {
   const [aba, setAba] = useState("resumo");
   const [proj, setProj] = useState(null);
   const [plano, setPlano] = useState(null);
+  const [soEntregas, setSoEntregas] = useState(false);      // lista de projetos filtrada pelos que ainda não têm entregas
 
   const carregar = useCallback(() => api("/me").then(setUser).catch(() => setUser(null)), []);
   useEffect(() => { carregar(); }, [carregar]);
@@ -33,7 +34,7 @@ export default function App() {
   const emAdmin = ADMIN.some(([k]) => k === aba);
   const abas = [["resumo", "Meu planejamento", aba === "resumo"], ["projetos", "Plano 2027", emPlano], ...(admin ? [["admin", "Administração", emAdmin]] : [])];
   const pend = (k) => (plano ? ({ viagens: plano.etapas.viagens.pendentes, eventos: plano.etapas.eventos.pendentes, headcount: plano.etapas.headcount.pendentes }[k] || 0) : 0);
-  const ir = (a, p = null) => { setAba(a); setProj(p); window.scrollTo(0, 0); };
+  const ir = (a, p = null, filtro = false) => { setAba(a); setProj(p); setSoEntregas(filtro); window.scrollTo(0, 0); };
 
   return (
     <div className="app">
@@ -52,7 +53,7 @@ export default function App() {
         {aba === "resumo" && <Resumo plano={plano} recarregarPlano={carregarPlano} admin={admin} ir={ir} />}
         {aba === "projetos" && (proj
           ? <Projeto orcamento={proj} admin={admin} voltar={() => setProj(null)} irViagens={() => ir("viagens")} irEtapa={(k) => ir(k)} irProjeto={(o) => ir("projetos", o)} />
-          : <Projetos abrir={setProj} />)}
+          : <Projetos abrir={setProj} semEntregas={soEntregas && plano ? plano.projetos.filter((p) => p.entregas.pendentes > 0).map((p) => p.orcamento) : null} limparFiltro={() => setSoEntregas(false)} />)}
         {aba === "receitas" && <Receitas admin={admin} irProjeto={(o) => ir("projetos", o)} />}
         {aba === "eventos" && <Eventos irProjeto={(o) => ir("projetos", o)} />}
         {aba === "exposicao" && <Exposicao irProjeto={(o) => ir("projetos", o)} />}
