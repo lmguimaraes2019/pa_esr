@@ -137,18 +137,51 @@ export function Exportar({ irProjeto }) {
 }
 
 function Acessos({ d, valor, onChange }) {
+  const [busca, setBusca] = useState("");
+  const [soSel, setSoSel] = useState(false);
   const alt = (lista, item) => (lista.includes(item) ? lista.filter((x) => x !== item) : [...lista, item]);
+  const norm = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const porGer = {};
+  d.projetos.forEach((p) => { (porGer[p.gerente || "Sem gerente"] ||= []).push(p); });
+  const coberto = (p) => valor.gerentes.includes(p.gerente);
+  const visiveis = d.projetos.filter((p) => coberto(p) || valor.projetos.includes(p.orcamento));
+  const q = norm(busca);
+  const grupos = Object.keys(porGer).sort().map((g) => [g, porGer[g].filter((p) => (!q || norm(p.orcamento + " " + p.descricao + " " + g).includes(q)) && (!soSel || coberto(p) || valor.projetos.includes(p.orcamento)))]).filter(([, l]) => l.length);
+  const marcarGrupo = (g, ps, marcar) => {
+    const ids = ps.map((p) => p.orcamento);
+    onChange({ ...valor, projetos: marcar ? [...new Set([...valor.projetos, ...ids])] : valor.projetos.filter((o) => !ids.includes(o)) });
+  };
   return (
-    <>
-      <fieldset className="cartao" style={{ margin: "8px 0" }}><legend>Gerentes de projetos que acompanha (vê todos os projetos de cada um)</legend>
+    <div className="acessos">
+      <div className="acessos-resumo"><strong>{visiveis.length}</strong> de {d.projetos.length} projetos visíveis para este usuário
+        {(valor.gerentes.length > 0 || valor.projetos.length > 0) && <button type="button" className="link" onClick={() => onChange({ ...valor, gerentes: [], projetos: [] })}>Limpar acessos</button>}</div>
+      <fieldset className="cartao" style={{ margin: "8px 0" }}><legend>1. Gerentes que acompanha <span className="mudo">(vê todos os projetos de cada um)</span></legend>
         <div className="filtros" style={{ margin: 0 }}>{d.gerentes.map((g) => (
-          <button type="button" key={g} className={valor.gerentes.includes(g) ? "on" : ""} onClick={() => onChange({ ...valor, gerentes: alt(valor.gerentes, g) })}>{g}</button>))}</div></fieldset>
-      <fieldset className="cartao" style={{ margin: "8px 0" }}><legend>Projetos avulsos (além dos gerentes acima)</legend>
-        <div style={{ maxHeight: 180, overflow: "auto" }}>{d.projetos.map((p) => (
-          <label key={p.orcamento} style={{ display: "flex", gap: 8, alignItems: "center", textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>
-            <input type="checkbox" style={{ width: "auto" }} checked={valor.projetos.includes(p.orcamento)} onChange={() => onChange({ ...valor, projetos: alt(valor.projetos, p.orcamento) })} />
-            {p.orcamento} | {p.descricao} <span className="mudo">({p.gerente})</span></label>))}</div></fieldset>
-    </>
+          <button type="button" key={g} className={valor.gerentes.includes(g) ? "on" : ""} onClick={() => onChange({ ...valor, gerentes: alt(valor.gerentes, g) })}>
+            {valor.gerentes.includes(g) ? "✓ " : ""}{g} <span className="mudo">({(porGer[g] || []).length})</span></button>))}</div></fieldset>
+      <fieldset className="cartao" style={{ margin: "8px 0" }}><legend>2. Projetos avulsos <span className="mudo">(além dos gerentes acima)</span></legend>
+        <div className="acessos-barra">
+          <input type="search" placeholder="Buscar por número, nome ou gerente" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          <label className="acessos-so"><input type="checkbox" checked={soSel} onChange={(e) => setSoSel(e.target.checked)} /> só os com acesso</label></div>
+        <div className="acessos-lista">{grupos.map(([g, ps]) => {
+          const livres = ps.filter((p) => !coberto(p));
+          const todos = livres.length > 0 && livres.every((p) => valor.projetos.includes(p.orcamento));
+          return (
+            <div key={g} className="acessos-grupo">
+              <div className="acessos-gcab"><strong>{g}</strong><span className="mudo">{ps.length} projeto(s)</span>
+                {valor.gerentes.includes(g) ? <span className="chip">já incluído pelo gerente</span>
+                  : <button type="button" className="link" onClick={() => marcarGrupo(g, livres, !todos)}>{todos ? "Desmarcar todos" : "Marcar todos"}</button>}</div>
+              {ps.map((p) => {
+                const via = coberto(p);
+                return (
+                  <label key={p.orcamento} className={"acessos-item" + (via ? " via" : "")}>
+                    <input type="checkbox" checked={via || valor.projetos.includes(p.orcamento)} disabled={via} onChange={() => onChange({ ...valor, projetos: alt(valor.projetos, p.orcamento) })} />
+                    <span className="acessos-num">{p.orcamento}</span><span>{p.descricao}</span></label>);
+              })}
+            </div>);
+        })}
+          {!grupos.length && <p className="mudo" style={{ margin: 8 }}>Nenhum projeto encontrado.</p>}</div></fieldset>
+    </div>
   );
 }
 

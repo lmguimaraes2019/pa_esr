@@ -409,3 +409,16 @@ a.botao:hover{background:var(--azul-claro)}
 .tag.nat{background:#FFF4E0;color:#8A5300;border-color:#F2D29B}
 .tab tr.pai td { font-weight: 600; background: #f6f8fb; }
 .tab tr.filho td { font-size: .93em; }
+/* acesso a projetos (gestão de usuários) */
+.acessos-resumo{display:flex;gap:12px;align-items:center;margin:6px 0;color:var(--mudo)}
+.acessos-barra{display:flex;gap:14px;align-items:center;margin-bottom:8px}
+.acessos-barra input[type=search]{flex:1;max-width:420px}
+.acessos-so{display:flex;flex-direction:row;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-weight:400;white-space:nowrap}
+.acessos-so input{width:auto}
+.acessos-lista{max-height:380px;overflow:auto;border:1px solid var(--bd);border-radius:8px;background:#fff}
+.acessos-gcab{position:sticky;top:0;display:flex;gap:12px;align-items:center;padding:6px 12px;background:var(--azul-claro);border-bottom:1px solid var(--bd);z-index:1}
+.acessos-item{display:flex;flex-direction:row;gap:10px;align-items:center;padding:5px 12px 5px 22px;text-transform:none;letter-spacing:0;font-weight:400;cursor:pointer;border-bottom:1px solid #f0f2f5}
+.acessos-item:hover{background:#f6f8fb}
+.acessos-item input{width:auto;margin:0}
+.acessos-item.via{color:var(--mudo);cursor:default}
+.acessos-num{font-variant-numeric:tabular-nums;font-weight:700;min-width:48px}
