@@ -112,12 +112,18 @@ class LinhaPatch(BaseModel):
         return None if v is None else _validar_meses(v)
 
 
+NATUREZAS = {"sustentacao": "Sustentação", "investimento": "Investimento", "crescimento": "Crescimento ou projeto",
+             "capacitacao": "Capacitação e eventos", "gestao": "Gestão da área", "": "Sem natureza definida"}
+FINALIDADES = {"caixa": "Fluxo de caixa", "headcount": "Headcount"}
+
+
 class ProjetoNovo(BaseModel):
     descricao: str = Field(min_length=3, max_length=200)
     origem: str = Field(min_length=1, max_length=40)
     gerente: str = Field(min_length=1, max_length=100)
     tipo: str = Field(default="despesa", pattern="^(despesa|receita)$")
     finalidade: str = Field(default="caixa", pattern="^(caixa|headcount)$")
+    natureza: str = Field(default="", pattern="^(sustentacao|investimento|crescimento|capacitacao|gestao|)$")
 
 
 class ProjetoPatch(BaseModel):
@@ -127,6 +133,7 @@ class ProjetoPatch(BaseModel):
     gerente: str | None = Field(default=None, min_length=1, max_length=100)
     tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
     finalidade: str | None = Field(default=None, pattern="^(caixa|headcount)$")
+    natureza: str | None = Field(default=None, pattern="^(sustentacao|investimento|crescimento|capacitacao|gestao|)$")
     contingenciado: bool | None = None
     detalhe: str | None = Field(default=None, max_length=3000)
 
@@ -344,7 +351,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
         "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
-             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]),
+             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "natureza": r["natureza"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],
@@ -376,8 +383,8 @@ def criar_projeto(dados: ProjetoNovo, u: dict = Depends(usuario_liberado)):
         n = 1 + max([int(r[0][4:]) for r in c.execute("SELECT orcamento FROM projetos WHERE orcamento LIKE 'N27-%'")
                      if r[0][4:].isdigit()] or [0])
         chave = f"N27-{n:03d}"
-        c.execute("INSERT INTO projetos (orcamento, n_projeto, descricao, origem, origem_2027, gerente, novo, tipo, finalidade) VALUES (?,?,?,?,?,?,1,?,?)",
-                  (chave, "", dados.descricao.strip(), dados.origem, dados.origem, dados.gerente, dados.tipo, dados.finalidade))
+        c.execute("INSERT INTO projetos (orcamento, n_projeto, descricao, origem, origem_2027, gerente, novo, tipo, finalidade, natureza) VALUES (?,?,?,?,?,?,1,?,?,?)",
+                  (chave, "", dados.descricao.strip(), dados.origem, dados.origem, dados.gerente, dados.tipo, dados.finalidade, dados.natureza))
         if u["perfil"] != "admin":     # quem cria enxerga o que criou, mesmo sem acompanhar aquele gerente
             c.execute("INSERT OR IGNORE INTO user_projetos (user_id, orcamento) VALUES (?,?)", (u["id"], chave))
         audit(c, u["login"], "criou orçamento novo", chave, detalhe=f"{dados.tipo} | {dados.descricao} | {dados.origem} | {dados.gerente}")
@@ -485,7 +492,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "natureza": p["natureza"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},
@@ -751,6 +758,22 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         return sorted(out.values(), key=lambda d: -max(d["plano"], d["base"]))
 
     origens, grupos = agrupar(por_origem, "origem", exec_origem), agrupar(por_grupo, "grupo", exec_grupo)
+    def por_atributo(coluna: str, nomes: dict) -> list[dict]:      # natureza do gasto e finalidade: valores pelo cadastro do projeto
+        rows = c.execute(f"""SELECT p.{coluna} AS k, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN projetos p USING (orcamento)
+                             WHERE l.orcamento IN ({marks}) GROUP BY 1, l.ciclo""", ids).fetchall()
+        ex = c.execute(f"""SELECT p.{coluna} AS k, SUM(e.realizado) r, SUM(e.empenhado) em FROM execucao e JOIN projetos p USING (orcamento)
+                           WHERE e.orcamento IN ({marks}) GROUP BY 1""", ids).fetchall()
+        out: dict[str, dict] = {}
+        for r in rows:
+            d = out.setdefault(r["k"], {"nome": nomes.get(r["k"], r["k"]), "base": 0.0, "plano": 0.0, "realizado": 0.0, "empenhado": 0.0})
+            d["base" if r["ciclo"] == config.CICLO_BASE else "plano"] = _arred(r["t"])
+        for r in ex:
+            d = out.setdefault(r["k"], {"nome": nomes.get(r["k"], r["k"]), "base": 0.0, "plano": 0.0, "realizado": 0.0, "empenhado": 0.0})
+            d["realizado"], d["empenhado"] = _arred(r["r"] or 0), _arred(r["em"] or 0)
+        for d in out.values():
+            d["executado"] = _arred(d["realizado"] + d["empenhado"])
+        return sorted(out.values(), key=lambda d: -max(d["plano"], d["base"]))
+    naturezas, finalidades = por_atributo("natureza", NATUREZAS), por_atributo("finalidade", FINALIDADES)
     tot = lambda lista, k: _arred(sum(x[k] for x in lista)) if lista else 0.0
     status = {"mantida": 0, "ajustada": 0, "nova": 0, "viagens": 0}
     for r in c.execute(
@@ -770,7 +793,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
             "total_realizado": tot(origens, "realizado"), "total_empenhado": tot(origens, "empenhado"),
             "total_executado": tot(origens, "executado") if origens else 0.0,
             "linhas_status": status,
-            "por_origem": origens, "por_grupo": grupos,
+            "por_origem": origens, "por_grupo": grupos, "por_natureza": naturezas, "por_finalidade": finalidades,
             "mensal_plano": [{"mes": NOMES_MESES[i], "valor": _arred(mensal[m] or 0)} for i, m in enumerate(MESES)]}
 
 

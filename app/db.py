@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS projetos (
     diretoria TEXT NOT NULL DEFAULT 'ESR',
     original_2026 REAL NOT NULL DEFAULT 0,
     novo INTEGER NOT NULL DEFAULT 0,
+    natureza TEXT NOT NULL DEFAULT '',             -- sustentacao, investimento, crescimento, capacitacao, gestao ('' = não definida)
     finalidade TEXT NOT NULL DEFAULT 'caixa',      -- 'caixa' (fluxo de caixa) ou 'headcount' (pessoal)
     tipo TEXT NOT NULL DEFAULT 'despesa',
     origem_2027 TEXT NOT NULL DEFAULT '',
@@ -383,6 +384,8 @@ def init_db() -> None:
         if "finalidade" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: finalidade do orçamento
             c.execute("ALTER TABLE projetos ADD COLUMN finalidade TEXT NOT NULL DEFAULT 'caixa'")
             c.execute("UPDATE projetos SET finalidade='headcount' WHERE UPPER(descricao) LIKE '%PESSOAL%'")      # sugestão inicial pelo nome
+        if "natureza" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: natureza do gasto
+            c.execute("ALTER TABLE projetos ADD COLUMN natureza TEXT NOT NULL DEFAULT ''")
         if "evento_id" not in {r[1] for r in c.execute("PRAGMA table_info(viagens)")}:      # migração: viagens vindas de eventos
             c.execute("ALTER TABLE viagens ADD COLUMN evento_id INTEGER")
         if "site" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: site do evento

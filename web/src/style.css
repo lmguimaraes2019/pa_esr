@@ -403,3 +403,4 @@ button{-webkit-text-fill-color:currentColor}
 .tag.cx{background:#E3F2FD;color:#0B4F8A;border-color:#B7D8F5}
 a.botao{display:inline-block;padding:8px 14px;border:1px solid var(--azul);border-radius:8px;color:var(--azul);font-weight:600;text-decoration:none;background:#fff}
 a.botao:hover{background:var(--azul-claro)}
+.tag.nat{background:#FFF4E0;color:#8A5300;border-color:#F2D29B}

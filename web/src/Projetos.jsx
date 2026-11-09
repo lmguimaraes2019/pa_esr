@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt } from "./api.js";
-import { Delta, pct, Selo } from "./ui.jsx";
+import { Delta, pct, Selo, NATUREZAS, nomeNatureza } from "./ui.jsx";
 
 function NovoOrcamento({ listas, onCriar, onFechar }) {
-  const [f, setF] = useState({ tipo: "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
+  const [f, setF] = useState({ tipo: "despesa", finalidade: "caixa", natureza: "", descricao: "", origem: "", gerente: "" });
   const [erro, setErro] = useState("");
   const salvar = async (e) => {
     e.preventDefault(); setErro("");
@@ -21,6 +21,7 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
         <label>Origem de recursos<select value={f.origem} onChange={(e) => setF({ ...f, origem: e.target.value })} required>
           <option value="">Selecione…</option>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
         <label>Finalidade<select value={f.finalidade} onChange={(e) => setF({ ...f, finalidade: e.target.value })}><option value="caixa">Fluxo de caixa</option><option value="headcount">Headcount</option></select></label>
+        <label>Natureza do gasto<select value={f.natureza} onChange={(e) => setF({ ...f, natureza: e.target.value })}>{NATUREZAS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
         <label>Gerente do projeto<select value={f.gerente} onChange={(e) => setF({ ...f, gerente: e.target.value })} required>
           <option value="">Selecione…</option>{listas.gerentes.map((g) => <option key={g}>{g}</option>)}</select></label>
       </div>
@@ -31,14 +32,17 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
 }
 
 export default function Projetos({ abrir }) {
-  const [ps, setPs] = useState(null);
+  const [todos, setPs] = useState(null);
+  const [fNat, setFNat] = useState("");
+  const [fFin, setFFin] = useState("");
   const [erro, setErro] = useState("");
   const [novo, setNovo] = useState(false);
   const [listas, setListas] = useState(null);
   const [fechado, setFechado] = useState({});      // grupos recolhidos (hook antes dos retornos antecipados)
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
-  if (!ps) return <p>Carregando…</p>;
+  if (!todos) return <p>Carregando…</p>;
+  const ps = todos.filter((p) => (!fNat || (fNat === "_sem" ? !p.natureza : p.natureza === fNat)) && (!fFin || p.finalidade === fFin));
   const soma = (k) => ps.filter((p) => p.tipo !== "receita").reduce((a, p) => a + p[k], 0);
   const somaT = (k) => ps.reduce((a, p) => a + p[k], 0);
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
@@ -60,7 +64,7 @@ export default function Projetos({ abrir }) {
   const linhaProjeto = (p) => (
           <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido ? "concluido" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
             <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
-            <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} <span className={"tag " + (p.finalidade === "headcount" ? "hc" : "cx")} title="Finalidade do orçamento">{p.finalidade === "headcount" ? "headcount" : "fluxo de caixa"}</span> {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
+            <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} <span className={"tag " + (p.finalidade === "headcount" ? "hc" : "cx")} title="Finalidade do orçamento">{p.finalidade === "headcount" ? "headcount" : "fluxo de caixa"}</span> {p.natureza && <span className="tag nat" title="Natureza do gasto">{nomeNatureza(p.natureza)}</span>} {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
             <td>{p.gerente}</td>
             <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.empenhado_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className={"n " + (p.total_2026 - p.realizado_2026 - p.empenhado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026 - p.empenhado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
             {p.tipo === "receita"
@@ -77,7 +81,11 @@ export default function Projetos({ abrir }) {
         <div className="acoes"><button type="button" onClick={() => setFechado({})}>Expandir tudo</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => !k.includes("|")).map((k) => [k, true])))}>Recolher gerências</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => k.includes("|")).map((k) => [k, true])))}>Recolher origens</button></div>
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}
-      {!ps.length && <p className="mudo">Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima.</p>}
+      <div className="filtros" style={{ margin: "8px 0" }}>
+        <select value={fFin} onChange={(e) => setFFin(e.target.value)} aria-label="Filtrar por finalidade"><option value="">Todas as finalidades</option><option value="caixa">Fluxo de caixa</option><option value="headcount">Headcount</option></select>
+        <select value={fNat} onChange={(e) => setFNat(e.target.value)} aria-label="Filtrar por natureza"><option value="">Todas as naturezas</option>{NATUREZAS.filter(([k]) => k).map(([k, t]) => <option key={k} value={k}>{t}</option>)}<option value="_sem">Sem natureza definida</option></select>
+      </div>
+      {!ps.length && <p className="mudo">{todos.length ? "Nenhum projeto neste filtro." : "Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima."}</p>}
       <div className="rolagem"><table className="tab clic pa">
         <thead>
           <tr className="grupos"><th colSpan={3} style={{ background: "#fff" }} /><th colSpan={5} className="g26"><Selo ano={2026} /></th><th colSpan={4} className="g27"><Selo ano={2027} /></th></tr>

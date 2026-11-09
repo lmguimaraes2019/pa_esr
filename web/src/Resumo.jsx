@@ -95,6 +95,8 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
       </div>
       <Cobertura admin={admin} />
       <section className="cartao"><h3>Por origem de recurso</h3><Quadro itens={r.por_origem} rotulo="Origem" /></section>
+      <section className="cartao"><h3>Por natureza do gasto</h3><Quadro itens={r.por_natureza || []} rotulo="Natureza" /></section>
+      <section className="cartao"><h3>Por finalidade (fluxo de caixa ou headcount)</h3><Quadro itens={r.por_finalidade || []} rotulo="Finalidade" /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>
         <div className="meses">{r.mensal_plano.map((m) => (

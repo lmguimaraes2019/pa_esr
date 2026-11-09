@@ -956,3 +956,18 @@ def test_finalidade_do_projeto_e_exposicao_cambial(client):
     assert ws["L3"].value == 3500 and ws["K3"].value == "USD" and ws["A3"].value == "NÃO" and ws["O3"].value == "2º TRIMESTRE 2027"
     assert client.delete(f"/api/exposicao/{xid}").status_code == 200
     assert client.get("/api/exposicao").json()["totais"]["itens"] == 1
+
+
+def test_natureza_do_gasto_no_projeto_e_no_resumo(client):
+    entrar(client)
+    L = client.get("/api/listas").json()
+    o = client.post("/api/projetos", json={"descricao": "Projeto Natureza ZZ", "origem": L["origens"][0], "gerente": L["gerentes"][0], "natureza": "investimento"}).json()["orcamento"]
+    assert next(p for p in client.get("/api/projetos").json() if p["orcamento"] == o)["natureza"] == "investimento"
+    for n in ("sustentacao", "crescimento", "capacitacao", "gestao", ""):
+        assert client.patch(f"/api/projetos/{o}", json={"natureza": n}).status_code == 200
+        assert client.get(f"/api/projetos/{o}").json()["projeto"]["natureza"] == n
+    assert client.patch(f"/api/projetos/{o}", json={"natureza": "outra"}).status_code == 422
+    r = client.get("/api/resumo").json()
+    assert {x["nome"] for x in r["por_natureza"]} <= {"Sustentação", "Investimento", "Crescimento ou projeto", "Capacitação e eventos", "Gestão da área", "Sem natureza definida"}
+    assert abs(sum(x["plano"] for x in r["por_natureza"]) - sum(x["plano"] for x in r["por_origem"])) < 0.05
+    assert abs(sum(x["plano"] for x in r["por_finalidade"]) - sum(x["plano"] for x in r["por_origem"])) < 0.05

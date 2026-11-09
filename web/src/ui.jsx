@@ -79,3 +79,6 @@ export function TarefaOrc({ dados, orcamento, edt, tarefa, onChange }) {
     </label>
   );
 }
+
+export const NATUREZAS = [["", "Sem natureza definida"], ["sustentacao", "Sustentação"], ["investimento", "Investimento"], ["crescimento", "Crescimento ou projeto"], ["capacitacao", "Capacitação e eventos"], ["gestao", "Gestão da área"]];
+export const nomeNatureza = (k) => (NATUREZAS.find(([v]) => v === k) || [])[1] || "";
