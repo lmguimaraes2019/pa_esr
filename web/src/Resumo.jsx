@@ -3,8 +3,16 @@ import { api, fmt, mi } from "./api.js";
 import { Kpi, Delta, pct, Selo } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 
-function Quadro({ itens, rotulo }) {
+function Quadro({ itens, rotulo, aninhado }) {
+  const [fechado, setFechado] = useState({});
   const max = Math.max(1, ...itens.map((i) => Math.max(i.plano, i.base)));
+  const linha = (i, filho, tem) => (
+    <tr key={(filho ? "f-" : "") + i.nome + (filho || "")} className={filho ? "filho" : tem ? "pai" : ""} onClick={tem ? () => setFechado({ ...fechado, [i.nome]: !fechado[i.nome] }) : undefined} style={tem ? { cursor: "pointer" } : undefined}>
+      <td style={filho ? { paddingLeft: 28 } : undefined}>{tem && <span className="mudo" style={{ marginRight: 6 }}>{fechado[i.nome] ? "▸" : "▾"}</span>}{filho ? <span className="mudo">{i.nome}</span> : i.nome}</td>
+      <td className="n">{fmt(i.base)}</td><td className="n">{fmt(i.executado)}</td><td className="n">{pct(i.executado, i.base)}</td>
+      <td className="n"><strong>{fmt(i.plano)}</strong></td><td className="n"><Delta de={i.base} para={i.plano} /></td>
+      <td><div className="barra"><span className="b26" style={{ width: (i.base / max) * 100 + "%" }} /><span className="b27" style={{ width: (i.plano / max) * 100 + "%" }} /></div></td>
+    </tr>);
   return (
     <table className="tab">
       <thead>
@@ -12,12 +20,10 @@ function Quadro({ itens, rotulo }) {
           <th colSpan={3} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th><th rowSpan={2} style={{ background: "#fff", width: "18%" }} /></tr>
         <tr><th>{rotulo}</th><th className="n g26">Aprovado</th><th className="n g26">Executado</th><th className="n g26">% exec.</th><th className="n g27">Plano 2027</th><th className="n g27">Δ vs aprovado</th><th /></tr>
       </thead>
-      <tbody>{itens.map((i) => (
-        <tr key={i.nome}>
-          <td>{i.nome}</td><td className="n">{fmt(i.base)}</td><td className="n">{fmt(i.executado)}</td><td className="n">{pct(i.executado, i.base)}</td>
-          <td className="n"><strong>{fmt(i.plano)}</strong></td><td className="n"><Delta de={i.base} para={i.plano} /></td>
-          <td><div className="barra"><span className="b26" style={{ width: (i.base / max) * 100 + "%" }} /><span className="b27" style={{ width: (i.plano / max) * 100 + "%" }} /></div></td>
-        </tr>))}</tbody>
+      <tbody>{itens.map((i) => {
+        const fs = aninhado ? i.finalidades || [] : [];
+        return [linha(i, null, fs.length > 0), ...(fechado[i.nome] ? [] : fs.map((f) => linha(f, i.nome, false)))];
+      })}</tbody>
       <tfoot><tr><td>Total</td><td className="n">{fmt(itens.reduce((a, i) => a + i.base, 0))}</td><td className="n">{fmt(itens.reduce((a, i) => a + i.executado, 0))}</td><td />
         <td className="n">{fmt(itens.reduce((a, i) => a + i.plano, 0))}</td><td className="n"><Delta de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td><td /></tr></tfoot>
     </table>
@@ -94,8 +100,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
         </section>
       </div>
       <Cobertura admin={admin} />
-      <section className="cartao"><h3>Por origem de recurso</h3><Quadro itens={r.por_origem} rotulo="Origem" /></section>
-      <section className="cartao"><h3>Por finalidade do orçamento</h3><Quadro itens={r.por_finalidade || []} rotulo="Finalidade" /></section>
+      <section className="cartao"><h3>Por origem de recurso e finalidade</h3><Quadro itens={r.por_origem} rotulo="Origem / finalidade" aninhado /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>
         <div className="meses">{r.mensal_plano.map((m) => (

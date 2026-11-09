@@ -977,3 +977,5 @@ def test_finalidades_do_projeto_e_resumo(client):
     r = client.get("/api/resumo").json()
     assert "Investimento" in {x["nome"] for x in r["por_finalidade"]}
     assert abs(sum(x["plano"] for x in r["por_finalidade"]) - sum(x["plano"] for x in r["por_origem"])) < 0.05
+    for o in r["por_origem"]:                                          # a quebra por finalidade fecha com o total da origem
+        assert abs(sum(f["plano"] for f in o["finalidades"]) - o["plano"]) < 0.05 and abs(sum(f["base"] for f in o["finalidades"]) - o["base"]) < 0.05

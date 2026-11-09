@@ -772,6 +772,26 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
             d["executado"] = _arred(d["realizado"] + d["empenhado"])
         return sorted(out.values(), key=lambda d: -max(d["plano"], d["base"]))
     finalidades = por_atributo("finalidade", FINALIDADES)
+    # origem de recurso quebrada por finalidade (mesmos valores de "origens", detalhados)
+    cruz = c.execute(
+        f"""SELECT CASE WHEN l.ciclo = {config.CICLO_BASE} THEN p.origem ELSE {ORIGEM_27} END AS origem, p.finalidade AS fin, l.ciclo, SUM({SOMA_MESES}) t
+            FROM linhas l JOIN projetos p USING (orcamento) WHERE l.orcamento IN ({marks}) GROUP BY 1, 2, l.ciclo""", ids).fetchall()
+    cruz_ex = c.execute(
+        f"""SELECT p.origem AS origem, p.finalidade AS fin, SUM(e.realizado) r, SUM(e.empenhado) em FROM execucao e JOIN projetos p USING (orcamento)
+            WHERE e.orcamento IN ({marks}) GROUP BY 1, 2""", ids).fetchall()
+    filhos: dict[str, dict[str, dict]] = {}
+    novo = lambda k: {"nome": FINALIDADES.get(k, k), "base": 0.0, "plano": 0.0, "realizado": 0.0, "empenhado": 0.0}
+    for r in cruz:
+        d = filhos.setdefault(r["origem"], {}).setdefault(r["fin"], novo(r["fin"]))
+        d["base" if r["ciclo"] == config.CICLO_BASE else "plano"] = _arred(r["t"])
+    for r in cruz_ex:
+        d = filhos.setdefault(r["origem"], {}).setdefault(r["fin"], novo(r["fin"]))
+        d["realizado"], d["empenhado"] = _arred(r["r"] or 0), _arred(r["em"] or 0)
+    for o in origens:
+        lista = list(filhos.get(o["nome"], {}).values())
+        for d in lista:
+            d["executado"] = _arred(d["realizado"] + d["empenhado"])
+        o["finalidades"] = sorted(lista, key=lambda d: -max(d["plano"], d["base"]))
     tot = lambda lista, k: _arred(sum(x[k] for x in lista)) if lista else 0.0
     status = {"mantida": 0, "ajustada": 0, "nova": 0, "viagens": 0}
     for r in c.execute(

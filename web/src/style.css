@@ -404,3 +404,5 @@ button{-webkit-text-fill-color:currentColor}
 a.botao{display:inline-block;padding:8px 14px;border:1px solid var(--azul);border-radius:8px;color:var(--azul);font-weight:600;text-decoration:none;background:#fff}
 a.botao:hover{background:var(--azul-claro)}
 .tag.nat{background:#FFF4E0;color:#8A5300;border-color:#F2D29B}
+.tab tr.pai td { font-weight: 600; background: #f6f8fb; }
+.tab tr.filho td { font-size: .93em; }
