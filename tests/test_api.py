@@ -958,16 +958,17 @@ def test_finalidade_do_projeto_e_exposicao_cambial(client):
     assert client.get("/api/exposicao").json()["totais"]["itens"] == 1
 
 
-def test_natureza_do_gasto_no_projeto_e_no_resumo(client):
+def test_finalidades_do_projeto_e_resumo(client):
     entrar(client)
     L = client.get("/api/listas").json()
-    o = client.post("/api/projetos", json={"descricao": "Projeto Natureza ZZ", "origem": L["origens"][0], "gerente": L["gerentes"][0], "natureza": "investimento"}).json()["orcamento"]
-    assert next(p for p in client.get("/api/projetos").json() if p["orcamento"] == o)["natureza"] == "investimento"
-    for n in ("sustentacao", "crescimento", "capacitacao", "gestao", ""):
-        assert client.patch(f"/api/projetos/{o}", json={"natureza": n}).status_code == 200
-        assert client.get(f"/api/projetos/{o}").json()["projeto"]["natureza"] == n
-    assert client.patch(f"/api/projetos/{o}", json={"natureza": "outra"}).status_code == 422
+    o = client.post("/api/projetos", json={"descricao": "Projeto Finalidade ZZ", "origem": L["origens"][0], "gerente": L["gerentes"][0], "finalidade": "investimento"}).json()["orcamento"]
+    assert next(p for p in client.get("/api/projetos").json() if p["orcamento"] == o)["finalidade"] == "investimento"
+    for n in ("caixa", "headcount", "sustentacao", "crescimento", "capacitacao", "gestao", "investimento"):
+        assert client.patch(f"/api/projetos/{o}", json={"finalidade": n}).status_code == 200
+        assert client.get(f"/api/projetos/{o}").json()["projeto"]["finalidade"] == n
+    assert client.patch(f"/api/projetos/{o}", json={"finalidade": "outra"}).status_code == 422
+    for p in client.get("/api/projetos").json():                      # todos os projetos do seed passam a investimento
+        assert client.patch(f"/api/projetos/{p['orcamento']}", json={"finalidade": "investimento"}).status_code == 200
     r = client.get("/api/resumo").json()
-    assert {x["nome"] for x in r["por_natureza"]} <= {"Sustentação", "Investimento", "Crescimento ou projeto", "Capacitação e eventos", "Gestão da área", "Sem natureza definida"}
-    assert abs(sum(x["plano"] for x in r["por_natureza"]) - sum(x["plano"] for x in r["por_origem"])) < 0.05
+    assert "Investimento" in {x["nome"] for x in r["por_finalidade"]}
     assert abs(sum(x["plano"] for x in r["por_finalidade"]) - sum(x["plano"] for x in r["por_origem"])) < 0.05

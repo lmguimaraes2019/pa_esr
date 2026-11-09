@@ -80,5 +80,6 @@ export function TarefaOrc({ dados, orcamento, edt, tarefa, onChange }) {
   );
 }
 
-export const NATUREZAS = [["", "Sem natureza definida"], ["sustentacao", "Sustentação"], ["investimento", "Investimento"], ["crescimento", "Crescimento ou projeto"], ["capacitacao", "Capacitação e eventos"], ["gestao", "Gestão da área"]];
-export const nomeNatureza = (k) => (NATUREZAS.find(([v]) => v === k) || [])[1] || "";
+export const FINALIDADES = [["caixa", "Fluxo de caixa"], ["headcount", "Headcount"], ["sustentacao", "Sustentação"], ["investimento", "Investimento"], ["crescimento", "Crescimento ou projeto"], ["capacitacao", "Capacitação e eventos"], ["gestao", "Gestão da área"]];
+export const nomeFinalidade = (k) => (FINALIDADES.find(([v]) => v === k) || FINALIDADES[0])[1];
+export const classeFinalidade = (k) => (k === "headcount" ? "hc" : k === "caixa" || !k ? "cx" : "nat");
