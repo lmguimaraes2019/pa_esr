@@ -397,3 +397,9 @@ button{-webkit-text-fill-color:currentColor}
   .tab.pa tr.proj td:nth-child(1){padding-left:16px}
   main:has(.tab.pa){padding-left:12px;padding-right:12px}
 }
+
+/* finalidade do orçamento */
+.tag.hc{background:#EDE7F6;color:#4A2C8A;border-color:#C9B8EA}
+.tag.cx{background:#E3F2FD;color:#0B4F8A;border-color:#B7D8F5}
+a.botao{display:inline-block;padding:8px 14px;border:1px solid var(--azul);border-radius:8px;color:var(--azul);font-weight:600;text-decoration:none;background:#fff}
+a.botao:hover{background:var(--azul-claro)}

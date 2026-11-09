@@ -117,6 +117,7 @@ class ProjetoNovo(BaseModel):
     origem: str = Field(min_length=1, max_length=40)
     gerente: str = Field(min_length=1, max_length=100)
     tipo: str = Field(default="despesa", pattern="^(despesa|receita)$")
+    finalidade: str = Field(default="caixa", pattern="^(caixa|headcount)$")
 
 
 class ProjetoPatch(BaseModel):
@@ -125,6 +126,7 @@ class ProjetoPatch(BaseModel):
     origem: str | None = Field(default=None, min_length=1, max_length=40)
     gerente: str | None = Field(default=None, min_length=1, max_length=100)
     tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
+    finalidade: str | None = Field(default=None, pattern="^(caixa|headcount)$")
     contingenciado: bool | None = None
     detalhe: str | None = Field(default=None, max_length=3000)
 
@@ -342,7 +344,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
         "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
-             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "contingenciado": bool(r["contingenciado"]),
+             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],
@@ -374,8 +376,8 @@ def criar_projeto(dados: ProjetoNovo, u: dict = Depends(usuario_liberado)):
         n = 1 + max([int(r[0][4:]) for r in c.execute("SELECT orcamento FROM projetos WHERE orcamento LIKE 'N27-%'")
                      if r[0][4:].isdigit()] or [0])
         chave = f"N27-{n:03d}"
-        c.execute("INSERT INTO projetos (orcamento, n_projeto, descricao, origem, origem_2027, gerente, novo, tipo) VALUES (?,?,?,?,?,?,1,?)",
-                  (chave, "", dados.descricao.strip(), dados.origem, dados.origem, dados.gerente, dados.tipo))
+        c.execute("INSERT INTO projetos (orcamento, n_projeto, descricao, origem, origem_2027, gerente, novo, tipo, finalidade) VALUES (?,?,?,?,?,?,1,?,?)",
+                  (chave, "", dados.descricao.strip(), dados.origem, dados.origem, dados.gerente, dados.tipo, dados.finalidade))
         if u["perfil"] != "admin":     # quem cria enxerga o que criou, mesmo sem acompanhar aquele gerente
             c.execute("INSERT OR IGNORE INTO user_projetos (user_id, orcamento) VALUES (?,?)", (u["id"], chave))
         audit(c, u["login"], "criou orçamento novo", chave, detalhe=f"{dados.tipo} | {dados.descricao} | {dados.origem} | {dados.gerente}")
@@ -483,7 +485,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},

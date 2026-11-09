@@ -926,3 +926,33 @@ def test_projeto_sem_valor_em_2027_fica_no_relatorio_e_fora_da_planilha(client):
     pre = client.get("/api/export/preflight").json()
     meus = [a for a in pre["avisos"] if o == (a["orcamento"] or "")]
     assert meus and all(a["nivel"] == "aviso" for a in meus)      # só informa: não entra na planilha e não bloqueia a exportação
+
+
+def test_finalidade_do_projeto_e_exposicao_cambial(client):
+    entrar(client)
+    L = client.get("/api/listas").json()
+    o = client.post("/api/projetos", json={"descricao": "DSS-ESR-TESTE-PESSOAL ZZ", "origem": L["origens"][0], "gerente": L["gerentes"][0], "finalidade": "headcount"}).json()["orcamento"]
+    ps = {p["orcamento"]: p for p in client.get("/api/projetos").json()}
+    assert ps[o]["finalidade"] == "headcount" and all(p["finalidade"] in ("caixa", "headcount") for p in ps.values())
+    assert client.patch(f"/api/projetos/{o}", json={"finalidade": "caixa"}).status_code == 200
+    assert client.get(f"/api/projetos/{o}").json()["projeto"]["finalidade"] == "caixa"
+    assert client.patch(f"/api/projetos/{o}", json={"finalidade": "xis"}).status_code == 422
+    corpo = {"orcamento": o, "sc_andamento": "Não", "ponto_focal": "Celia Lopes", "tipo": "HW", "descricao": "Hardware diversos", "moeda": "USD",
+             "valor": 3000, "pais_origem": "EUA", "trimestre": 2}
+    r = client.post("/api/exposicao", json=corpo)
+    assert r.status_code == 201 and r.json()["completo"] and r.json()["diretoria"] == "DSS" and r.json()["gerencia"] == "ESR"
+    xid = r.json()["id"]
+    assert client.post("/api/exposicao", json={**corpo, "moeda": "EUR", "valor": 100, "trimestre": 1}).status_code == 201
+    assert client.post("/api/exposicao", json={**corpo, "moeda": "BRL"}).status_code == 422
+    d = client.get("/api/exposicao").json()
+    assert d["totais"]["usd"] == 3000 and d["totais"]["eur"] == 100 and d["totais"]["itens"] == 2
+    assert client.put(f"/api/exposicao/{xid}", json={**corpo, "valor": 3500}).json()["valor"] == 3500
+    x = client.get("/api/exposicao/xlsx")
+    assert x.status_code == 200 and x.content[:2] == b"PK"
+    from openpyxl import load_workbook
+    import io as _io
+    ws = load_workbook(_io.BytesIO(x.content)).active
+    assert ws["L1"].value == "Valor total USD" and ws["M2"].value == 100 and ws["O2"].value == "1º TRIMESTRE 2027"      # ordenado por trimestre
+    assert ws["L3"].value == 3500 and ws["K3"].value == "USD" and ws["A3"].value == "NÃO" and ws["O3"].value == "2º TRIMESTRE 2027"
+    assert client.delete(f"/api/exposicao/{xid}").status_code == 200
+    assert client.get("/api/exposicao").json()["totais"]["itens"] == 1

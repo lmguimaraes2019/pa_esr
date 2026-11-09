@@ -3,7 +3,7 @@ import { api, fmt } from "./api.js";
 import { Delta, pct, Selo } from "./ui.jsx";
 
 function NovoOrcamento({ listas, onCriar, onFechar }) {
-  const [f, setF] = useState({ tipo: "despesa", descricao: "", origem: "", gerente: "" });
+  const [f, setF] = useState({ tipo: "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
   const [erro, setErro] = useState("");
   const salvar = async (e) => {
     e.preventDefault(); setErro("");
@@ -20,6 +20,7 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
         <label>Nome do orçamento<input value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} required minLength={3} placeholder="ex.: DSS-ESR-ASSOCIACAO-NOVO PROGRAMA" /></label>
         <label>Origem de recursos<select value={f.origem} onChange={(e) => setF({ ...f, origem: e.target.value })} required>
           <option value="">Selecione…</option>{listas.origens.map((o) => <option key={o}>{o}</option>)}</select></label>
+        <label>Finalidade<select value={f.finalidade} onChange={(e) => setF({ ...f, finalidade: e.target.value })}><option value="caixa">Fluxo de caixa</option><option value="headcount">Headcount</option></select></label>
         <label>Gerente do projeto<select value={f.gerente} onChange={(e) => setF({ ...f, gerente: e.target.value })} required>
           <option value="">Selecione…</option>{listas.gerentes.map((g) => <option key={g}>{g}</option>)}</select></label>
       </div>
@@ -59,7 +60,7 @@ export default function Projetos({ abrir }) {
   const linhaProjeto = (p) => (
           <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido ? "concluido" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
             <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
-            <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
+            <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} <span className={"tag " + (p.finalidade === "headcount" ? "hc" : "cx")} title="Finalidade do orçamento">{p.finalidade === "headcount" ? "headcount" : "fluxo de caixa"}</span> {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
             <td>{p.gerente}</td>
             <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.empenhado_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className={"n " + (p.total_2026 - p.realizado_2026 - p.empenhado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026 - p.empenhado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
             {p.tipo === "receita"

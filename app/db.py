@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS projetos (
     diretoria TEXT NOT NULL DEFAULT 'ESR',
     original_2026 REAL NOT NULL DEFAULT 0,
     novo INTEGER NOT NULL DEFAULT 0,
+    finalidade TEXT NOT NULL DEFAULT 'caixa',      -- 'caixa' (fluxo de caixa) ou 'headcount' (pessoal)
     tipo TEXT NOT NULL DEFAULT 'despesa',
     origem_2027 TEXT NOT NULL DEFAULT '',
     gerente_2026 TEXT NOT NULL DEFAULT ''     -- gestor de 2026; a coluna "gerente" passa a ser o gestor vigente em 2027
@@ -89,6 +90,28 @@ CREATE TABLE IF NOT EXISTS receitas (
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_receitas_ciclo_orc ON receitas (ciclo, orcamento);
+
+CREATE TABLE IF NOT EXISTS exposicao_cambial (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    orcamento TEXT NOT NULL REFERENCES projetos(orcamento),
+    sc_andamento TEXT NOT NULL DEFAULT '',
+    diretoria TEXT NOT NULL DEFAULT 'DSS',
+    gerencia TEXT NOT NULL DEFAULT 'ESR',
+    ponto_focal TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT '',
+    processo TEXT NOT NULL DEFAULT '',
+    descricao TEXT NOT NULL DEFAULT '',
+    fabricante TEXT NOT NULL DEFAULT '',
+    canal TEXT NOT NULL DEFAULT '',
+    moeda TEXT NOT NULL DEFAULT 'USD' CHECK (moeda IN ('USD','EUR')),
+    valor REAL NOT NULL DEFAULT 0,
+    pais_origem TEXT NOT NULL DEFAULT '',
+    trimestre INTEGER NOT NULL DEFAULT 1 CHECK (trimestre BETWEEN 1 AND 4),
+    conecta TEXT NOT NULL DEFAULT '',
+    previsao_sc TEXT NOT NULL DEFAULT '',
+    atualizado_por TEXT NOT NULL DEFAULT '',
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS eventos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -259,6 +282,7 @@ PREMISSAS_PADRAO = [
     ("reajuste_geral", 0.0, "Reajuste de 2027 sobre os demais grupos de despesa (percentual)"),
     ("viagens_bagagem_vezes", 1.0, "Quantas vezes a franquia de bagagem entra no custo da viagem (a planilha de 2026 contou 2 no consolidado)"),
     ("dolar", 5.5, "Câmbio USD/BRL usado nas calculadoras (a planilha de parcerias usa 5,50)"),
+    ("euro", 6.4, "Câmbio EUR/BRL usado para converter a exposição cambial em euro para reais"),
 ]
 
 
@@ -356,6 +380,9 @@ def init_db() -> None:
             for col in ("edt", "tarefa"):
                 if col not in tc:
                     c.execute(f"ALTER TABLE {tabela} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if "finalidade" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: finalidade do orçamento
+            c.execute("ALTER TABLE projetos ADD COLUMN finalidade TEXT NOT NULL DEFAULT 'caixa'")
+            c.execute("UPDATE projetos SET finalidade='headcount' WHERE UPPER(descricao) LIKE '%PESSOAL%'")      # sugestão inicial pelo nome
         if "evento_id" not in {r[1] for r in c.execute("PRAGMA table_info(viagens)")}:      # migração: viagens vindas de eventos
             c.execute("ALTER TABLE viagens ADD COLUMN evento_id INTEGER")
         if "site" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: site do evento

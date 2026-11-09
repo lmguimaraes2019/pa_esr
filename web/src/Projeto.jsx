@@ -144,6 +144,7 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
   const [gestor, setGestor] = useState(p.gerente);
   const [nome, setNome] = useState(p.descricao);
   const [tipo, setTipo] = useState(p.tipo);
+  const [finalidade, setFinalidade] = useState(p.finalidade || "caixa");
   const [msg, setMsg] = useState("");
   useEffect(() => { api("/listas").then(setListas).catch(() => {}); }, []);
   useEffect(() => { setOrigem(p.origem); setGestor(p.gerente); setNome(p.descricao); setTipo(p.tipo); }, [p.origem, p.gerente, p.descricao, p.tipo]);
@@ -166,6 +167,7 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
         <label>Gestor em 2027
           <select value={gestor} onChange={(e) => setGestor(e.target.value)}>{[...new Set([p.gerente, ...listas.gerentes])].map((g) => <option key={g}>{g}</option>)}</select></label>
         {pode && <label>Nome do orçamento<input value={nome} onChange={(e) => setNome(e.target.value)} /></label>}
+        <label>Finalidade<select value={finalidade} onChange={(e) => setFinalidade(e.target.value)}><option value="caixa">Fluxo de caixa</option><option value="headcount">Headcount</option></select></label>
         {pode && <label>Tipo de orçamento<select value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>}
       </div>
       <div className="acoes">
@@ -175,6 +177,7 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
           salvar({ gerente: gestor }, `Gestor de 2027 alterado para ${gestor}.${p.novo ? "" : ` O de 2026 continua ${p.gerente_2026}.`}`);
         }}>Salvar gestor</button>
         {pode && <button disabled={nome.trim() === p.descricao || nome.trim().length < 3} onClick={() => salvar({ descricao: nome }, "Nome atualizado.")}>Salvar nome</button>}
+        <button disabled={finalidade === p.finalidade} onClick={() => salvar({ finalidade }, finalidade === "headcount" ? "Orçamento marcado como headcount." : "Orçamento marcado como fluxo de caixa.")}>Salvar finalidade</button>
         {pode && <button disabled={tipo === p.tipo} onClick={() => salvar({ tipo }, tipo === "receita" ? "Agora é um orçamento de receita: o total entra como resultado positivo." : "Agora é um orçamento de despesa.")}>Salvar tipo</button>}
         {p.novo && <button className="perigo-btn" onClick={excluir}>Excluir orçamento</button>}
         {msg && <span className="ok">{msg}</span>}
@@ -324,7 +327,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>}{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + (p.finalidade === "headcount" ? "hc" : "cx")}>{p.finalidade === "headcount" ? "headcount" : "fluxo de caixa"}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} novo={p.novo} onSalvo={carregar} />}
