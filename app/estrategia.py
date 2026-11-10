@@ -126,3 +126,31 @@ def semear_po(c: sqlite3.Connection) -> bool:
     gravar(c, PO_2027)
     c.execute("INSERT INTO meta (chave, valor) VALUES ('po2027_semeado', '1')")
     return True
+
+
+# ---------------------------------------------------------------- PO 2027 completo (12 diretrizes, 30 REs, 146 ROs e os indicadores do CG)
+
+def _chave_codigo(tipo: str, codigo: str) -> tuple[str, str]:
+    """'RO 7.1.1', 'RE 7.1' e '7.1.1' são o mesmo item; 'RC 6.1.2' (PO-2026) continua sendo outro."""
+    return tipo, re.sub(r"^(RO|RE|DIRETRIZ|D)\s+", "", (codigo or "").strip().upper())
+
+
+def carregar_po_completo(c: sqlite3.Connection, forcar: bool = False) -> dict:
+    """Atualiza o catálogo com o PO 2027 completo das planilhas de detalhamento (arquivo app/assets/po2027.json).
+
+    Os itens são casados pelo código, então atualizam a linha existente (mesmo id) e os vínculos de projetos e entregas continuam valendo;
+    só os itens que ainda não existem são criados. Nada é apagado."""
+    import json
+    from pathlib import Path
+    if not forcar and c.execute("SELECT 1 FROM meta WHERE chave='po2027_completo'").fetchone():
+        return {"novos": 0, "alterados": 0, "ja_carregado": True}
+    dados = json.loads((Path(__file__).parent / "assets" / "po2027.json").read_text(encoding="utf-8"))
+    existentes = {_chave_codigo(r["tipo"], r["codigo"]): r["codigo"] for r in c.execute("SELECT tipo, codigo FROM estrategia")}
+    itens = []
+    for x in dados["cg"] + dados["diretrizes"] + dados["res"] + dados["ros"]:
+        x = dict(x)
+        x["codigo"] = existentes.get(_chave_codigo(x["tipo"], x["codigo"]), x["codigo"])      # mantém o código já gravado
+        itens.append(x)
+    r = gravar(c, itens)
+    c.execute("INSERT INTO meta (chave, valor) VALUES ('po2027_completo', '1') ON CONFLICT(chave) DO UPDATE SET valor='1'")
+    return r

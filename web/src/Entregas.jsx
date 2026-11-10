@@ -33,24 +33,74 @@ function ItemEst({ e, marcado, coberto, onAlterna }) {
   );
 }
 
+const sn = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const numeros = (e) => (e.codigo.match(/\d+/g) || []).map(Number);
+const porNumero = (a, b) => { const x = numeros(a), y = numeros(b); for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? -1) !== (y[i] ?? -1)) return (x[i] ?? -1) - (y[i] ?? -1); return 0; };
+
+/** Seletor em árvore: diretriz > RE > RO, com busca, filtro "só ESR", seleção sempre visível e indicadores do CG ao final. */
 export function SeletorEstrategia({ catalogo, ids, onChange }) {
   const [q, setQ] = useState("");
+  const temEsr = catalogo.some((e) => e.tipo === "po" && /\bESR\b/.test(e.responsavel));
+  const [soEsr, setSoEsr] = useState(temEsr);
+  const [verCg, setVerCg] = useState(false);
+  const [abertos, setAbertos] = useState(() => new Set(catalogo.filter((e) => ids.includes(e.id)).flatMap((e) => [e.id, ...e.pais])));
+  const porId = Object.fromEntries(catalogo.map((e) => [e.id, e]));
   const cobertos = fecho(catalogo, ids);
   const alterna = (id) => onChange(ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]);
-  const txt = q.trim().toLowerCase();
-  const passa = (e) => !txt || (e.codigo + " " + e.descricao + " " + e.meta + " " + e.responsavel).toLowerCase().includes(txt);
-  const hier = catalogo.filter((e) => e.tipo !== "cg");
-  // um RE ou diretriz aparece se ele ou algum item abaixo dele passa no filtro
-  const visivel = (e) => passa(e) || hier.some((f) => f.pais.includes(e.id) && passa(f));
-  const cg = catalogo.filter((e) => e.tipo === "cg" && passa(e));
+  const txt = sn(q.trim());
+  const filhosDe = {};
+  catalogo.forEach((e) => e.pais.forEach((pid) => { const pai = porId[pid]; if (pai && pai.tipo !== "cg" && ((pai.tipo === "diretriz" && e.tipo === "re") || (pai.tipo === "re" && e.tipo === "po"))) (filhosDe[pid] ||= []).push(e); }));
+  const filhos = (e) => (filhosDe[e.id] || []).slice().sort(porNumero);
+  const passaTxt = (e) => !txt || sn(e.codigo + " " + e.descricao + " " + e.meta + " " + e.responsavel + " " + e.lider + " " + e.objetivo).includes(txt);
+  const passaEsr = (e) => !soEsr || ids.includes(e.id) || /\bESR\b/.test(e.responsavel);
+  // um item aparece se ele (RO) passa nos filtros, ou se algum item abaixo dele aparece
+  const aparece = (e) => (e.tipo === "po" ? passaTxt(e) && passaEsr(e) : filhos(e).some(aparece) || (!soEsr && passaTxt(e)) || (txt && passaTxt(e) && !soEsr));
+  const dirs = catalogo.filter((e) => e.tipo === "diretriz").sort(porNumero);
+  const visiveis = dirs.filter(aparece);
+  const cgs = catalogo.filter((e) => e.tipo === "cg" && (!txt || passaTxt(e))).sort(porNumero);
+  const nRos = catalogo.filter((e) => e.tipo === "po").length;
+  const nVis = catalogo.filter((e) => e.tipo === "po" && aparece(e)).length;
+  const aberto = (e) => !!txt || abertos.has(e.id);
+  const toggle = (id) => setAbertos((x) => { const n = new Set(x); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const expandirTudo = (abrir) => setAbertos(abrir ? new Set(catalogo.filter((e) => e.tipo === "diretriz" || e.tipo === "re").map((e) => e.id)) : new Set());
+  const sel = ids.map((i) => porId[i]).filter(Boolean).sort(porNumero);
+  const nSel = (e) => filhos(e).reduce((a, f) => a + (ids.includes(f.id) ? 1 : 0) + nSel(f), 0);
+  const Cab = ({ e }) => (
+    <div className={"est-grupo n" + NIVEL[e.tipo] + (ids.includes(e.id) ? " marcado" : "")}>
+      <button type="button" className="est-seta" onClick={() => toggle(e.id)} aria-expanded={aberto(e)} aria-label={aberto(e) ? "Recolher" : "Expandir"}>{aberto(e) ? "▾" : "▸"}</button>
+      <label className="est-gtit"><input type="checkbox" checked={ids.includes(e.id)} onChange={() => alterna(e.id)} />
+        <b className={"est-cod " + e.tipo}>{rotuloEst(e)}</b> <span>{e.descricao}</span>
+        {cobertos.has(e.id) && !ids.includes(e.id) && <span className="chip herdado" title="Já coberto por um item marcado abaixo dele">coberto</span>}</label>
+      <span className="est-cont mudo">{nSel(e) > 0 && <strong className="est-nsel">{nSel(e)} marcado(s)</strong>} {e.tipo === "diretriz" ? `${filhos(e).filter(aparece).length} RE` : `${filhos(e).filter(aparece).length} RO`}</span>
+    </div>);
   return (
     <div className="est-sel">
-      <input className="est-busca" type="search" placeholder="Buscar por código, texto ou responsável" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar na estratégia" />
+      <div className="est-sel-sel" aria-live="polite">
+        {sel.length ? (<><strong>Marcados ({sel.length}):</strong>{sel.map((e) => (
+          <button type="button" key={e.id} className={"chip rem " + e.tipo} title={e.descricao + " (clique para remover)"} onClick={() => alterna(e.id)}>{rotuloEst(e)} ×</button>))}</>)
+          : <span className="mudo">Nenhum item marcado. Abra uma diretriz, escolha o RO que o orçamento ajuda a entregar e marque a caixa. Marcar o RO já cobre o RE, a diretriz e o indicador do CG.</span>}
+      </div>
+      <div className="est-barra">
+        <input className="est-busca" type="search" placeholder="Buscar por código, texto, métrica ou responsável" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar na estratégia" />
+        {temEsr && <label className="est-so"><input type="checkbox" checked={soEsr} onChange={(e) => setSoEsr(e.target.checked)} /> só ROs da ESR</label>}
+        <button type="button" className="link" onClick={() => expandirTudo(true)}>Expandir tudo</button>
+        <button type="button" className="link" onClick={() => expandirTudo(false)}>Recolher tudo</button>
+      </div>
+      <p className="mudo est-conta">{soEsr ? <>Mostrando {nVis} de {nRos} ROs do PO 2027 (responsável ESR). O orçamento serve a um RO de outra área? <button type="button" className="link" onClick={() => setSoEsr(false)}>Ver todos os ROs</button></> : <>Mostrando {nVis} de {nRos} ROs do PO 2027.</>}</p>
       <div className="est-lista" role="group" aria-label="Diretrizes, resultados estratégicos e resultados operacionais">
-        {hier.filter(visivel).map((e) => <ItemEst key={e.id} e={e} marcado={ids.includes(e.id)} coberto={cobertos.has(e.id)} onAlterna={alterna} />)}
-        {cg.length > 0 && <div className="est-sep">Indicadores do Contrato de Gestão</div>}
-        {cg.map((e) => <ItemEst key={e.id} e={e} marcado={ids.includes(e.id)} coberto={cobertos.has(e.id)} onAlterna={alterna} />)}
-        {!hier.some(visivel) && !cg.length && <p className="mudo">Nada encontrado.</p>}
+        {visiveis.map((d) => (
+          <div key={d.id} className="est-bloco">
+            <Cab e={d} />
+            {aberto(d) && filhos(d).filter(aparece).map((r) => (
+              <div key={r.id}>
+                <Cab e={r} />
+                {aberto(r) && filhos(r).filter(aparece).map((o) => <ItemEst key={o.id} e={o} marcado={ids.includes(o.id)} coberto={cobertos.has(o.id)} onAlterna={alterna} />)}
+              </div>))}
+          </div>))}
+        {!visiveis.length && <p className="mudo" style={{ margin: 8 }}>Nada encontrado.{soEsr && " Tente ver todos os ROs."}</p>}
+        {cgs.length > 0 && <div className="est-sep">Indicadores do Contrato de Gestão <span className="mudo" style={{ fontWeight: 400 }}>(já cobertos pelo RO marcado)</span>
+          {!txt && !cgs.some((e) => ids.includes(e.id)) && <button type="button" className="link" style={{ marginLeft: 8 }} onClick={() => setVerCg(!verCg)}>{verCg ? "ocultar" : "marcar um indicador diretamente"}</button>}</div>}
+        {(verCg || txt || cgs.some((e) => ids.includes(e.id))) && cgs.map((e) => <ItemEst key={e.id} e={e} marcado={ids.includes(e.id)} coberto={cobertos.has(e.id)} onAlterna={alterna} />)}
       </div>
     </div>
   );

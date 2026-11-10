@@ -422,3 +422,19 @@ a.botao:hover{background:var(--azul-claro)}
 .acessos-item input{width:auto;margin:0}
 .acessos-item.via{color:var(--mudo);cursor:default}
 .acessos-num{font-variant-numeric:tabular-nums;font-weight:700;min-width:48px}
+/* seletor de vínculo estratégico em árvore */
+.est-sel-sel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:#f6f8fb;border:1px solid #d9dee7;border-radius:8px;margin-bottom:8px}
+.chip.rem{border:0;cursor:pointer}.chip.rem:hover{outline:2px solid #c0392b}
+.est-barra{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.est-barra .est-busca{flex:1;min-width:240px;margin:0}
+label.est-so{display:flex;flex-direction:row;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;white-space:nowrap}label.est-so input{width:auto}
+.est-conta{margin:4px 2px 8px;font-size:.85rem}
+.est-lista{max-height:520px}
+.est-bloco{border-bottom:1px solid #eef1f5;padding-bottom:4px;margin-bottom:4px}
+.est-grupo{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px}.est-grupo:hover{background:#f3f6fb}.est-grupo.marcado{background:#e8f1ff}
+.est-grupo.n0{background:#f4effa;font-weight:600;position:sticky;top:0;z-index:2}.est-grupo.n0.marcado{background:#e8f1ff}
+.est-grupo.n1{margin-left:18px}
+.est-seta{border:0;background:transparent;cursor:pointer;width:24px;padding:0;font-size:1rem;color:#475467}
+label.est-gtit{display:flex;flex-direction:row;gap:8px;align-items:baseline;flex:1;min-width:0;text-transform:none;letter-spacing:0;font-weight:inherit;font-size:.92rem;color:inherit;cursor:pointer}
+label.est-gtit input{width:auto;flex:none}
+.est-cont{white-space:nowrap;font-size:.8rem;font-weight:400}.est-nsel{color:#1d4a9c;margin-right:6px}

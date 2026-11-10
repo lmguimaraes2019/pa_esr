@@ -422,8 +422,9 @@ def init_db() -> None:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         semear_receitas(c)
         if config.SEMEAR_PO:
-            from .estrategia import semear_po
+            from .estrategia import carregar_po_completo, semear_po
             semear_po(c)
+            carregar_po_completo(c)      # uma vez: 12 diretrizes, 30 REs e 146 ROs; os vínculos já feitos continuam valendo
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))

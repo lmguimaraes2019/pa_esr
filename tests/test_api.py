@@ -999,3 +999,24 @@ def test_projeto_de_headcount_nao_exige_entregas(client):
     assert client.patch(f"/api/projetos/{o}", json={"finalidade": "headcount"}).status_code == 200
     depois = next(x for x in client.get("/api/planejamento").json()["projetos"] if x["orcamento"] == o)
     assert depois["entregas"]["pendentes"] == 0
+
+
+def test_po_2027_completo_preserva_vinculos(client):
+    from app import db, estrategia
+    entrar(client)
+    o = client.get("/api/projetos").json()[0]["orcamento"]
+    with db.tx() as c:
+        estrategia.semear_po(c)
+        ro = c.execute("SELECT id FROM estrategia WHERE tipo='po' AND codigo='7.1.2'").fetchone()["id"]
+        antes = c.execute("SELECT COUNT(*) FROM estrategia").fetchone()[0]
+    assert client.put(f"/api/projetos/{o}/estrategia", json={"ids": [ro]}).status_code == 200
+    with db.tx() as c:
+        r = estrategia.carregar_po_completo(c)
+        assert r["novos"] > 100 and estrategia.carregar_po_completo(c)["ja_carregado"]
+        n = {t: c.execute("SELECT COUNT(*) FROM estrategia WHERE tipo=?", (t,)).fetchone()[0] for t in ("diretriz", "re", "po", "cg")}
+        assert n["diretriz"] == 12 and n["re"] == 30 and n["po"] == 146
+        assert c.execute("SELECT id FROM estrategia WHERE tipo='po' AND codigo='7.1.2'").fetchone()["id"] == ro      # mesma linha, mesmo id
+        assert c.execute("SELECT 1 FROM projeto_estrategia WHERE orcamento=? AND estrategia_id=?", (o, ro)).fetchone()
+        assert c.execute("SELECT indicador FROM estrategia WHERE id=?", (ro,)).fetchone()[0] == "9"      # indicador atualizado pela planilha
+        assert estrategia.carregar_po_completo(c, forcar=True)["novos"] == 0      # idempotente
+        assert c.execute("SELECT COUNT(*) FROM estrategia").fetchone()[0] > antes
