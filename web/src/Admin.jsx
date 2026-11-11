@@ -132,6 +132,12 @@ export function Exportar({ irProjeto }) {
         <div className="acoes"><a className="botao primario" href="/api/export/relatorio">Gerar relatório (Word)</a></div>
         <p className="mudo">O relatório usa os dados de agora e não depende da conferência acima. Ao abrir no Word, aceite a atualização dos campos para acertar a numeração do sumário.</p>
       </section>
+      <section className="cartao">
+        <h3>Apresentação executiva do orçamento</h3>
+        <p>Apresentação em PowerPoint, no padrão visual da ESR (template 20 Anos), com a visão de alto nível: resumo dos números, evolução de 2026 para 2027 por origem de recurso, finalidade e grupo de despesa, orçamento por gerência, maiores projetos e os que mais mudam, receitas e resultado, conexão com o Plano Operacional e o Contrato de Gestão e pontos de atenção. Os gráficos e tabelas são editáveis no PowerPoint.</p>
+        <div className="acoes"><a className="botao primario" href="/api/export/apresentacao">Gerar apresentação (PowerPoint)</a></div>
+        <p className="mudo">Usa os dados de agora. Cada geração fica registrada na auditoria.</p>
+      </section>
     </>
   );
 }

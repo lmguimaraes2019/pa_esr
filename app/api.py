@@ -990,6 +990,19 @@ def relatorio_diretor(u: dict = Depends(exige_admin), c: sqlite3.Connection = De
                              headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
+@router.get("/export/apresentacao")
+def apresentacao_executiva(u: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+    """Apresentação executiva do orçamento (PowerPoint), no padrão visual do template ESR 20 Anos."""
+    from . import apresentacao
+    conteudo = apresentacao.gerar(c, u)
+    audit(c, u["login"], "gerou apresentação executiva", detalhe=f"{len(conteudo) // 1024} KB")
+    c.commit()
+    nome = f"Apresentacao_Orcamento_{config.CICLO_PLANO}_ESR_{datetime.now():%Y%m%d_%H%M}.pptx"
+    return StreamingResponse(iter([conteudo]),
+                             media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                             headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
 @router.get("/auditoria")
 def ver_auditoria(limite: int = 200, _: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
     rows = c.execute("SELECT * FROM auditoria ORDER BY id DESC LIMIT ?", (max(1, min(limite, 1000)),)).fetchall()

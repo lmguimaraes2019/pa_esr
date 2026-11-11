@@ -1020,3 +1020,16 @@ def test_po_2027_completo_preserva_vinculos(client):
         assert c.execute("SELECT indicador FROM estrategia WHERE id=?", (ro,)).fetchone()[0] == "9"      # indicador atualizado pela planilha
         assert estrategia.carregar_po_completo(c, forcar=True)["novos"] == 0      # idempotente
         assert c.execute("SELECT COUNT(*) FROM estrategia").fetchone()[0] > antes
+
+
+def test_apresentacao_executiva(client):
+    import io
+    from pptx import Presentation
+    entrar(client)
+    r = client.get("/api/export/apresentacao")
+    assert r.status_code == 200 and "presentationml" in r.headers["content-type"]
+    prs = Presentation(io.BytesIO(r.content))
+    assert len(prs.slides) == 13
+    textos = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
+    assert "ORÇAMENTO ESR 2027" in textos and "RESUMO EXECUTIVO" in textos and "OBRIGADO" in textos
+    assert sum(1 for s in prs.slides for sh in s.shapes if sh.has_chart) >= 4
