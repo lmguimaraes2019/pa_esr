@@ -76,7 +76,7 @@ def _novo(prs, titulo: str, n: int):
     _rect(s, 0, 0, 0.18, 0.85, LARANJA)
     _txt(s, 0.35, 0, 8.4, 0.85, titulo.upper(), 20, True, BRANCO, ancora=MSO_ANCHOR.MIDDLE)
     _rect(s, 0, 5.35, 10, 0.275, NAVY)
-    _txt(s, 0.3, 5.35, 6, 0.275, "ESR — Escola Superior de Redes | Orçamento 2027", 8, False, BRANCO, ancora=MSO_ANCHOR.MIDDLE)
+    _txt(s, 0.3, 5.35, 6, 0.275, "ESR | Escola Superior de Redes | Orçamento 2027", 8, False, BRANCO, ancora=MSO_ANCHOR.MIDDLE)
     _txt(s, 8.5, 5.35, 1.2, 0.275, str(n), 8, True, LARANJA, PP_ALIGN.RIGHT, MSO_ANCHOR.MIDDLE)
     return s
 
@@ -108,14 +108,14 @@ def _kpi_leve(s, x, y, w, h, valor, rotulo_, apoio=""):
         _txt(s, x + 0.2, y + 0.75, w - 0.3, h - 0.78, apoio, 9.5, False, MUDO)
 
 
-def _grafico(s, x, y, w, h, cats, series, horizontal=False, rotulos=True):
+def _grafico(s, x, y, w, h, cats, series, horizontal=False, rotulos=True, mil=False):
     """Barras agrupadas nativas (editáveis no PowerPoint). Valores em R$ milhões."""
     cd = CategoryChartData()
     if horizontal:                                # barras horizontais desenham de baixo para cima: invertemos para ler de cima para baixo
         cats, series = list(cats)[::-1], [(n_, list(v)[::-1], c_) for n_, v, c_ in series][::-1]
     cd.categories = [corta(str(c), 30) for c in cats]
     for nome, vals, _ in series:
-        cd.add_series(nome, [round(v / 1e6, 2) for v in vals])
+        cd.add_series(nome, [round(v / (1e3 if mil else 1e6), 2) for v in vals])
     tipo = XL_CHART_TYPE.BAR_CLUSTERED if horizontal else XL_CHART_TYPE.COLUMN_CLUSTERED
     gf = s.shapes.add_chart(tipo, Inches(x), Inches(y), Inches(w), Inches(h), cd)
     ch = gf.chart
@@ -133,7 +133,7 @@ def _grafico(s, x, y, w, h, cats, series, horizontal=False, rotulos=True):
     if rotulos:
         plot.has_data_labels = True
         dl = plot.data_labels
-        dl.number_format, dl.number_format_is_linked = '#,##0.0', False
+        dl.number_format, dl.number_format_is_linked = ('#,##0' if mil else '#,##0.0'), False
         dl.font.size = Pt(9)
     va = ch.value_axis
     va.minimum_scale = 0
@@ -143,7 +143,7 @@ def _grafico(s, x, y, w, h, cats, series, horizontal=False, rotulos=True):
     va.tick_labels.font.size = Pt(9)
     va.tick_labels.number_format, va.tick_labels.number_format_is_linked = '#,##0', False
     va.has_title = True
-    va.axis_title.text_frame.text = "R$ milhões"
+    va.axis_title.text_frame.text = "R$ mil" if mil else "R$ milhões"
     va.axis_title.text_frame.paragraphs[0].runs[0].font.size = Pt(9)
     va.axis_title.text_frame.paragraphs[0].runs[0].font.bold = False
     ca = ch.category_axis
@@ -191,6 +191,11 @@ def _leitura(s, x, y, w, h, titulo, pontos, tam=12):
 def _ms(v: float) -> str:
     """Valor em R$ milhões para tabelas, com uma casa."""
     return f"{v / 1e6:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _mil(v: float) -> str:
+    """Valor em R$ mil, sem casas decimais."""
+    return f"{v / 1e3:,.0f}".replace(",", ".")
 
 
 def _pl(n: int, um: str, varios: str) -> str:
@@ -395,6 +400,65 @@ def _slide_estrategia(prs, d, n):
     _txt(s, L, BASE - 0.22, R_ - L, 0.25, "Um projeto pode atender a mais de um item; por isso os valores não se somam.", 9.5, False, MUDO, italico=True)
 
 
+def _slide_headcount(prs, d, n):
+    hc = d["headcount"]
+    t, itens = hc["totais"], hc["itens"]
+    s = _novo(prs, "Headcount e aquisição de equipamentos", n)
+    eq = {k: sum(i["equipamentos"][k] * i["quantidade"] for i in itens) for k in ("computador", "monitor", "periferico")}
+    eq_total = sum(eq.values())
+    n_comp = sum(i["quantidade"] for i in itens if i["computador"])
+    w = 2.2
+    _kpi(s, L, TOPO, w, 1.3, str(t["posicoes"]), "Novas posições", f"em {_pl(len(hc['por_projeto']), 'projeto', 'projetos')}")
+    _kpi(s, L + 2.4, TOPO, w, 1.3, mi(t["custo_2027"]), "Custo em 2027", "a partir do mês de início", laranja=True)
+    _kpi(s, L + 4.8, TOPO, w, 1.3, mi(t["anualizado"]), "Custo anualizado", "doze meses")
+    _kpi(s, L + 7.2, TOPO, w, 1.3, mi(eq_total), "Equipamentos", _pl(n_comp, "computador", "computadores"), laranja=True)
+    ger = sorted(hc["por_gerencia"], key=lambda g: -g["custo_2027"])[:7]
+    y = TOPO + 1.5
+    if ger:
+        eq_g: dict[str, float] = {}
+        for i in itens:
+            k = i["gerencia"] or "Sem gerência"
+            eq_g[k] = eq_g.get(k, 0.0) + i["equipamentos"]["total"]
+        linhas = [[corta(g["gerencia"], 44), str(g["posicoes"]), _mil(g["custo_2027"]), _mil(g["anualizado"]), _mil(eq_g.get(g["gerencia"], 0.0))] for g in ger]
+        tot = ["Total", str(t["posicoes"]), _mil(t["custo_2027"]), _mil(t["anualizado"]), _mil(eq_total)]
+        _tabela(s, L, y, [4.0, 1.2, 1.4, 1.4, 1.4], ["Gerência a que o headcount fica vinculado", "Posições", "Custo 2027", "Anualizado", "Equipamentos"], linhas, tot, tam=10, alt=0.27)
+    else:
+        _txt(s, L, y, R_ - L, 0.4, "Nenhuma posição de headcount lançada até agora.", 12, False, MUDO)
+    nota = f"Tabela em R$ mil. O custo de 2027 já inclui os equipamentos (computador {mi(eq['computador'])}, monitor {mi(eq['monitor'])}, periféricos {mi(eq['periferico'])}), adquiridos por meio da GTI."
+    if t["incompletos"]:
+        nota += f" {_pl(t['incompletos'], 'posição', 'posições')} com informações pendentes."
+    _txt(s, L, BASE - 0.28, R_ - L, 0.28, nota, 9, False, MUDO, italico=True)
+
+
+def _slide_cambio(prs, d, n):
+    ex = d["exposicao"]
+    t, cam, itens = ex["totais"], ex["cambio"], ex["itens"]
+    s = _novo(prs, "Exposição à moeda estrangeira", n)
+    if not itens:
+        _txt(s, L, TOPO + 0.3, R_ - L, 0.5, "Nenhum item de exposição cambial lançado até agora.", 14, False, MUDO)
+        return
+    def moeda(v, simbolo):
+        return f"{simbolo} {v / 1e3:,.0f} mil".replace(",", ".") if abs(v) >= 1e3 else f"{simbolo} {v:,.0f}".replace(",", ".")
+    ap = lambda m: f"{_pl(sum(1 for i in itens if i['moeda'] == m), 'item', 'itens')} | câmbio R$ {cam[m]:.2f}".replace(".", ",")
+    _kpi(s, L, TOPO, 3.0, 1.3, moeda(t["usd"], "US$"), "Dólar", f"{mi(t['brl_usd'])} | {ap('USD')}")
+    _kpi(s, L + 3.2, TOPO, 3.0, 1.3, moeda(t["eur"], "€"), "Euro", f"{mi(t['brl_eur'])} | {ap('EUR')}", laranja=True)
+    _kpi(s, L + 6.4, TOPO, 3.0, 1.3, moeda(t["gbp"], "£"), "Libra", f"{mi(t['brl_gbp'])} | {ap('GBP')}")
+    total_brl = t["brl_usd"] + t["brl_eur"] + t["brl_gbp"]
+    por_tri = ex["por_trimestre"]
+    y = TOPO + 1.45
+    _grafico(s, L, y, 5.0, BASE - y - 0.3, [q["nome"].split(" ")[0] + " tri" for q in por_tri],
+             [("Dólar", [q["usd"] * cam["USD"] for q in por_tri], NAVY), ("Euro", [q["eur"] * cam["EUR"] for q in por_tri], LARANJA), ("Libra", [q["gbp"] * cam["GBP"] for q in por_tri], AZULC)], mil=True)
+    tipos: dict[str, float] = {}
+    for i in itens:
+        tipos[i["tipo"] or "Sem tipo"] = tipos.get(i["tipo"] or "Sem tipo", 0.0) + i["valor"] * cam[i["moeda"]]
+    linhas = [[corta(k, 30), _mil(v)] for k, v in sorted(tipos.items(), key=lambda kv: -kv[1])[:6]]
+    _tabela(s, 5.5, y, [2.9, 1.3], ["Tipo de aquisição", "R$ mil"], linhas, ["Total", _mil(total_brl)], tam=10, alt=0.27)
+    nota = f"Exposição total equivalente a {mi(total_brl)} em reais, no câmbio das premissas do plano. Gráfico e tabela em R$ mil, por trimestre de 2027."
+    if t["incompletos"]:
+        nota += f" {_pl(t['incompletos'], 'item', 'itens')} com informações pendentes."
+    _txt(s, L, BASE - 0.28, R_ - L, 0.28, nota, 9, False, MUDO, italico=True)
+
+
 def _slide_atencao(prs, d, n):
     cob, P, sit = d["cobertura"], d["projetos"], d["situacao"]
     ger = [g for g in d["gerencias"] if g["nivel"] == "gerencia"]
@@ -443,7 +507,7 @@ def gerar(c: sqlite3.Connection, u: dict) -> bytes:
     _capa(prs, agora)
     _encerramento(prs)
     n = 2
-    for f in (_slide_resumo, _slide_origem, _slide_finalidade, _slide_matriz, _slide_grupos, _slide_gerencias, _slide_projetos, _slide_mudam, _slide_receitas, _slide_estrategia, _slide_atencao):
+    for f in (_slide_resumo, _slide_origem, _slide_finalidade, _slide_matriz, _slide_grupos, _slide_gerencias, _slide_projetos, _slide_mudam, _slide_receitas, _slide_headcount, _slide_cambio, _slide_estrategia, _slide_atencao):
         f(prs, d, n)
         n += 1
     lista = prs.slides._sldIdLst

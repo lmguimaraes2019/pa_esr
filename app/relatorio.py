@@ -10,7 +10,7 @@ import re
 import sqlite3
 from datetime import datetime
 
-from . import api, api_entregas, api_eventos, api_headcount, api_planejamento, api_receitas, api_viagens, config, estrategia
+from . import api, api_entregas, api_eventos, api_exposicao, api_headcount, api_planejamento, api_receitas, api_viagens, config, estrategia
 from .db import MESES, NOMES_MESES
 from .relatorio_docx import AZUL, CIANO, CINZA, LARANJA, NAVY, ROXO, VERDE, Doc, montar
 
@@ -151,7 +151,7 @@ def coletar(c: sqlite3.Connection, u: dict) -> dict:
     ids = [p["orcamento"] for p in projetos]
     d = {"extintos": extintos,
         "resumo": api.resumo(u, c), "projetos": projetos, "receitas": api_receitas.listar(u, c), "viagens": api_viagens.listar(u, c),
-        "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "cobertura": api_entregas.cobertura(u, c),
+        "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "exposicao": api_exposicao.listar(u, c), "cobertura": api_entregas.cobertura(u, c),
         "gerencias": api_planejamento._por_gerencia(c), "situacao": api_planejamento.resumir(c, ids),
         "premissas": [dict(r) for r in c.execute("SELECT chave, valor, descricao FROM premissas ORDER BY chave")],
         "catalogo": estrategia.arvore(c), "detalhe": {}, "entregas": {}, "vinculos": {},

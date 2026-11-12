@@ -87,7 +87,7 @@ def test_gestor_so_ve_seus_projetos_e_edita_com_auditoria(client):
 def test_nova_linha_e_validacoes(client):
     entrar(client)
     contas = client.get("/api/contas").json()
-    assert len(contas) == 130
+    assert len(contas) == 150
     body = {"edt": "1", "tarefa": "01", "conta_codigo": contas[0]["codigo"], "meses": [10] * 12}
     r = client.post("/api/projetos/6839/linhas", json=body)
     assert r.status_code == 201 and r.json()["ref"] is None and r.json()["total"] == 120
@@ -1029,7 +1029,7 @@ def test_apresentacao_executiva(client):
     r = client.get("/api/export/apresentacao")
     assert r.status_code == 200 and "presentationml" in r.headers["content-type"]
     prs = Presentation(io.BytesIO(r.content))
-    assert len(prs.slides) == 13
+    assert len(prs.slides) == 15
     textos = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
     assert "ORÇAMENTO ESR 2027" in textos and "RESUMO EXECUTIVO" in textos and "OBRIGADO" in textos
     assert sum(1 for s in prs.slides for sh in s.shapes if sh.has_chart) >= 4
