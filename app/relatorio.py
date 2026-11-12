@@ -169,7 +169,7 @@ def coletar(c: sqlite3.Connection, u: dict) -> dict:
 def _parte1(doc: Doc, d: dict) -> None:
     r, rec, hc, vi, ev, cob = d["resumo"], d["receitas"], d["headcount"], d["viagens"], d["eventos"], d["cobertura"]
     P = d["projetos"]
-    despesa_proj = [p for p in P if p["tipo"] == "despesa"]
+    despesa_proj = [p for p in P + d["extintos"] if p["tipo"] == "despesa"]      # extintas entram como redução: o valor de 2026 migra para outros projetos
     plano, base, exe = r["total_plano"], r["total_base"], r["total_executado"]
     t = rec["totais"]
     doc.divisoria("1", "Visão geral", "do planejamento")
@@ -240,7 +240,7 @@ def _parte1(doc: Doc, d: dict) -> None:
     ordem = sorted(despesa_proj, key=lambda p: p["total_2027"] - p["total_2026"])
     maiores = [p for p in ordem[::-1][:10] if p["total_2027"] - p["total_2026"] > 0]
     menores = [p for p in ordem[:10] if p["total_2027"] - p["total_2026"] < 0]
-    lin = lambda p: [f"{p['orcamento']} | {corta(p['descricao'], 46)}", corta(p["gerente"], 22), n0(p["total_2026"]), n0(p["total_2027"]), sinal(p["total_2027"] - p["total_2026"]), var_pc(p["total_2027"], p["total_2026"])]
+    lin = lambda p: [f"{p['orcamento']} | {corta(p['descricao'], 46)}" + (" (extinta)" if p.get("extinto") else ""), corta(p["gerente"], 22), n0(p["total_2026"]), n0(p["total_2027"]), sinal(p["total_2027"] - p["total_2026"]), var_pc(p["total_2027"], p["total_2026"])]
     cab = ["Projeto", "Gerente", "2026", "2027", "Variação", "%"]
     larg = [3300, 1700, 1200, 1200, 1300, 900]
     if maiores:
@@ -364,7 +364,7 @@ def _parte1(doc: Doc, d: dict) -> None:
           "Viagens, eventos e headcount são calculados nas suas próprias páginas e alimentam o orçamento. As premissas usadas nos cálculos são:")
     doc.tabela(["Premissa", "Valor", "Descrição"], [[p["chave"], str(p["valor"]).replace(".", ","), p["descricao"]] for p in d["premissas"]],
                [2700, 1100, 5838], alin=["left", "right", "left"], legenda="Premissas do planejamento.")
-    esp = [("Ações extintas (não existirão no PA 2027 e não vão na planilha do PMO)", d["extintos"]),
+    esp = [("Ações extintas (sem orçamento próprio em 2027; as entregas e os valores de 2026 migram para outros projetos, e o aprovado e o executado de 2026 continuam nos totais)", d["extintos"]),
            ("Projetos novos em 2027", [p for p in P if p["novo"]]), ("Projetos contingenciados (sem exportação para o PMO)", [p for p in P if p["contingenciado"]]),
            ("Projetos replicados de 2026 para 2027", [p for p in P if p["replicado_para"]]),
            ("Projetos de despesa sem nenhum valor em 2027 (constam neste relatório, mas não vão na planilha do PMO)",

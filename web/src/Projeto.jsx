@@ -372,15 +372,15 @@ function FaixaEstrategia({ orcamento, abrir }) {
 function ExtincaoProjeto({ p, onSalvo }) {
   const [erro, setErro] = useState("");
   const enviar = async (extinto) => { setErro(""); try { await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: { extinto } }); onSalvo(); } catch (e) { setErro(e.message); } };
-  const extinguir = () => { if (window.confirm("Marcar esta ação como extinta? Ela não existirá no PA 2027: sai dos totais, das pendências e da planilha do PMO. Os valores lançados ficam guardados e você pode reativá-la depois.")) enviar(true); };
+  const extinguir = () => { if (window.confirm("Marcar esta ação como extinta? Ela não terá orçamento em 2027 (o valor de 2027 vira zero, sem pendências e fora da planilha do PMO). O aprovado e o executado de 2026 continuam nos totais, identificados como ação extinta, porque as entregas migram para outros projetos. Você pode reativá-la depois.")) enviar(true); };
   if (p.extinto) return (
     <div className="nota aviso" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", margin: "10px 0" }}>
-      <span><strong>Ação extinta.</strong> Não existirá no PA 2027{p.extinto_em ? ` (marcada em ${p.extinto_em})` : ""}. Fica fora dos totais, das pendências e da planilha do PMO.</span>
+      <span><strong>Ação extinta.</strong> Sem orçamento próprio em 2027{p.extinto_em ? ` (marcada em ${p.extinto_em})` : ""}: as entregas migram para outros projetos. O aprovado e o executado de 2026 seguem nos totais; o plano 2027 desta ação vale zero e ela fica fora da planilha do PMO.</span>
       <button onClick={() => enviar(false)}>Reativar no PA 2027</button>{erro && <span className="erro">{erro}</span>}</div>);
   return (
     <div style={{ margin: "8px 0", display: "flex", gap: 10, alignItems: "center" }}>
       <button type="button" onClick={extinguir} title="Esta ação não existirá no PA 2027">Marcar ação como extinta</button>
-      <span className="mudo" style={{ fontSize: ".85rem" }}>Use quando a ação acabou e não terá orçamento em 2027.</span>{erro && <span className="erro">{erro}</span>}</div>);
+      <span className="mudo" style={{ fontSize: ".85rem" }}>Use quando a ação acabou e suas entregas migram para outros projetos em 2027.</span>{erro && <span className="erro">{erro}</span>}</div>);
 }
 
 function NumeroProjeto({ orcamento, atual, contingenciado, novo, onSalvo }) {

@@ -50,8 +50,8 @@ def exige_admin(u: dict = Depends(usuario_liberado)) -> dict:
 
 
 def permitidos(c: sqlite3.Connection, u: dict, extintos: bool = False) -> set[str]:
-    """Orçamentos que o usuário enxerga. As ações extintas (que não existirão no PA 2027) ficam de fora de todos os
-    totais, pendências e exportações; só a lista de projetos e a página do projeto as incluem (extintos=True), para poder reativá-las."""
+    """Orçamentos que o usuário enxerga. As ações extintas (que não existirão no PA 2027) ficam de fora do plano 2027,
+    das pendências e das exportações; o aprovado e o executado de 2026 delas continuam contando (extintos=True)."""
     if u["perfil"] == "admin":
         ids = {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
     else:
@@ -735,17 +735,19 @@ async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...
 @router.get("/resumo")
 def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     # orçamentos de receita não entram na despesa: o valor deles aparece em Receitas, com sinal positivo
-    ids = sorted(o for o in permitidos(c, u) if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa")
+    ids = sorted(o for o in permitidos(c, u, extintos=True) if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa")
     marks = ",".join("?" for _ in ids) or "''"
+    # ações extintas mantêm o aprovado e o executado de 2026 (as entregas migram para outros projetos); só o plano 2027 delas é zerado
+    EXC = f"NOT (l.ciclo={config.CICLO_PLANO} AND l.orcamento IN (SELECT orcamento FROM projetos WHERE extinto=1))"
     por_origem = c.execute(
         f"""SELECT CASE WHEN l.ciclo = {config.CICLO_BASE} THEN p.origem ELSE {ORIGEM_27} END AS origem, l.ciclo, SUM({SOMA_MESES}) t
             FROM linhas l JOIN projetos p USING (orcamento)
-            WHERE l.orcamento IN ({marks}) GROUP BY 1, l.ciclo""", ids).fetchall()
+            WHERE {EXC} AND l.orcamento IN ({marks}) GROUP BY 1, l.ciclo""", ids).fetchall()
     por_grupo = c.execute(
         f"""SELECT k.grupo, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN contas k ON k.codigo=l.conta_codigo
-            WHERE l.orcamento IN ({marks}) GROUP BY k.grupo, l.ciclo""", ids).fetchall()
+            WHERE {EXC} AND l.orcamento IN ({marks}) GROUP BY k.grupo, l.ciclo""", ids).fetchall()
     mensal = c.execute(
-        f"SELECT {', '.join(f'SUM({m}) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks})",
+        f"SELECT {', '.join(f'SUM(l.{m}) {m}' for m in MESES)} FROM linhas l WHERE l.ciclo=? AND {EXC} AND l.orcamento IN ({marks})",
         (config.CICLO_PLANO, *ids)).fetchone()
 
     exec_origem = c.execute(
@@ -771,7 +773,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     origens, grupos = agrupar(por_origem, "origem", exec_origem), agrupar(por_grupo, "grupo", exec_grupo)
     def por_atributo(coluna: str, nomes: dict) -> list[dict]:      # finalidade: valores pelo cadastro do projeto
         rows = c.execute(f"""SELECT p.{coluna} AS k, l.ciclo, SUM({SOMA_MESES}) t FROM linhas l JOIN projetos p USING (orcamento)
-                             WHERE l.orcamento IN ({marks}) GROUP BY 1, l.ciclo""", ids).fetchall()
+                             WHERE {EXC} AND l.orcamento IN ({marks}) GROUP BY 1, l.ciclo""", ids).fetchall()
         ex = c.execute(f"""SELECT p.{coluna} AS k, SUM(e.realizado) r, SUM(e.empenhado) em FROM execucao e JOIN projetos p USING (orcamento)
                            WHERE e.orcamento IN ({marks}) GROUP BY 1""", ids).fetchall()
         out: dict[str, dict] = {}
@@ -788,7 +790,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     # origem de recurso quebrada por finalidade (mesmos valores de "origens", detalhados)
     cruz = c.execute(
         f"""SELECT CASE WHEN l.ciclo = {config.CICLO_BASE} THEN p.origem ELSE {ORIGEM_27} END AS origem, p.finalidade AS fin, l.ciclo, SUM({SOMA_MESES}) t
-            FROM linhas l JOIN projetos p USING (orcamento) WHERE l.orcamento IN ({marks}) GROUP BY 1, 2, l.ciclo""", ids).fetchall()
+            FROM linhas l JOIN projetos p USING (orcamento) WHERE {EXC} AND l.orcamento IN ({marks}) GROUP BY 1, 2, l.ciclo""", ids).fetchall()
     cruz_ex = c.execute(
         f"""SELECT p.origem AS origem, p.finalidade AS fin, SUM(e.realizado) r, SUM(e.empenhado) em FROM execucao e JOIN projetos p USING (orcamento)
             WHERE e.orcamento IN ({marks}) GROUP BY 1, 2""", ids).fetchall()
@@ -809,7 +811,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     status = {"mantida": 0, "ajustada": 0, "nova": 0, "viagens": 0}
     for r in c.execute(
             f"SELECT l.fonte, l.base_id, {', '.join('l.' + m for m in MESES)}, {', '.join('b.' + m + ' AS b_' + m for m in MESES)} "
-            f"FROM linhas l LEFT JOIN linhas b ON b.id = l.base_id WHERE l.ciclo=? AND l.orcamento IN ({marks})",
+            f"FROM linhas l LEFT JOIN linhas b ON b.id = l.base_id WHERE l.ciclo=? AND {EXC} AND l.orcamento IN ({marks})",
             (config.CICLO_PLANO, *ids)):
         if r["fonte"] in ("viagens", "eventos", "headcount"):
             status["viagens"] += 1
@@ -819,11 +821,17 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
             status["mantida"] += 1
         else:
             status["ajustada"] += 1
-    # ações extintas: ficam fora dos totais acima (que comparam só o que existe em 2027); o aprovado de 2026 delas é informado à parte
-    ext = [o for o in permitidos(c, u, extintos=True) - permitidos(c, u)
-           if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa"]
-    extintos = {"n": len(ext), "aprovado_2026": _arred(c.execute(
-        f"SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_BASE} AND orcamento IN ({','.join('?' for _ in ext) or chr(39) * 2})", ext).fetchone()[0])}
+    # ações extintas: o aprovado e o executado de 2026 continuam nos totais; em 2027 elas valem zero (as entregas migram para outros projetos)
+    ext = [o for o in ids if c.execute("SELECT extinto FROM projetos WHERE orcamento=?", (o,)).fetchone()["extinto"]]
+    lista = []
+    for o in ext:
+        pr = c.execute("SELECT orcamento, n_projeto, descricao, gerente, finalidade, extinto_em FROM projetos WHERE orcamento=?", (o,)).fetchone()
+        ap = c.execute(f"SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_BASE} AND orcamento=?", (o,)).fetchone()[0]
+        ex = c.execute("SELECT COALESCE(SUM(realizado+empenhado),0) FROM execucao WHERE orcamento=?", (o,)).fetchone()[0]
+        lista.append({**dict(pr), "aprovado_2026": _arred(ap), "executado_2026": _arred(ex)})
+    lista.sort(key=lambda x: -x["aprovado_2026"])
+    extintos = {"n": len(lista), "aprovado_2026": _arred(sum(x["aprovado_2026"] for x in lista)),
+                "executado_2026": _arred(sum(x["executado_2026"] for x in lista)), "lista": lista}
     return {"ciclo_base": config.CICLO_BASE, "ciclo_plano": config.CICLO_PLANO,
             "total_base": tot(origens, "base"), "total_plano": tot(origens, "plano"),
             "total_realizado": tot(origens, "realizado"), "total_empenhado": tot(origens, "empenhado"),

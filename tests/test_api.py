@@ -1043,7 +1043,8 @@ def test_acao_extinta_sai_dos_totais_e_pode_ser_reativada(client):
     assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"extinto": True}).status_code == 200
     depois = client.get("/api/resumo").json()
     assert abs((antes["total_plano"] - depois["total_plano"]) - alvo["total_2027"]) < 0.05
-    assert depois["total_base"] < antes["total_base"] and depois["extintos"]["n"] == 1 and depois["extintos"]["aprovado_2026"] > 0
+    assert depois["total_base"] == antes["total_base"]                         # o aprovado de 2026 continua nos totais
+    assert depois["extintos"]["n"] == 1 and depois["extintos"]["aprovado_2026"] > 0 and depois["extintos"]["lista"][0]["orcamento"] == alvo["orcamento"]
     p = next(x for x in client.get("/api/projetos").json() if x["orcamento"] == alvo["orcamento"])
     assert p["extinto"] and p["total_2027"] == 0                                   # continua na lista (para reativar), sem valor em 2027
     assert client.get(f"/api/projetos/{alvo['orcamento']}").json()["projeto"]["extinto"] is True

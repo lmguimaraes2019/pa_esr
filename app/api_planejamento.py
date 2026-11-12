@@ -161,10 +161,14 @@ def _executado(c: sqlite3.Connection, ids: set[str]) -> float:
     return _arred(c.execute(f"SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento IN ({marks})", sorted(ids)).fetchone()[0])
 
 
-def _agrega(c: sqlite3.Connection, ids) -> dict:
+def _agrega(c: sqlite3.Connection, ids, ext=()) -> dict:
+    """ids: ações vivas em 2027. ext: ações extintas, que mantêm só o aprovado e o executado de 2026 (plano 2027 zerado)."""
     ids = sorted(set(ids))
+    ext = sorted(set(ext) - set(ids))
     res = list(resumir(c, ids).values())
-    return {"projetos": len(res), "aprovado": _arred(sum(p["despesas"]["aprovado"] for p in res)), "executado": _executado(c, set(ids)),
+    ap_ext = sum(p["despesas"]["aprovado"] for p in resumir(c, ext).values()) if ext else 0.0
+    return {"projetos": len(res), "extintas": len(ext), "aprovado": _arred(sum(p["despesas"]["aprovado"] for p in res) + ap_ext),
+            "executado": _executado(c, set(ids) | set(ext)),
             "plano": _arred(sum(p["despesas"]["plano"] for p in res)), "receitas": _arred(sum(p["receitas"]["total"] for p in res)),
             "pendencias": sum(p["pendencias"] for p in res)}
 
@@ -180,6 +184,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
     ficam Leandro e Célia, só com os projetos cadastrados em nome de cada um; cada gerência, os projetos
     que seus gestores acompanham (cada projeto uma vez, ainda que gerente e coordenador o acompanhem)."""
     todos_ids = [r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE extinto=0")]
+    todos_ext = [r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE extinto=1")]
     grupos: dict[str, list[dict]] = {GER_DSS: [], GER_DIR: []}
     for r in c.execute("SELECT * FROM users WHERE ativo=1 ORDER BY nome").fetchall():
         nome = (r["gerencia"] or "").strip()
@@ -192,6 +197,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
         if nv == "diretoria" and not membros and not todos_ids:
             continue
         ids: set[str] = set()
+        ids_ext: set[str] = set()
         pessoas, pend, todos_concluidos, conc_em, responsaveis = [], 0, True, None, 0
         for m in membros:
             cu = c.execute("SELECT concluido_em, obs FROM conclusoes WHERE login=?", (m["login"],)).fetchone()
@@ -200,7 +206,8 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
             if nv == "diretoria":      # projetos em que o nome do usuário é o gerente cadastrado
                 pri = _sem_acento(m["nome"]).split(" ")[0]
                 meus = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos WHERE extinto=0") if _sem_acento(r["gerente"]).startswith(pri)]
-                a = _agrega(c, meus)
+                meus_ext = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos WHERE extinto=1") if _sem_acento(r["gerente"]).startswith(pri)]
+                a = _agrega(c, meus, meus_ext)
                 base.update(projetos=a["projetos"], plano=a["plano"], pendencias=a["pendencias"], aprovado=a["aprovado"], executado=a["executado"], receitas=a["receitas"])
             elif m["perfil"] != "admin" and nv == "gerencia":
                 if m["cargo"] == "coordenador":      # coordenadores não têm projetos sob sua responsabilidade: ficam sem valores
@@ -210,8 +217,11 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
                 # projetos do gestor: os que têm o nome dele como gerente (os demais que ele acompanha pertencem a outros gestores)
                 proprios = [r[0] for r in c.execute(
                     "SELECT orcamento FROM projetos WHERE extinto=0 AND gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (m["id"],))]
+                ids_ext |= {r[0] for r in c.execute(
+                    "SELECT orcamento FROM projetos WHERE extinto=1 AND gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (m["id"],))}
                 ids |= set(proprios)      # a gerência mostra só os projetos pelos quais ela é responsável, não os que apenas acompanha
-                a = _agrega(c, proprios)
+                a = _agrega(c, proprios, [r[0] for r in c.execute(
+                    "SELECT orcamento FROM projetos WHERE extinto=1 AND gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (m["id"],))])
                 responsaveis += 1
                 pend += a["pendencias"]
                 todos_concluidos = todos_concluidos and bool(cu)
@@ -222,9 +232,9 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
             pessoas.append(base)
         pessoas.sort(key=lambda p: (ORDEM_CARGO.get(p["cargo"], 9), p["nome"].lower()))
         if nv in ("dss", "diretoria"):      # a DSS repete a Diretoria Adjunta: ambas somam todos os projetos da ESR
-            a = _agrega(c, todos_ids)
+            a = _agrega(c, todos_ids, todos_ext)
         else:
-            a = _agrega(c, ids)
+            a = _agrega(c, ids, ids_ext)
         out.append({"gerencia": nome, "nivel": nv, **a, "concluido": nv == "gerencia" and todos_concluidos and responsaveis > 0,
                     "concluido_em": conc_em if todos_concluidos else None, "pessoas": pessoas})
     return out

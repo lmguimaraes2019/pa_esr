@@ -339,7 +339,7 @@ def _slide_projetos(prs, d, n):
 
 
 def _slide_mudam(prs, d, n):
-    desp = [p for p in d["projetos"] if p["tipo"] == "despesa"]
+    desp = [p for p in d["projetos"] + d["extintos"] if p["tipo"] == "despesa"]      # extintas aparecem como redução (valor migra para outros projetos)
     ordem = sorted(desp, key=lambda p: p["total_2027"] - p["total_2026"])
     mais = [p for p in ordem[::-1][:5] if p["total_2027"] - p["total_2026"] > 0]
     menos = [p for p in ordem[:5] if p["total_2027"] - p["total_2026"] < 0]
@@ -411,7 +411,7 @@ def _slide_atencao(prs, d, n):
          "ainda não têm orçamento ligado a eles." if ros_esr_sem else "todos têm projeto vinculado."),
         ("Preenchimento do planejamento", f"{sum(1 for g in ger if g.get('concluido'))} de {_pl(len(ger), 'gerência concluiu', 'gerências concluíram')}", f"{_pl(sum(v['pendencias'] for _, v in pend), 'pendência aberta', 'pendências abertas')} em {_pl(len(pend), 'projeto', 'projetos')}."),
         ("Situação dos projetos", _pl(len(cont), "contingenciado", "contingenciados"),
-         f"{_pl(len(vazios), 'projeto de despesa', 'projetos de despesa')} sem valor em 2027." + (f" {_pl(d['resumo']['extintos']['n'], 'ação extinta', 'ações extintas')} ({mi(d['resumo']['extintos']['aprovado_2026'])} aprovados em 2026) não existirão no PA 2027." if d["resumo"]["extintos"]["n"] else "")),
+         f"{_pl(len(vazios), 'projeto de despesa', 'projetos de despesa')} sem valor em 2027." + (f" {_pl(d['resumo']['extintos']['n'], 'ação extinta', 'ações extintas')} em 2027 ({mi(d['resumo']['extintos']['aprovado_2026'])} aprovados em 2026, que seguem nos totais e migram para outros projetos)." if d["resumo"]["extintos"]["n"] else "")),
     ]
     for i, (tit, grande, pequeno) in enumerate(cartoes):
         x, y = L + (i % 2) * (w + 0.2), TOPO + (i // 2) * (h + 0.2)

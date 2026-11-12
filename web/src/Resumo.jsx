@@ -101,7 +101,14 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
         </section>
       </div>
       <Cobertura admin={admin} />
-      {r.extintos && r.extintos.n > 0 && <div className="nota">{r.extintos.n} ação(ões) extinta(s) não existirão no PA 2027 e ficam fora dos totais desta página. Aprovado em 2026 nelas: <strong>{fmt(r.extintos.aprovado_2026)}</strong>.</div>}
+      {r.extintos && r.extintos.n > 0 && (
+        <section className="cartao" style={{ borderLeft: "4px solid #E87722" }}>
+          <h3>Ações extintas ({r.extintos.n})</h3>
+          <p className="mudo" style={{ marginTop: 0 }}>Não terão orçamento próprio em 2027: as entregas migram para outros projetos. O aprovado e o executado de 2026 continuam contando nos totais desta página, e o valor delas em 2027 é zero (já está previsto nos projetos que recebem as entregas).</p>
+          <table className="tabela"><thead><tr><th>Ação</th><th>Gerente</th><th className="n">Aprovado 2026</th><th className="n">Executado</th><th className="n">Plano 2027</th></tr></thead>
+            <tbody>{r.extintos.lista.map((x) => <tr key={x.orcamento}><td>{x.orcamento} | {x.descricao}</td><td>{x.gerente}</td><td className="n">{fmt(x.aprovado_2026)}</td><td className="n">{fmt(x.executado_2026)}</td><td className="n">{fmt(0)}</td></tr>)}</tbody>
+            <tfoot><tr><td colSpan="2">Total</td><td className="n">{fmt(r.extintos.aprovado_2026)}</td><td className="n">{fmt(r.extintos.executado_2026)}</td><td className="n">{fmt(0)}</td></tr></tfoot></table>
+        </section>)}
       <section className="cartao"><h3>Por origem de recurso e finalidade</h3><Quadro itens={r.por_origem} rotulo="Origem / finalidade" aninhado /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>
