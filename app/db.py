@@ -416,6 +416,9 @@ def init_db() -> None:
         if "criado_por" not in {r[1] for r in c.execute("PRAGMA table_info(headcount)")}:      # migração: quem lançou a posição
             c.execute("ALTER TABLE headcount ADD COLUMN criado_por TEXT NOT NULL DEFAULT ''")
             c.execute("UPDATE headcount SET criado_por = atualizado_por")
+        if "gerencia" not in {r[1] for r in c.execute("PRAGMA table_info(headcount)")}:      # migração: gerência a que a posição fica vinculada
+            c.execute("ALTER TABLE headcount ADD COLUMN gerencia TEXT NOT NULL DEFAULT ''")
+            c.execute("UPDATE headcount SET gerencia = COALESCE((SELECT gerencia FROM users WHERE login = headcount.criado_por), '')")
         pc = {r[1] for r in c.execute("PRAGMA table_info(projetos)")}      # migração: projeto replicado para 2027
         for col in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por"):
             if col not in pc:

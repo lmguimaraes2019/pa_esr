@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from . import equipamentos, pessoal, sync
 from .api_eventos import tarefas_dos_projetos
-from .api import _arred, _conn, exige_acesso, exige_admin, permitidos, usuario_liberado
+from .api import _arred, _chave_nome, _conn, _gerencia_do, exige_acesso, exige_admin, permitidos, usuario_liberado
 from .db import audit, tx
 
 router = APIRouter(prefix="/api/headcount")
@@ -25,6 +25,7 @@ class HcIn(BaseModel):
     mes_inicio: int = Field(default=1, ge=1, le=12)
     quantidade: int = Field(default=1, ge=1, le=100)
     justificativa: str = Field(default="", max_length=1000)
+    gerencia: str = Field(default="", max_length=120)
     edt: str = Field(default="", max_length=200)
     tarefa: str = Field(default="", max_length=200)
     computador: str = Field(default="", max_length=10)
@@ -62,14 +63,14 @@ def _calc(r: sqlite3.Row, par: dict, reaj: float) -> dict:
     eq = equipamentos.custo(r["computador"], r["monitor"], r["periferico"])
     return {"id": r["id"], "orcamento": r["orcamento"], "funcao": r["funcao"], "cargo": r["cargo"], "trajetoria": r["trajetoria"],
             "nivel": r["nivel"], "grupo": r["grupo"], "posicao": r["posicao"], "mes_inicio": r["mes_inicio"], "quantidade": q,
-            "justificativa": r["justificativa"], "edt": r["edt"], "tarefa": r["tarefa"], "atualizado_por": r["atualizado_por"],
+            "justificativa": r["justificativa"], "gerencia": r["gerencia"], "edt": r["edt"], "tarefa": r["tarefa"], "atualizado_por": r["atualizado_por"],
             "faixa": f, "salario_tabela": base, "custo": cm, "meses_2027": meses,
             "computador": r["computador"], "monitor": r["monitor"], "periferico": r["periferico"],
             "equipamentos": {**eq["por_tipo"], "unitario": eq["total"], "total": _arred(eq["total"] * q),
                              "nomes": {t: (i["nome"] if i else "") for t, i in eq["itens"].items()}},
             "anualizado": _arred(cm["anual"] * q), "custo_2027": _arred(cm["mensal"] * meses * q + eq["total"] * q),
             "faltando": [n for n, ok in (("função", r["funcao"].strip()), ("cargo", r["cargo"].strip()),
-                                         ("justificativa", r["justificativa"].strip()),
+                                         ("gerência", r["gerencia"].strip()), ("justificativa", r["justificativa"].strip()),
                                          ("tarefa do orçamento que recebe o valor", r["edt"] and r["tarefa"])) if not ok]}
 
 
@@ -93,17 +94,30 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         x["posicoes"] += d["quantidade"]; x["anualizado"] += d["anualizado"]; x["custo_2027"] += d["custo_2027"]
     for x in por_proj.values():
         x["anualizado"], x["custo_2027"] = _arred(x["anualizado"]), _arred(x["custo_2027"])
+    por_ger: dict[str, dict] = {}
+    for d in itens:
+        x = por_ger.setdefault(d["gerencia"] or "Sem gerência", {"gerencia": d["gerencia"] or "Sem gerência", "posicoes": 0, "anualizado": 0.0, "custo_2027": 0.0})
+        x["posicoes"] += d["quantidade"]; x["anualizado"] = _arred(x["anualizado"] + d["anualizado"]); x["custo_2027"] = _arred(x["custo_2027"] + d["custo_2027"])
+    ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return {
-        "itens": itens, "por_projeto": list(por_proj.values()),
+        "itens": itens, "por_projeto": list(por_proj.values()), "por_gerencia": sorted(por_ger.values(), key=lambda x: x["gerencia"].lower()),
+        "gerencias": _gerencias(c), "gerencia_usuario": u.get("gerencia") or "",
         "totais": {"posicoes": sum(d["quantidade"] for d in itens), "anualizado": _arred(sum(d["anualizado"] for d in itens)),
                    "custo_2027": _arred(sum(d["custo_2027"] for d in itens)), "incompletos": sum(1 for d in itens if d["faltando"])},
         "tabela": pessoal.tabela_salarial(), "tabela_nome": pessoal.tabela_info()["nome"], "reajuste": reaj,
         "catalogo": {"itens": equipamentos.catalogo(), "atualizado_em": equipamentos.carregar()["atualizado_em"]},
         "parametros": [{"chave": k, "valor": par[k], "descricao": v[1], "padrao": v[0]} for k, v in pessoal.PARAMETROS.items()],
-        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "meu": o in meus}
+        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "meu": o in meus, "gerencia": _gerencia_do(p["gerente"], ger_de)}
                      for o, p in projetos.items() if p["tipo"] == "despesa"],
         "tarefas": tarefas_dos_projetos(c, "headcount", [o for o, p in projetos.items() if p["tipo"] == "despesa"]),
     }
+
+
+def _gerencias(c: sqlite3.Connection) -> list[str]:
+    """Gerências a que um headcount pode ficar vinculado: as dos usuários ativos, mais a Diretoria Adjunta."""
+    nomes = {r[0].strip() for r in c.execute("SELECT gerencia FROM users WHERE ativo=1 AND COALESCE(gerencia,'')<>''")}
+    nomes.add("Diretoria Adjunta")
+    return sorted(nomes, key=str.lower)
 
 
 def _valida(d: HcIn, c: sqlite3.Connection | None = None) -> None:
@@ -113,6 +127,8 @@ def _valida(d: HcIn, c: sqlite3.Connection | None = None) -> None:
         cod = getattr(d, tipo)
         if cod and not equipamentos.item(cod, tipo):
             raise HTTPException(422, f"Equipamento '{cod}' não existe no catálogo de {tipo}.")
+    if c is not None and d.gerencia and d.gerencia not in _gerencias(c):
+        raise HTTPException(422, "Gerência não encontrada.")
     if c is not None and (d.edt or d.tarefa) and not c.execute(
             "SELECT 1 FROM linhas WHERE ciclo=2027 AND orcamento=? AND edt=? AND tarefa=? LIMIT 1", (d.orcamento, d.edt, d.tarefa)).fetchone():
         raise HTTPException(422, "A tarefa escolhida não existe nesse projeto.")
@@ -129,9 +145,9 @@ def criar(d: HcIn, u: dict = Depends(usuario_liberado)):
         _projeto_custeio(c, d.orcamento)
         _valida(d, c)
         cur = c.execute("INSERT INTO headcount (orcamento, funcao, cargo, trajetoria, nivel, grupo, posicao, mes_inicio, quantidade, "
-                        "justificativa, edt, tarefa, computador, monitor, periferico, criado_por, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "justificativa, gerencia, edt, tarefa, computador, monitor, periferico, criado_por, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (d.orcamento, d.funcao.strip(), d.cargo.strip(), d.trajetoria, d.nivel, d.grupo, d.posicao, d.mes_inicio,
-                         d.quantidade, d.justificativa.strip(), d.edt, d.tarefa, d.computador, d.monitor, d.periferico, u["login"], u["login"]))
+                         d.quantidade, d.justificativa.strip(), d.gerencia, d.edt, d.tarefa, d.computador, d.monitor, d.periferico, u["login"], u["login"]))
         audit(c, u["login"], "incluiu headcount", d.orcamento, detalhe=f"{d.funcao or d.cargo} {d.trajetoria}/{d.nivel}/{d.grupo} x{d.quantidade}")
         sync.sincronizar(c, d.orcamento, u["login"])
         return _uma(c, cur.lastrowid)
@@ -149,9 +165,9 @@ def editar(hid: int, d: HcIn, u: dict = Depends(usuario_liberado)):
         _projeto_custeio(c, d.orcamento)
         _valida(d, c)
         c.execute("UPDATE headcount SET orcamento=?, funcao=?, cargo=?, trajetoria=?, nivel=?, grupo=?, posicao=?, mes_inicio=?, quantidade=?, "
-                  "justificativa=?, edt=?, tarefa=?, computador=?, monitor=?, periferico=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
+                  "justificativa=?, gerencia=?, edt=?, tarefa=?, computador=?, monitor=?, periferico=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
                   (d.orcamento, d.funcao.strip(), d.cargo.strip(), d.trajetoria, d.nivel, d.grupo, d.posicao, d.mes_inicio, d.quantidade,
-                   d.justificativa.strip(), d.edt, d.tarefa, d.computador, d.monitor, d.periferico, u["login"], hid))
+                   d.justificativa.strip(), d.gerencia, d.edt, d.tarefa, d.computador, d.monitor, d.periferico, u["login"], hid))
         audit(c, u["login"], "editou headcount", d.orcamento, detalhe=f"id {hid}")
         for o in {atual["orcamento"], d.orcamento}:
             sync.sincronizar(c, o, u["login"])

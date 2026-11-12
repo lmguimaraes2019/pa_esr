@@ -438,3 +438,14 @@ label.est-so{display:flex;flex-direction:row;gap:6px;align-items:center;text-tra
 label.est-gtit{display:flex;flex-direction:row;gap:8px;align-items:baseline;flex:1;min-width:0;text-transform:none;letter-spacing:0;font-weight:inherit;font-size:.92rem;color:inherit;cursor:pointer}
 label.est-gtit input{width:auto;flex:none}
 .est-cont{white-space:nowrap;font-size:.8rem;font-weight:400}.est-nsel{color:#1d4a9c;margin-right:6px}
+
+/* formulário de headcount: rótulo, campo e dica em linhas compartilhadas, para os campos ficarem alinhados */
+.grade-alinhada{row-gap:0;column-gap:14px;align-items:start}
+.grade-alinhada>label{display:grid;grid-row:span 3;grid-template-rows:subgrid;row-gap:5px;padding-bottom:14px;align-content:start}
+.grade-alinhada>label>span{align-self:end;line-height:1.25}
+.grade-alinhada>label>small{align-self:start;line-height:1.3}
+.grade-alinhada>label>input,.grade-alinhada>label>select{align-self:start;width:100%;box-sizing:border-box;height:42px}
+/* ações extintas: vermelho claro */
+.tab tr.extinta td,.tab tr.extinta:hover td{background:#fde8e8}
+.tab tr.extinta td:first-child{border-left:4px solid #d64545}
+.tab tr.extinta td,.tab tr.extinta td .mudo{color:#7a2a2a}

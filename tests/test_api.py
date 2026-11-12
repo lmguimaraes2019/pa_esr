@@ -246,7 +246,7 @@ def test_headcount_formulas_da_planilha(client):
     # faixa PLENO GRUPO 01 da Gestão do Negócio: 6418,58 a 9627,88; posição 0 = início da faixa
     r = client.post("/api/headcount", json={"orcamento": orc, "funcao": "Analista", "cargo": "Analista Pleno", "trajetoria": "GESTAO DO NEGOCIO",
                                             "nivel": "PLENO", "grupo": "GRUPO 01", "posicao": 0, "mes_inicio": 7, "quantidade": 2,
-                                            "justificativa": "Demanda nova", "edt": tf["edt"], "tarefa": tf["tarefa"]})
+                                            "justificativa": "Demanda nova", "gerencia": "Diretoria Adjunta", "edt": tf["edt"], "tarefa": tf["tarefa"]})
     assert r.status_code == 201
     d = r.json()
     assert d["custo"]["salario"] == 6418.58 and d["meses_2027"] == 6 and d["faltando"] == []
@@ -1064,3 +1064,19 @@ def test_gerencia_conta_so_projetos_pelos_quais_e_responsavel(client):
     linha = next(x for x in client.get("/api/planejamento").json()["gerencias"] if x["gerencia"] == "Gerência Conta")
     esperado = [p for p in client.get("/api/projetos").json() if p["gerente"] == ger and not p["extinto"]]
     assert linha["projetos"] == len(esperado)
+
+
+def test_headcount_vinculado_a_gerencia(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    assert "Diretoria Adjunta" in h["gerencias"]
+    orc = h["projetos"][0]["orcamento"]
+    base = {"orcamento": orc, "funcao": "Analista", "cargo": "Analista Pleno", "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO", "grupo": "GRUPO 01", "justificativa": "x"}
+    r = client.post("/api/headcount", json={**base, "gerencia": "Gerência Inexistente"})
+    assert r.status_code == 422
+    r = client.post("/api/headcount", json={**base, "gerencia": "Diretoria Adjunta"})
+    assert r.status_code == 201 and r.json()["gerencia"] == "Diretoria Adjunta" and "gerência" not in r.json()["faltando"]
+    sem = client.post("/api/headcount", json=base).json()
+    assert "gerência" in sem["faltando"]
+    por = {x["gerencia"]: x for x in client.get("/api/headcount").json()["por_gerencia"]}
+    assert por["Diretoria Adjunta"]["posicoes"] == 1 and "Sem gerência" in por
