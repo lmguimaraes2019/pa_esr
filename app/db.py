@@ -372,6 +372,10 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN novo INTEGER NOT NULL DEFAULT 0")
         if "tipo" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento de despesa ou de receita
             c.execute("ALTER TABLE projetos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'despesa'")
+        if "extinto" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: ação extinta, que não existirá no PA 2027
+            c.execute("ALTER TABLE projetos ADD COLUMN extinto INTEGER NOT NULL DEFAULT 0")
+            c.execute("ALTER TABLE projetos ADD COLUMN extinto_em TEXT NOT NULL DEFAULT ''")
+            c.execute("ALTER TABLE projetos ADD COLUMN extinto_por TEXT NOT NULL DEFAULT ''")
         if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
         if "detalhe" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: descrição do projeto escrita pelo gestor

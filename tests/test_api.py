@@ -1033,3 +1033,33 @@ def test_apresentacao_executiva(client):
     textos = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
     assert "ORÇAMENTO ESR 2027" in textos and "RESUMO EXECUTIVO" in textos and "OBRIGADO" in textos
     assert sum(1 for s in prs.slides for sh in s.shapes if sh.has_chart) >= 4
+
+
+def test_acao_extinta_sai_dos_totais_e_pode_ser_reativada(client):
+    entrar(client)
+    antes = client.get("/api/resumo").json()
+    alvo = max((p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa"), key=lambda p: p["total_2027"])
+    assert alvo["total_2027"] > 0
+    assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"extinto": True}).status_code == 200
+    depois = client.get("/api/resumo").json()
+    assert abs((antes["total_plano"] - depois["total_plano"]) - alvo["total_2027"]) < 0.05
+    assert depois["total_base"] < antes["total_base"] and depois["extintos"]["n"] == 1 and depois["extintos"]["aprovado_2026"] > 0
+    p = next(x for x in client.get("/api/projetos").json() if x["orcamento"] == alvo["orcamento"])
+    assert p["extinto"] and p["total_2027"] == 0                                   # continua na lista (para reativar), sem valor em 2027
+    assert client.get(f"/api/projetos/{alvo['orcamento']}").json()["projeto"]["extinto"] is True
+    assert alvo["orcamento"] not in {x["orcamento"] for x in client.get("/api/planejamento").json()["projetos"]}
+    assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"extinto": False}).status_code == 200
+    assert abs(client.get("/api/resumo").json()["total_plano"] - antes["total_plano"]) < 0.05
+
+
+def test_gerencia_conta_so_projetos_pelos_quais_e_responsavel(client):
+    entrar(client)
+    g = client.get("/api/usuarios").json()["gerentes"]
+    ger, outro = g[0], g[1]
+    base = {"perfil": "gestor", "gerencia": "Gerência Conta", "cargo": "gerente"}
+    # acompanha projetos de dois gerentes, mas só um é o responsável direto
+    r = client.post("/api/usuarios", json={**base, "login": "g.conta", "nome": "Gestor Conta", "gerentes": [ger]})
+    assert r.status_code == 201, r.text
+    linha = next(x for x in client.get("/api/planejamento").json()["gerencias"] if x["gerencia"] == "Gerência Conta")
+    esperado = [p for p in client.get("/api/projetos").json() if p["gerente"] == ger and not p["extinto"]]
+    assert linha["projetos"] == len(esperado)

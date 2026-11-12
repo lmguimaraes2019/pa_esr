@@ -49,17 +49,23 @@ def exige_admin(u: dict = Depends(usuario_liberado)) -> dict:
     return u
 
 
-def permitidos(c: sqlite3.Connection, u: dict) -> set[str]:
+def permitidos(c: sqlite3.Connection, u: dict, extintos: bool = False) -> set[str]:
+    """Orçamentos que o usuário enxerga. As ações extintas (que não existirão no PA 2027) ficam de fora de todos os
+    totais, pendências e exportações; só a lista de projetos e a página do projeto as incluem (extintos=True), para poder reativá-las."""
     if u["perfil"] == "admin":
-        return {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
-    rows = c.execute("SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?) "
-                     "UNION SELECT orcamento FROM user_projetos WHERE user_id=?", (u["id"], u["id"]))
-    return {r[0] for r in rows}
+        ids = {r[0] for r in c.execute("SELECT orcamento FROM projetos")}
+    else:
+        rows = c.execute("SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?) "
+                         "UNION SELECT orcamento FROM user_projetos WHERE user_id=?", (u["id"], u["id"]))
+        ids = {r[0] for r in rows}
+    if not extintos and ids:
+        ids -= {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE extinto=1")}
+    return ids
 
 
 def exige_acesso(c: sqlite3.Connection, u: dict, orcamento: str) -> sqlite3.Row:
     p = c.execute("SELECT * FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
-    if not p or orcamento not in permitidos(c, u):
+    if not p or orcamento not in permitidos(c, u, extintos=True):
         raise HTTPException(404, "Projeto não encontrado.")
     return p
 
@@ -133,6 +139,7 @@ class ProjetoPatch(BaseModel):
     tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
     finalidade: str | None = Field(default=None, pattern=_FIN)
     contingenciado: bool | None = None
+    extinto: bool | None = None
     detalhe: str | None = Field(default=None, max_length=3000)
 
     @field_validator("n_projeto")
@@ -330,7 +337,7 @@ def _gerencia_do(gerente: str | None, ger_de: dict[str, str]) -> str:
 
 @router.get("/projetos")
 def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = sorted(permitidos(c, u))
+    ids = sorted(permitidos(c, u, extintos=True))
     if not ids:
         return []
     marks = ",".join("?" for _ in ids)
@@ -349,17 +356,17 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
         "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
-             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]),
+             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]), "extinto": bool(r["extinto"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
-             "total_2027": _arred(r["t_plano"]) if r["tipo"] != "receita" else 0.0,
-             "receitas_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else 0)),
-             "resultado_2027": _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
+             "total_2027": _arred(r["t_plano"]) if r["tipo"] != "receita" and not r["extinto"] else 0.0,
+             "receitas_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else 0)),
+             "resultado_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
              "realizado_2026": _arred(r["realizado"]),
              "empenhado_2026": _arred(r["empenhado"]),
-             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] else [])} for r in rows]
+             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] and not r["extinto"] else [])} for r in rows]
 
 
 @router.get("/listas")
@@ -418,6 +425,12 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             if u["perfil"] != "admin":
                 raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
             campos["contingenciado"] = int(campos["contingenciado"])
+        if "extinto" in campos:
+            campos["extinto"] = int(campos["extinto"])
+            campos["extinto_em"] = datetime.now().strftime("%Y-%m-%d %H:%M") if campos["extinto"] else ""
+            campos["extinto_por"] = u["login"] if campos["extinto"] else ""
+            if bool(campos["extinto"]) != bool(p["extinto"]):
+                audit(c, u["login"], "marcou a ação como extinta (fora do PA 2027)" if campos["extinto"] else "reativou a ação no PA 2027", orcamento, detalhe=p["descricao"])
         if u["perfil"] != "admin" and ("n_projeto" in campos or ("descricao" in campos and not p["novo"])):
             raise HTTPException(403, "Apenas o administrador altera o Nº do Projeto e o nome de orçamentos existentes.")
         if "tipo" in campos and u["perfil"] != "admin" and not p["novo"]:
@@ -490,7 +503,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},
@@ -806,11 +819,16 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
             status["mantida"] += 1
         else:
             status["ajustada"] += 1
+    # ações extintas: ficam fora dos totais acima (que comparam só o que existe em 2027); o aprovado de 2026 delas é informado à parte
+    ext = [o for o in permitidos(c, u, extintos=True) - permitidos(c, u)
+           if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa"]
+    extintos = {"n": len(ext), "aprovado_2026": _arred(c.execute(
+        f"SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas WHERE ciclo={config.CICLO_BASE} AND orcamento IN ({','.join('?' for _ in ext) or chr(39) * 2})", ext).fetchone()[0])}
     return {"ciclo_base": config.CICLO_BASE, "ciclo_plano": config.CICLO_PLANO,
             "total_base": tot(origens, "base"), "total_plano": tot(origens, "plano"),
             "total_realizado": tot(origens, "realizado"), "total_empenhado": tot(origens, "empenhado"),
             "total_executado": tot(origens, "executado") if origens else 0.0,
-            "linhas_status": status,
+            "linhas_status": status, "extintos": extintos,
             "por_origem": origens, "por_grupo": grupos, "por_finalidade": finalidades,
             "mensal_plano": [{"mes": NOMES_MESES[i], "valor": _arred(mensal[m] or 0)} for i, m in enumerate(MESES)]}
 

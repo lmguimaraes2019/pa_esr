@@ -179,7 +179,7 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
     DSS e Diretoria Adjunta somam todos os projetos da ESR (a DSS repete a Diretoria Adjunta); abaixo da Diretoria
     ficam Leandro e Célia, só com os projetos cadastrados em nome de cada um; cada gerência, os projetos
     que seus gestores acompanham (cada projeto uma vez, ainda que gerente e coordenador o acompanhem)."""
-    todos_ids = [r[0] for r in c.execute("SELECT orcamento FROM projetos")]
+    todos_ids = [r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE extinto=0")]
     grupos: dict[str, list[dict]] = {GER_DSS: [], GER_DIR: []}
     for r in c.execute("SELECT * FROM users WHERE ativo=1 ORDER BY nome").fetchall():
         nome = (r["gerencia"] or "").strip()
@@ -199,18 +199,18 @@ def _por_gerencia(c: sqlite3.Connection) -> list[dict]:
                     "concluido_em": cu["concluido_em"] if cu else None, "obs": cu["obs"] if cu else ""}
             if nv == "diretoria":      # projetos em que o nome do usuário é o gerente cadastrado
                 pri = _sem_acento(m["nome"]).split(" ")[0]
-                meus = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos") if _sem_acento(r["gerente"]).startswith(pri)]
+                meus = [r["orcamento"] for r in c.execute("SELECT orcamento, gerente FROM projetos WHERE extinto=0") if _sem_acento(r["gerente"]).startswith(pri)]
                 a = _agrega(c, meus)
                 base.update(projetos=a["projetos"], plano=a["plano"], pendencias=a["pendencias"], aprovado=a["aprovado"], executado=a["executado"], receitas=a["receitas"])
             elif m["perfil"] != "admin" and nv == "gerencia":
-                ids |= set(permitidos(c, m))
                 if m["cargo"] == "coordenador":      # coordenadores não têm projetos sob sua responsabilidade: ficam sem valores
                     base["coordenador"] = True
                     pessoas.append(base)
                     continue
                 # projetos do gestor: os que têm o nome dele como gerente (os demais que ele acompanha pertencem a outros gestores)
                 proprios = [r[0] for r in c.execute(
-                    "SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (m["id"],))]
+                    "SELECT orcamento FROM projetos WHERE extinto=0 AND gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (m["id"],))]
+                ids |= set(proprios)      # a gerência mostra só os projetos pelos quais ela é responsável, não os que apenas acompanha
                 a = _agrega(c, proprios)
                 responsaveis += 1
                 pend += a["pendencias"]

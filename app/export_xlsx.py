@@ -53,7 +53,7 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         f"SELECT l.id, l.orcamento, l.edt, l.tarefa, l.conta_codigo, {cols}, "
         "p.n_projeto, p.novo, p.contingenciado, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
         "FROM linhas l JOIN projetos p USING (orcamento) JOIN contas k ON k.codigo = l.conta_codigo "
-        "WHERE l.ciclo = ? AND p.tipo = 'despesa' ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
+        "WHERE l.ciclo = ? AND p.tipo = 'despesa' AND p.extinto = 0 ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
 
     zeradas = 0
     pend_num: set[str] = set()

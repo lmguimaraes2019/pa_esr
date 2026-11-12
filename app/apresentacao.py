@@ -234,7 +234,7 @@ def _slide_resumo(prs, d, n):
     _kpi(s, x(0), TOPO, w, 1.95, mi(plano), "Plano 2027", "despesas planejadas")
     _kpi(s, x(1), TOPO, w, 1.95, mi(base), "Aprovado 2026", f"executado {mi(exe)} ({pc(exe / base * 100 if base else 0, 0)})", laranja=True)
     _kpi(s, x(2), TOPO, w, 1.95, var_pc(plano, base), "Variação", ("+" if plano - base > 0.5 else "") + mi(plano - base))
-    _kpi(s, x(3), TOPO, w, 1.95, str(len(desp)), "Projetos", _pl(sum(1 for p in desp if p["novo"]), "novo em 2027", "novos em 2027"), laranja=True)
+    _kpi(s, x(3), TOPO, w, 1.95, str(len(desp)), "Projetos", _pl(sum(1 for p in desp if p["novo"]), "novo em 2027", "novos em 2027") + (f"; {_pl(r['extintos']['n'], 'extinta', 'extintas')}" if r["extintos"]["n"] else ""), laranja=True)
     y2 = TOPO + 1.95 + 0.22
     _kpi_leve(s, x(0), y2, w, 1.4, mi(t["receita"]), "Receitas 2027", f"2026: {mi(t['receita_2026'])}")
     _kpi_leve(s, x(1), y2, w, 1.4, mi(t["resultado"]), "Resultado 2027", "receitas menos despesas")
@@ -410,7 +410,8 @@ def _slide_atencao(prs, d, n):
         ("Resultados Operacionais da ESR", f"{len(ros_esr_sem)} de {len(ros_esr)} sem projeto" if ros_esr else "sem RO da ESR no catálogo",
          "ainda não têm orçamento ligado a eles." if ros_esr_sem else "todos têm projeto vinculado."),
         ("Preenchimento do planejamento", f"{sum(1 for g in ger if g.get('concluido'))} de {_pl(len(ger), 'gerência concluiu', 'gerências concluíram')}", f"{_pl(sum(v['pendencias'] for _, v in pend), 'pendência aberta', 'pendências abertas')} em {_pl(len(pend), 'projeto', 'projetos')}."),
-        ("Situação dos projetos", _pl(len(cont), "contingenciado", "contingenciados"), f"{_pl(len(vazios), 'projeto de despesa', 'projetos de despesa')} sem valor em 2027."),
+        ("Situação dos projetos", _pl(len(cont), "contingenciado", "contingenciados"),
+         f"{_pl(len(vazios), 'projeto de despesa', 'projetos de despesa')} sem valor em 2027." + (f" {_pl(d['resumo']['extintos']['n'], 'ação extinta', 'ações extintas')} ({mi(d['resumo']['extintos']['aprovado_2026'])} aprovados em 2026) não existirão no PA 2027." if d["resumo"]["extintos"]["n"] else "")),
     ]
     for i, (tit, grande, pequeno) in enumerate(cartoes):
         x, y = L + (i % 2) * (w + 0.2), TOPO + (i // 2) * (h + 0.2)

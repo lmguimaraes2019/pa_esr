@@ -327,11 +327,12 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>}{p.extinto && <> · <span className="tag aviso">extinta no PA 2027</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} novo={p.novo} onSalvo={carregar} />}
       </div>
+      <ExtincaoProjeto p={p} onSalvo={carregar} />
       <FaixaMigracao p={p} irProjeto={irProjeto} />
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
       {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}
@@ -365,6 +366,21 @@ function FaixaEstrategia({ orcamento, abrir }) {
       <button className="link" onClick={abrir}>{direto.length ? "ver e alterar" : "vincular agora"}</button>
     </div>
   );
+}
+
+/** Ação que acabou: não existirá no PA 2027. Sai dos totais, das pendências e da planilha do PMO; dá para reativar a qualquer momento. */
+function ExtincaoProjeto({ p, onSalvo }) {
+  const [erro, setErro] = useState("");
+  const enviar = async (extinto) => { setErro(""); try { await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: { extinto } }); onSalvo(); } catch (e) { setErro(e.message); } };
+  const extinguir = () => { if (window.confirm("Marcar esta ação como extinta? Ela não existirá no PA 2027: sai dos totais, das pendências e da planilha do PMO. Os valores lançados ficam guardados e você pode reativá-la depois.")) enviar(true); };
+  if (p.extinto) return (
+    <div className="nota aviso" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", margin: "10px 0" }}>
+      <span><strong>Ação extinta.</strong> Não existirá no PA 2027{p.extinto_em ? ` (marcada em ${p.extinto_em})` : ""}. Fica fora dos totais, das pendências e da planilha do PMO.</span>
+      <button onClick={() => enviar(false)}>Reativar no PA 2027</button>{erro && <span className="erro">{erro}</span>}</div>);
+  return (
+    <div style={{ margin: "8px 0", display: "flex", gap: 10, alignItems: "center" }}>
+      <button type="button" onClick={extinguir} title="Esta ação não existirá no PA 2027">Marcar ação como extinta</button>
+      <span className="mudo" style={{ fontSize: ".85rem" }}>Use quando a ação acabou e não terá orçamento em 2027.</span>{erro && <span className="erro">{erro}</span>}</div>);
 }
 
 function NumeroProjeto({ orcamento, atual, contingenciado, novo, onSalvo }) {

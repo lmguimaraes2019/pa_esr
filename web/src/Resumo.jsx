@@ -101,6 +101,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
         </section>
       </div>
       <Cobertura admin={admin} />
+      {r.extintos && r.extintos.n > 0 && <div className="nota">{r.extintos.n} ação(ões) extinta(s) não existirão no PA 2027 e ficam fora dos totais desta página. Aprovado em 2026 nelas: <strong>{fmt(r.extintos.aprovado_2026)}</strong>.</div>}
       <section className="cartao"><h3>Por origem de recurso e finalidade</h3><Quadro itens={r.por_origem} rotulo="Origem / finalidade" aninhado /></section>
       <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
       <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>

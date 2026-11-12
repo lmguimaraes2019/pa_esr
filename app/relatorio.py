@@ -145,9 +145,11 @@ def grafico_grupos(cats: list[str], series: list[tuple[str, list[float], str]], 
 
 def coletar(c: sqlite3.Connection, u: dict) -> dict:
     """Reúne, com as mesmas funções que alimentam as telas, tudo o que o relatório conta."""
-    projetos = api.projetos(u, c)
+    todos = api.projetos(u, c)
+    projetos = [p for p in todos if not p["extinto"]]      # ações extintas não existirão no PA 2027: ficam de fora dos números
+    extintos = [p for p in todos if p["extinto"]]
     ids = [p["orcamento"] for p in projetos]
-    d = {
+    d = {"extintos": extintos,
         "resumo": api.resumo(u, c), "projetos": projetos, "receitas": api_receitas.listar(u, c), "viagens": api_viagens.listar(u, c),
         "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "cobertura": api_entregas.cobertura(u, c),
         "gerencias": api_planejamento._por_gerencia(c), "situacao": api_planejamento.resumir(c, ids),
@@ -362,7 +364,8 @@ def _parte1(doc: Doc, d: dict) -> None:
           "Viagens, eventos e headcount são calculados nas suas próprias páginas e alimentam o orçamento. As premissas usadas nos cálculos são:")
     doc.tabela(["Premissa", "Valor", "Descrição"], [[p["chave"], str(p["valor"]).replace(".", ","), p["descricao"]] for p in d["premissas"]],
                [2700, 1100, 5838], alin=["left", "right", "left"], legenda="Premissas do planejamento.")
-    esp = [("Projetos novos em 2027", [p for p in P if p["novo"]]), ("Projetos contingenciados (sem exportação para o PMO)", [p for p in P if p["contingenciado"]]),
+    esp = [("Ações extintas (não existirão no PA 2027 e não vão na planilha do PMO)", d["extintos"]),
+           ("Projetos novos em 2027", [p for p in P if p["novo"]]), ("Projetos contingenciados (sem exportação para o PMO)", [p for p in P if p["contingenciado"]]),
            ("Projetos replicados de 2026 para 2027", [p for p in P if p["replicado_para"]]),
            ("Projetos de despesa sem nenhum valor em 2027 (constam neste relatório, mas não vão na planilha do PMO)",
             [p for p in P if p["tipo"] == "despesa" and not p["contingenciado"] and abs(p["total_2027"]) < 0.005])]
