@@ -449,3 +449,7 @@ label.est-gtit input{width:auto;flex:none}
 .tab tr.extinta td,.tab tr.extinta:hover td{background:#fde8e8}
 .tab tr.extinta td:first-child{border-left:4px solid #d64545}
 .tab tr.extinta td,.tab tr.extinta td .mudo{color:#7a2a2a}
+/* fonte de financiamento do projeto: laranja enquanto estiver pendente */
+.fonte-fin{margin:10px 0}
+.fonte-fin.pend{border-left:4px solid #E87722;background:#fff7ef}
+.fonte-fin h3{margin-top:0}

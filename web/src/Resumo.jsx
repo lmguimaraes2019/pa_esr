@@ -60,6 +60,23 @@ function Cobertura({ admin }) {
   );
 }
 
+function EstrategiaFinanciamento() {
+  const [q, setQ] = useState(null);
+  useEffect(() => { api("/financiamento").then(setQ).catch(() => setQ(false)); }, []);
+  if (!q || !q.total) return null;
+  const inter = q.grupos.find((g) => g.fonte === "intercompany");
+  return (
+    <section className="cartao">
+      <h3>Estratégia de financiamento (despesas de 2027)</h3>
+      <div className="rolagem"><table className="tab">
+        <thead><tr><th>Fonte</th><th className="n">Projetos</th><th className="n">Despesa 2027</th><th className="n">% do total</th></tr></thead>
+        <tbody>{q.grupos.filter((g) => g.n).map((g) => <tr key={g.fonte || "x"} className={g.fonte === "" ? "extinta" : ""}><td>{g.nome}</td><td className="n">{g.n}</td><td className="n">{fmt(g.valor)}</td><td className="n">{(g.valor / q.total * 100).toFixed(1).replace(".", ",")}%</td></tr>)}</tbody>
+        <tfoot><tr><td>Total</td><td className="n">{q.grupos.reduce((a, g) => a + g.n, 0)}</td><td className="n">{fmt(q.total)}</td><td className="n">100,0%</td></tr></tfoot></table></div>
+      {inter && inter.n > 0 && <p className="mudo" style={{ marginBottom: 0 }}>Projetos custeados por transferência intercompany: {inter.projetos.map((x) => `${x.projeto} (${fmt(x.valor)})`).join("; ")}. A receita intercompany lançada é de {fmt(q.intercompany_receita)}, {q.intercompany_saldo >= 0 ? `com sobra de ${fmt(q.intercompany_saldo)}` : `faltando ${fmt(-q.intercompany_saldo)} para cobrir`}.</p>}
+      {q.pendentes > 0 && <p className="mudo" style={{ marginBottom: 0 }}>{q.pendentes} projeto(s) ainda sem fonte indicada (linha em vermelho claro).</p>}
+    </section>);
+}
+
 export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   const [r, setR] = useState(null);
   const [erro, setErro] = useState("");
@@ -101,6 +118,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
         </section>
       </div>
       <Cobertura admin={admin} />
+      <EstrategiaFinanciamento />
       {r.extintos && r.extintos.n > 0 && (
         <section className="cartao" style={{ borderLeft: "4px solid #E87722" }}>
           <h3>Ações extintas ({r.extintos.n})</h3>

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import config, export_xlsx, importers, security
 from .db import MESES, NOMES_MESES, audit, connect, tx
+from . import fontes as financiamento
 
 router = APIRouter(prefix="/api")
 SOMA_MESES = "+".join(MESES)
@@ -140,6 +141,8 @@ class ProjetoPatch(BaseModel):
     finalidade: str | None = Field(default=None, pattern=_FIN)
     contingenciado: bool | None = None
     extinto: bool | None = None
+    financiamento: str | None = Field(default=None, pattern="^(fomento|intercompany|receita|tbd)?$")      # vazio = ainda não informado
+    financiamento_obs: str | None = Field(default=None, max_length=300)
     detalhe: str | None = Field(default=None, max_length=3000)
 
     @field_validator("n_projeto")
@@ -358,6 +361,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
              "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]), "extinto": bool(r["extinto"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
+             "financiamento": financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]), "financiamento_informado": r["financiamento"], "financiamento_obs": r["financiamento_obs"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",
              "replicado_para": r["replicado_para"], "replicado_nome": r["replicado_nome"], "replicado_origem": r["replicado_origem"], "replicado_de": r["replicado_de"],
              "original_2026": _arred(r["original_2026"]), "total_2026": _arred(r["t_base"]),
@@ -366,7 +370,9 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
              "resultado_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
              "realizado_2026": _arred(r["realizado"]),
              "empenhado_2026": _arred(r["empenhado"]),
-             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] and not r["extinto"] else [])} for r in rows]
+             "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] and not r["extinto"] else [])
+                           + (["Fonte de financiamento"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
+                              and not financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]) else [])} for r in rows]
 
 
 @router.get("/listas")
@@ -445,6 +451,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             campos["descricao"] = campos["descricao"].strip()
         if "detalhe" in campos:
             campos["detalhe"] = campos["detalhe"].strip()
+        if "financiamento_obs" in campos:
+            campos["financiamento_obs"] = campos["financiamento_obs"].strip()
         if "origem" in campos:      # a mudança vale só para 2027; a origem de 2026 fica como está (exceto em orçamento novo, que não tem 2026)
             campos["origem_2027"] = campos.pop("origem")
             if p["novo"]:
@@ -503,7 +511,8 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
+                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},

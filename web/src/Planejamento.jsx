@@ -46,6 +46,9 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
     ["entregas", "Entregas e conexão estratégica", e.entregas.pendentes ? "pend" : "ok", e.entregas.pendentes ? `${e.entregas.pendentes} projeto(s) a ajustar` : "em dia",
       `${e.entregas.n} entrega(s) nos projetos${e.entregas.sem_conexao ? `, ${e.entregas.sem_conexao} sem KPI nem conexão com PO e CG` : ""}`, null,
       e.entregas.pendentes ? "Informar entregas" : "Revisar nos projetos"],
+    ["financiamento", "Fonte de financiamento", e.financiamento.pendentes ? "pend" : "ok", e.financiamento.pendentes ? `${e.financiamento.pendentes} projeto(s) a ajustar` : "em dia",
+      `${e.financiamento.intercompany} projeto(s) custeado(s) por intercompany${e.financiamento.tbd ? `, ${e.financiamento.tbd} a definir (TBD)` : ""}`, null,
+      e.financiamento.pendentes ? "Indicar fonte" : "Revisar nos projetos"],
   ];
   const feitas = itens.filter((i) => i[2] !== "pend").length;
   return (
@@ -56,7 +59,7 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
         <div className="progresso" title={`${feitas} de ${itens.length} etapas sem pendência`}><span style={{ width: (feitas / itens.length) * 100 + "%" }} /><small>{feitas} de {itens.length} em dia</small></div>
       </div>
       <div className="legenda-etapas"><span><i style={{ background: "#D96A00" }} />Precisa de ajuste</span><span><i style={{ background: "#1E8E3E" }} />Em dia</span></div>
-      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => (k === "entregas" ? ir("projetos", null, e.entregas.pendentes > 0) : ir(k))} />)}</ol>
+      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => (k === "entregas" ? ir("projetos", null, e.entregas.pendentes > 0 ? "entregas" : false) : k === "financiamento" ? ir("projetos", null, e.financiamento.pendentes > 0 ? "financiamento" : false) : ir(k))} />)}</ol>
       <div className="concluir">
         {plano.concluido ? (
           <><p><Estado tom="ok">concluído</Estado> Você marcou o planejamento como concluído em {quando(plano.concluido.concluido_em)}.{plano.concluido.obs && ` Observação: ${plano.concluido.obs}`}</p>
@@ -106,6 +109,7 @@ export function ResumoProjeto({ orcamento, irEtapa }) {
     ["viagens", "Viagens", fmt(d.viagens.total), `${d.viagens.n} viagem(ns)`, d.viagens.pendentes],
     ["eventos", "Eventos", fmt(d.eventos.total), `${d.eventos.n} evento(s)`, d.eventos.pendentes],
     ["headcount", "Headcount", fmt(d.headcount.total), `${d.headcount.n} posição(ões) | custo em 2027`, d.headcount.pendentes],
+    ["financiamento", "Fonte de financiamento", d.financiamento.fonte ? ({ fomento: "Fomento", intercompany: "Intercompany", receita: "Receita própria", tbd: "TBD" }[d.financiamento.fonte]) : "Não informada", d.financiamento.fonte === "intercompany" ? "Custeado pelas transferências intercompany" : d.financiamento.fonte ? "Estratégia de financiamento" : "Indique a fonte do recurso", d.financiamento.pendentes],
     ["entregas", "Entregas", `${d.entregas.n}`, d.entregas.motivo === "sem vínculo estratégico" ? "Falta vincular o orçamento ao PO e ao CG" : d.entregas.n ? `${d.entregas.n - d.entregas.sem_conexao} com KPI ou conexão estratégica` : "Nenhuma entrega informada", d.entregas.pendentes],
   ];
   return (

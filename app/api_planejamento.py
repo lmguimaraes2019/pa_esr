@@ -10,7 +10,7 @@ from . import config, viagens as vg
 from .api import _arred, _chave_nome, _conn, exige_acesso, exige_admin, permitidos, usuario_liberado
 from .api_eventos import _calc as _calc_evento, _dolar
 from .api_headcount import _calc as _calc_hc, _reajuste
-from . import pessoal
+from . import fontes, pessoal
 from .db import MESES, audit, tx
 
 router = APIRouter(prefix="/api/planejamento")
@@ -25,14 +25,15 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
     """Situação de cada projeto nas cinco etapas do plano 2027."""
     ids = sorted(ids)
     marks = ",".join("?" for _ in ids) or "''"
-    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo, contingenciado, finalidade FROM projetos WHERE orcamento IN ({marks})", ids)}
+    nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo, contingenciado, finalidade, financiamento, COALESCE(NULLIF(origem_2027, ''), origem) AS origem FROM projetos WHERE orcamento IN ({marks})", ids)}
     out = {o: {"orcamento": o, "projeto": nomes[o]["descricao"], "gerente": nomes[o]["gerente"], "novo": bool(nomes[o]["novo"]),
                "despesas": {"aprovado": 0.0, "plano": 0.0, "linhas": 0, "ajustadas": 0, "novas": 0, "excluidas": 0, "bloqueadas": 0},
                "receitas": {"n": 0, "total": 0.0},
                "viagens": {"n": 0, "total": 0.0, "pendentes": 0},
                "eventos": {"n": 0, "total": 0.0, "pendentes": 0},
                "headcount": {"n": 0, "total": 0.0, "pendentes": 0},
-               "entregas": {"n": 0, "sem_conexao": 0, "pendentes": 0, "vinculado": False, "motivo": ""}} for o in ids if o in nomes}
+               "entregas": {"n": 0, "sem_conexao": 0, "pendentes": 0, "vinculado": False, "motivo": ""},
+               "financiamento": {"fonte": fontes.efetivo(nomes[o]["origem"], nomes[o]["financiamento"]), "pendentes": 0}} for o in ids if o in nomes}
 
     # despesas: compara cada linha de 2027 com a de 2026
     usadas: set[int] = set()
@@ -103,7 +104,10 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
             if not p["entregas"]["n"]:
                 p["entregas"].update(pendentes=1, motivo="sem entregas")
             # a falta de vínculo com o PO e o CG não é pendência (há projetos sem vínculo); só o relatório da diretoria executiva a lista
-        p["pendencias"] = (p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"] + p["entregas"]["pendentes"])
+        # todo projeto de despesa com orçamento em 2027 precisa indicar de onde vem o recurso (fomento já é uma fonte; TBD também vale)
+        if nomes[o]["tipo"] == "despesa" and not nomes[o]["contingenciado"] and p["despesas"]["plano"] > 0 and not p["financiamento"]["fonte"]:
+            p["financiamento"]["pendentes"] = 1
+        p["pendencias"] = (p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"] + p["entregas"]["pendentes"] + p["financiamento"]["pendentes"])
     return out
 
 
@@ -117,6 +121,9 @@ def _etapas(projetos: list[dict]) -> dict:
         "eventos": {"n": soma("eventos", "n"), "total": _arred(soma("eventos", "total")), "pendentes": soma("eventos", "pendentes")},
         "headcount": {"n": soma("headcount", "n"), "total": _arred(soma("headcount", "total")), "pendentes": soma("headcount", "pendentes")},
         "entregas": {"n": soma("entregas", "n"), "sem_conexao": soma("entregas", "sem_conexao"), "pendentes": soma("entregas", "pendentes"), "projetos": len(projetos)},
+        "financiamento": {"pendentes": soma("financiamento", "pendentes"), "projetos": len(projetos),
+                          "intercompany": sum(1 for p in projetos if p["financiamento"]["fonte"] == "intercompany"),
+                          "tbd": sum(1 for p in projetos if p["financiamento"]["fonte"] == "tbd")},
     }
 
 
@@ -126,8 +133,9 @@ def _situacao(c: sqlite3.Connection, u: dict) -> dict:
         # entregas são responsabilidade do gestor do projeto: quem só enxerga o projeto de outro gestor não recebe essa pendência
         eu = _chave_nome(u["nome"])
         for p in projetos:
-            if p["entregas"]["pendentes"] and _chave_nome(p["gerente"]) != eu:
+            if (p["entregas"]["pendentes"] or p["financiamento"]["pendentes"]) and _chave_nome(p["gerente"]) != eu:
                 p["entregas"].update(pendentes=0, motivo="")
+                p["financiamento"]["pendentes"] = 0
                 p["pendencias"] = p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"]
     etapas = _etapas(projetos)
     # headcount que o usuário lançou em projeto de outro gestor também é pendência dele
@@ -139,7 +147,7 @@ def _situacao(c: sqlite3.Connection, u: dict) -> dict:
         d = _calc_hc(r, par, reaj)
         x = etapas["headcount"]
         x["n"] += r["quantidade"]; x["total"] = _arred(x["total"] + d["custo_2027"]); x["pendentes"] += 1 if d["faltando"] else 0
-    pend = etapas["viagens"]["pendentes"] + etapas["eventos"]["pendentes"] + etapas["headcount"]["pendentes"] + etapas["entregas"]["pendentes"]
+    pend = etapas["viagens"]["pendentes"] + etapas["eventos"]["pendentes"] + etapas["headcount"]["pendentes"] + etapas["entregas"]["pendentes"] + etapas["financiamento"]["pendentes"]
     return {"projetos": projetos, "etapas": etapas, "pendencias": pend}
 
 

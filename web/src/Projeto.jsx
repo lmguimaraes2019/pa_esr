@@ -334,6 +334,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       </div>
       <ExtincaoProjeto p={p} onSalvo={carregar} />
       <FaixaMigracao p={p} irProjeto={irProjeto} />
+      {p.tipo === "despesa" && !p.extinto && <FonteFinanciamento key={p.financiamento_informado + p.financiamento_obs} p={p} onSalvo={carregar} />}
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
       {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}
       <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
@@ -342,7 +343,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       {erro && <p className="erro" role="alert">{erro}</p>}
       {passo === "passado" ? <Passado d={d} irPlano={() => setPasso("plano")} recarregar={carregar} setErro={setErro} />
         : passo === "entregas" ? <EntregasProjeto orcamento={orcamento} contingenciado={p.contingenciado} />
-        : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={(k) => (k === "entregas" ? setPasso("entregas") : irEtapa(k))} />
+        : passo === "resumo" ? <ResumoProjeto orcamento={orcamento} irEtapa={(k) => (k === "entregas" ? setPasso("entregas") : k === "financiamento" ? window.scrollTo(0, 0) : irEtapa(k))} />
         : <Plano d={d} admin={admin} contas={contas} recarregar={carregar} setErro={setErro} irViagens={irViagens} voltar={voltar} />}
     </>
   );
@@ -365,6 +366,33 @@ function FaixaEstrategia({ orcamento, abrir }) {
         </>) : <span className="aviso-txt">sem vínculo com o PO e o Contrato de Gestão</span>}
       <button className="link" onClick={abrir}>{direto.length ? "ver e alterar" : "vincular agora"}</button>
     </div>
+  );
+}
+
+const FONTES_FIN = [["fomento", "Fomento"], ["intercompany", "Transferência intercompany"], ["receita", "Receita própria (externa)"], ["tbd", "A definir (TBD)"]];
+
+/** De onde vem o recurso que paga o projeto. Fomento já é uma fonte; os demais indicam intercompany, receita própria ou TBD. */
+function FonteFinanciamento({ p, onSalvo }) {
+  const [fonte, setFonte] = useState(p.financiamento_informado || "");
+  const [obs, setObs] = useState(p.financiamento_obs || "");
+  const [erro, setErro] = useState("");
+  const pendente = !p.financiamento;
+  const salvar = async () => { setErro(""); try { await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: { financiamento: fonte, financiamento_obs: obs } }); onSalvo(); } catch (e) { setErro(e.message); } };
+  const mudou = fonte !== (p.financiamento_informado || "") || obs.trim() !== (p.financiamento_obs || "");
+  return (
+    <section className={"cartao fonte-fin " + (pendente ? "pend" : "")}>
+      <h3>Fonte de financiamento {pendente && <span className="tag aviso">pendente</span>}</h3>
+      <div className="grade">
+        <label><span>De onde vem o recurso deste projeto</span>
+          <select value={fonte} onChange={(e) => setFonte(e.target.value)}>
+            <option value="">{p.financiamento === "fomento" ? "Fomento (pela origem de recursos)" : "Selecione…"}</option>
+            {FONTES_FIN.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
+        <label><span>Detalhe (opcional)</span><input value={obs} maxLength={300} onChange={(e) => setObs(e.target.value)} placeholder={fonte === "intercompany" ? "Ex.: repasse das áreas à ESR" : fonte === "receita" ? "Ex.: cliente ou contrato" : ""} /></label>
+        <div className="acoes" style={{ alignSelf: "end" }}><button className="primario" disabled={!mudou} onClick={salvar}>Salvar fonte</button></div>
+      </div>
+      <p className="mudo" style={{ margin: "6px 0 0" }}>{pendente ? "Este projeto não é de fomento: indique a fonte do recurso. Se ainda não houver, escolha A definir (TBD)." : "A fonte aparece no relatório e na apresentação como estratégia de financiamento."}{fonte === "intercompany" && " A despesa de 2027 do projeto será custeada pela receita das transferências intercompany."}</p>
+      {erro && <p className="erro">{erro}</p>}
+    </section>
   );
 }
 

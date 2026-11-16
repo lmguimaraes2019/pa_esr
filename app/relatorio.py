@@ -10,6 +10,7 @@ import re
 import sqlite3
 from datetime import datetime
 
+from . import financiamento
 from . import api, api_entregas, api_eventos, api_exposicao, api_headcount, api_planejamento, api_receitas, api_viagens, config, estrategia
 from .db import MESES, NOMES_MESES
 from .relatorio_docx import AZUL, CIANO, CINZA, LARANJA, NAVY, ROXO, VERDE, Doc, montar
@@ -151,7 +152,7 @@ def coletar(c: sqlite3.Connection, u: dict) -> dict:
     ids = [p["orcamento"] for p in projetos]
     d = {"extintos": extintos,
         "resumo": api.resumo(u, c), "projetos": projetos, "receitas": api_receitas.listar(u, c), "viagens": api_viagens.listar(u, c),
-        "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "exposicao": api_exposicao.listar(u, c), "cobertura": api_entregas.cobertura(u, c),
+        "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "exposicao": api_exposicao.listar(u, c), "financiamento": financiamento.quadro(c, ids), "cobertura": api_entregas.cobertura(u, c),
         "gerencias": api_planejamento._por_gerencia(c), "situacao": api_planejamento.resumir(c, ids),
         "premissas": [dict(r) for r in c.execute("SELECT chave, valor, descricao FROM premissas ORDER BY chave")],
         "catalogo": estrategia.arvore(c), "detalhe": {}, "entregas": {}, "vinculos": {},
@@ -162,6 +163,10 @@ def coletar(c: sqlite3.Connection, u: dict) -> dict:
         d["entregas"][o] = api_entregas._entregas(c, o)
         d["vinculos"][o] = sorted(r[0] for r in c.execute("SELECT estrategia_id FROM projeto_estrategia WHERE orcamento=?", (o,)))
     return d
+
+
+def _plural(n: int, um: str, varios: str) -> str:
+    return f"{n} {um if n == 1 else varios}"
 
 
 # ---------------------------------------------------------------- parte 1: visão geral
@@ -267,8 +272,44 @@ def _parte1(doc: Doc, d: dict) -> None:
     if t["sem_receita"]:
         doc.p(f"{t['sem_receita']} dos {len(rec['por_projeto'])} projetos não têm receita associada; as suas despesas são cobertas pelas receitas dos demais.")
 
-    # 1.4 headcount
-    doc.titulo(1, "1.4 Headcount")
+    # 1.4 estratégia de financiamento
+    doc.titulo(1, "1.4 Estratégia de financiamento")
+    fin = d["financiamento"]
+    gr = {g["fonte"]: g for g in fin["grupos"]}
+    if fin["total"]:
+        pct_ = lambda v: pc(v / fin["total"] * 100) if fin["total"] else "-"
+        txt = (f"As despesas de 2027, de **{mi(fin['total'])}**, têm as seguintes fontes de recurso: **{mi(gr['fomento']['valor'])}** em projetos de fomento ({pct_(gr['fomento']['valor'])})")
+        if gr["intercompany"]["n"]:
+            txt += f", **{mi(gr['intercompany']['valor'])}** em {_plural(gr['intercompany']['n'], 'projeto custeado', 'projetos custeados')} pelas transferências intercompany ({pct_(gr['intercompany']['valor'])})"
+        if gr["receita"]["n"]:
+            txt += f", **{mi(gr['receita']['valor'])}** em projetos custeados por receita própria ({pct_(gr['receita']['valor'])})"
+        if gr["tbd"]["n"]:
+            txt += f", **{mi(gr['tbd']['valor'])}** com fonte a definir, TBD ({pct_(gr['tbd']['valor'])})"
+        if gr[""]["n"]:
+            txt += f" e **{mi(gr['']['valor'])}** em {_plural(gr[''] ['n'], 'projeto', 'projetos')} que ainda não indicaram a fonte ({pct_(gr['']['valor'])})"
+        doc.p(txt + ".")
+        doc.tabela(["Fonte de financiamento", "Projetos", "Despesa 2027", "% do total"],
+                   [[g["nome"], str(g["n"]), n0(g["valor"]), pct_(g["valor"])] for g in fin["grupos"] if g["n"]],
+                   [4400, 1200, 2000, 1400], total=["Total", str(sum(g["n"] for g in fin["grupos"])), n0(fin["total"]), "100,0%"],
+                   legenda="Despesa de 2027 por fonte de financiamento, em R$. Projetos de fomento já têm a fonte definida; os demais indicam a fonte ou TBD.")
+        if gr["intercompany"]["n"]:
+            ic = gr["intercompany"]
+            doc.p(f"Os projetos abaixo serão custeados pela receita gerada pelas transferências intercompany. A receita intercompany prevista nos orçamentos é de **{mi(fin['intercompany_receita'])}**, "
+                  + (f"o que cobre os {mi(ic['valor'])} dos projetos, com sobra de {mi(fin['intercompany_saldo'])}." if fin["intercompany_saldo"] >= 0 else
+                     f"o que cobre parte dos {mi(ic['valor'])} dos projetos; faltam {mi(-fin['intercompany_saldo'])} para a cobertura total."))
+            doc.tabela(["Projeto", "Gerente", "Despesa 2027"],
+                       [[f"{x['orcamento']} | {corta(x['projeto'], 52)}", corta(x["gerente"], 24), n0(x["valor"])] for x in ic["projetos"]],
+                       [5000, 2600, 1400], total=["Total", "", n0(ic["valor"])], legenda="Projetos custeados por transferência intercompany, em R$.")
+        for k, tit in (("tbd", "Projetos com fonte a definir (TBD)"), ("", "Projetos que ainda não indicaram a fonte")):
+            if gr[k]["n"]:
+                doc.tabela(["Projeto", "Gerente", "Despesa 2027"],
+                           [[f"{x['orcamento']} | {corta(x['projeto'], 52)}", corta(x["gerente"], 24), n0(x["valor"])] for x in gr[k]["projetos"][:20]],
+                           [5000, 2600, 1400], legenda=tit + ", em R$." + (" Os 20 maiores." if gr[k]["n"] > 20 else ""))
+    else:
+        doc.p("Nenhum projeto com despesa em 2027 até agora.")
+
+    # 1.5 headcount
+    doc.titulo(1, "1.5 Headcount")
     ht = hc["totais"]
     if hc["itens"]:
         doc.p(f"Foram planejadas **{ht['posicoes']} novas posições** em {len(hc['por_projeto'])} projetos. O custo previsto em 2027, considerando o mês de entrada de cada posição e os equipamentos, "
@@ -286,8 +327,8 @@ def _parte1(doc: Doc, d: dict) -> None:
     else:
         doc.p("Não há posições novas de headcount lançadas no planejamento de 2027.")
 
-    # 1.5 viagens
-    doc.titulo(1, "1.5 Viagens")
+    # 1.6 viagens
+    doc.titulo(1, "1.6 Viagens")
     vt = vi["totais"]
     if vi["viagens"]:
         nac = [v for v in vi["viagens"] if v["tipo"] == "nac"]
@@ -308,8 +349,8 @@ def _parte1(doc: Doc, d: dict) -> None:
     else:
         doc.p("Não há viagens planejadas para 2027.")
 
-    # 1.6 eventos
-    doc.titulo(1, "1.6 Eventos")
+    # 1.7 eventos
+    doc.titulo(1, "1.7 Eventos")
     et = ev["totais"]
     if ev["itens"]:
         doc.p(f"Estão previstos **{et['eventos']} eventos**, com {et['pessoas']} participações da equipe. O custo total é de **{mi(et['total'])}**, sendo {mi(et['inscricao'])} de inscrições "
@@ -323,8 +364,8 @@ def _parte1(doc: Doc, d: dict) -> None:
     else:
         doc.p("Não há eventos planejados para 2027.")
 
-    # 1.7 conexão estratégica
-    doc.titulo(1, "1.7 Conexão com o Plano Operacional e o Contrato de Gestão")
+    # 1.8 conexão estratégica
+    doc.titulo(1, "1.8 Conexão com o Plano Operacional e o Contrato de Gestão")
     itens = cob["itens"]
     if itens:
         ligados = sum(1 for p in despesa_proj if p["orcamento"] not in {x["orcamento"] for x in cob["sem_vinculo"]})
@@ -345,8 +386,8 @@ def _parte1(doc: Doc, d: dict) -> None:
     else:
         doc.p("O catálogo estratégico (Plano Operacional e Contrato de Gestão) ainda não foi carregado, por isso o relatório não mostra a conexão dos projetos com ele.")
 
-    # 1.8 acompanhamento
-    doc.titulo(1, "1.8 Acompanhamento do planejamento")
+    # 1.9 acompanhamento
+    doc.titulo(1, "1.9 Acompanhamento do planejamento")
     ger = [g for g in d["gerencias"] if g["nivel"] == "gerencia"]
     if ger:
         doc.p("Situação do preenchimento por gerência: cada gerente conclui o seu planejamento depois de revisar projetos, receitas, viagens, eventos, headcount e entregas.")
@@ -358,8 +399,8 @@ def _parte1(doc: Doc, d: dict) -> None:
     if pend:
         doc.p(f"Há **{sum(s_['pendencias'] for _, s_ in pend)} pendência(s)** em {len(pend)} projeto(s). Os detalhes de cada projeto estão no capítulo correspondente da Parte 2.")
 
-    # 1.9 premissas
-    doc.titulo(1, "1.9 Premissas e critérios")
+    # 1.10 premissas
+    doc.titulo(1, "1.10 Premissas e critérios")
     doc.p("O plano de 2027 parte do orçamento aprovado de 2026. Cada linha pode ser mantida, ajustada ou excluída pelo gestor, e novas linhas podem ser criadas. "
           "Viagens, eventos e headcount são calculados nas suas próprias páginas e alimentam o orçamento. As premissas usadas nos cálculos são:")
     doc.tabela(["Premissa", "Valor", "Descrição"], [[p["chave"], str(p["valor"]).replace(".", ","), p["descricao"]] for p in d["premissas"]],

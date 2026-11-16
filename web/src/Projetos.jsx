@@ -30,7 +30,7 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
   );
 }
 
-export default function Projetos({ abrir, semEntregas, limparFiltro }) {
+export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro }) {
   const [todos, setPs] = useState(null);
   const [fFin, setFFin] = useState("");
   const [erro, setErro] = useState("");
@@ -40,7 +40,7 @@ export default function Projetos({ abrir, semEntregas, limparFiltro }) {
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
-  const ps = todos.filter((p) => (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)));
+  const ps = todos.filter((p) => (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
   const soma = (k) => ps.filter((p) => p.tipo !== "receita").reduce((a, p) => a + p[k], 0);
   const somaT = (k) => ps.reduce((a, p) => a + p[k], 0);
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
@@ -62,7 +62,7 @@ export default function Projetos({ abrir, semEntregas, limparFiltro }) {
   const linhaProjeto = (p) => (
           <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido ? "concluido " : "") + (p.extinto ? "extinta" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
             <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
-            <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} <span className={"tag " + classeFinalidade(p.finalidade)} title="Finalidade do orçamento">{nomeFinalidade(p.finalidade)}</span> {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.extinto && <span className="tag aviso" title="Não existirá no PA 2027">extinta</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
+            <td>{p.descricao} {p.tipo === "receita" && <span className="tag ok">receita</span>} <span className={"tag " + classeFinalidade(p.finalidade)} title="Finalidade do orçamento">{nomeFinalidade(p.finalidade)}</span> {p.contingenciado && <span className="tag aviso">contingenciado</span>} {p.financiamento === "intercompany" && <span className="tag ok" title="Custeado pelas transferências intercompany">intercompany</span>} {p.financiamento === "tbd" && <span className="tag" title="Fonte de financiamento a definir">TBD</span>} {p.pendencias.includes("Fonte de financiamento") && <span className="tag aviso" title="Indique a fonte de financiamento">sem fonte</span>} {p.extinto && <span className="tag aviso" title="Não existirá no PA 2027">extinta</span>} {p.replicado_para && <span className="tag ok" title={`${p.replicado_nome} | origem ${p.replicado_origem}`}>migrado para {p.replicado_para}</span>} {p.replicado_de && <span className="tag ok" title={`Replicado de ${p.replicado_de}`}>replicado de {p.replicado_de}</span>} {p.pendencias.length > 0 && <span className="tag aviso">sem Nº do Projeto</span>}</td>
             <td>{p.gerente}</td>
             <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.empenhado_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className={"n " + (p.total_2026 - p.realizado_2026 - p.empenhado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026 - p.empenhado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
             {p.tipo === "receita"
@@ -81,6 +81,9 @@ export default function Projetos({ abrir, semEntregas, limparFiltro }) {
       {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}
       {semEntregas && <div className="nota" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
         <span>{ps.length ? <>Mostrando só os <strong>{ps.length}</strong> projeto(s) que ainda não têm entregas informadas. Abra cada um e use a aba "Entregas 2027". Projetos de gestão da área e de headcount não precisam de entregas.</> : "Todos os projetos já têm entregas informadas."}</span>
+        <button type="button" onClick={limparFiltro}>Ver todos os projetos</button></div>}
+      {semFonte && <div className="nota" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+        <span>{ps.length ? <>Mostrando só os <strong>{ps.length}</strong> projeto(s) sem fonte de financiamento indicada. Abra cada um e escolha a fonte (intercompany, receita própria) ou A definir (TBD). Projetos de fomento já têm fonte.</> : "Todos os projetos já indicaram a fonte de financiamento."}</span>
         <button type="button" onClick={limparFiltro}>Ver todos os projetos</button></div>}
       <div className="filtros" style={{ margin: "8px 0" }}>
         <select value={fFin} onChange={(e) => setFFin(e.target.value)} aria-label="Filtrar por finalidade"><option value="">Todas as finalidades</option>{FINALIDADES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>

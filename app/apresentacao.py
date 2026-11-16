@@ -400,6 +400,37 @@ def _slide_estrategia(prs, d, n):
     _txt(s, L, BASE - 0.22, R_ - L, 0.25, "Um projeto pode atender a mais de um item; por isso os valores não se somam.", 9.5, False, MUDO, italico=True)
 
 
+def _slide_financiamento(prs, d, n):
+    fin = d["financiamento"]
+    gr = {g["fonte"]: g for g in fin["grupos"]}
+    s = _novo(prs, "Estratégia de financiamento", n)
+    tot = fin["total"] or 1.0
+    p_ = lambda v: f"{v / tot * 100:.0f}%".replace(".", ",")
+    outras = gr["tbd"]["valor"] + gr[""]["valor"]
+    n_outras = gr["tbd"]["n"] + gr[""]["n"]
+    w = 2.2
+    _kpi(s, L, TOPO, w, 1.3, mi(gr["fomento"]["valor"]), "Fomento", f"{_pl(gr['fomento']['n'], 'projeto', 'projetos')} | {p_(gr['fomento']['valor'])}")
+    _kpi(s, L + 2.4, TOPO, w, 1.3, mi(gr["intercompany"]["valor"]), "Intercompany", f"{_pl(gr['intercompany']['n'], 'projeto', 'projetos')} | {p_(gr['intercompany']['valor'])}", laranja=True)
+    _kpi(s, L + 4.8, TOPO, w, 1.3, mi(gr["receita"]["valor"]), "Receita própria", f"{_pl(gr['receita']['n'], 'projeto', 'projetos')} | {p_(gr['receita']['valor'])}")
+    _kpi(s, L + 7.2, TOPO, w, 1.3, mi(outras), "A definir (TBD)", f"{_pl(n_outras, 'projeto', 'projetos')} | {p_(outras)}", laranja=True)
+    ic = gr["intercompany"]
+    y = TOPO + 1.5
+    if ic["n"]:
+        linhas = [[corta(f"{x['orcamento']} | {x['projeto']}", 64), corta(x["gerente"], 26), _mil(x["valor"])] for x in ic["projetos"][:6]]
+        _tabela(s, L, y, [5.0, 2.8, 1.6], ["Projetos custeados pela receita das transferências intercompany", "Gerente", "R$ mil"], linhas,
+                ["Total", "", _mil(ic["valor"])] if ic["n"] > 1 else None, tam=10, alt=0.27, alin=["l", "l", "r"])
+        cob = (f"A receita intercompany prevista é de {mi(fin['intercompany_receita'])}, cobrindo os {mi(ic['valor'])} destes projetos, com sobra de {mi(fin['intercompany_saldo'])}."
+               if fin["intercompany_saldo"] >= 0 else
+               f"A receita intercompany prevista é de {mi(fin['intercompany_receita'])}, e faltam {mi(-fin['intercompany_saldo'])} para cobrir os {mi(ic['valor'])} destes projetos.")
+        _txt(s, L, BASE - 0.55, R_ - L, 0.5, cob, 11, True, NAVY)
+    else:
+        _txt(s, L, y + 0.1, R_ - L, 0.5, "Nenhum projeto indicou, até agora, ser custeado por transferências intercompany.", 12, False, MUDO)
+    nota = f"Despesa de 2027: {mi(fin['total'])}. Fomento já define a fonte do projeto; os demais indicam intercompany, receita própria ou TBD."
+    if gr[""]["n"]:
+        nota += f" {_pl(gr[''] ['n'], 'projeto ainda não indicou', 'projetos ainda não indicaram')} a fonte e entram em TBD neste quadro."
+    _txt(s, L, BASE - 0.28, R_ - L, 0.28, nota, 9, False, MUDO, italico=True)
+
+
 def _slide_headcount(prs, d, n):
     hc = d["headcount"]
     t, itens = hc["totais"], hc["itens"]
@@ -507,7 +538,7 @@ def gerar(c: sqlite3.Connection, u: dict) -> bytes:
     _capa(prs, agora)
     _encerramento(prs)
     n = 2
-    for f in (_slide_resumo, _slide_origem, _slide_finalidade, _slide_matriz, _slide_grupos, _slide_gerencias, _slide_projetos, _slide_mudam, _slide_receitas, _slide_headcount, _slide_cambio, _slide_estrategia, _slide_atencao):
+    for f in (_slide_resumo, _slide_origem, _slide_finalidade, _slide_matriz, _slide_grupos, _slide_gerencias, _slide_projetos, _slide_mudam, _slide_receitas, _slide_financiamento, _slide_headcount, _slide_cambio, _slide_estrategia, _slide_atencao):
         f(prs, d, n)
         n += 1
     lista = prs.slides._sldIdLst

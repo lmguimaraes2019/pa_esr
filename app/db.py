@@ -404,6 +404,10 @@ def init_db() -> None:
             c.execute("ALTER TABLE viagens ADD COLUMN evento_id INTEGER")
         if "site" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: site do evento
             c.execute("ALTER TABLE eventos ADD COLUMN site TEXT NOT NULL DEFAULT ''")
+        pf = {r[1] for r in c.execute("PRAGMA table_info(projetos)")}      # migração: fonte de financiamento do projeto
+        for col in ("financiamento", "financiamento_obs"):
+            if col not in pf:
+                c.execute(f"ALTER TABLE projetos ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         rc = {r[1] for r in c.execute("PRAGMA table_info(receitas)")}      # migração: transferência intercompany
         for col, ddl in (("tipo", "TEXT NOT NULL DEFAULT 'receita'"), ("ano", "INTEGER NOT NULL DEFAULT 2027"), ("cliente", "TEXT NOT NULL DEFAULT ''"),
                          ("origem_cliente", "TEXT NOT NULL DEFAULT ''"), ("gestor_cliente", "TEXT NOT NULL DEFAULT ''")):

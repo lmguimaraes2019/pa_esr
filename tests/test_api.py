@@ -53,7 +53,7 @@ def test_admin_ve_tudo_e_resumo_bate(client):
     r = client.get("/api/resumo").json()
     assert r["total_plano"] == pytest.approx(22_016_487.22, abs=1.0)
     assert r["total_base"] == pytest.approx(r["total_plano"], abs=0.01)
-    assert {p["orcamento"] for p in ps if p["pendencias"]} == {"7044"}
+    assert {p["orcamento"] for p in ps if "Nº do Projeto" in p["pendencias"]} == {"7044"}
 
 
 def test_gestor_so_ve_seus_projetos_e_edita_com_auditoria(client):
@@ -314,9 +314,10 @@ def test_planejamento_resumo_e_conclusao(client):
         if not v["orcamento"] or not v["edt"] or not v["tem_tarifa"]:
             client.delete(f"/api/viagens/{v['id']}")
     pend = client.get("/api/planejamento").json()
-    assert pend["pendencias"] == pend["etapas"]["entregas"]["pendentes"] > 0      # só faltam as entregas dos projetos
+    assert pend["pendencias"] == pend["etapas"]["entregas"]["pendentes"] + pend["etapas"]["financiamento"]["pendentes"] > 0      # só faltam as entregas e a fonte de financiamento
     for p in client.get("/api/projetos").json():
         client.post(f"/api/projetos/{p['orcamento']}/entregas/lote", json={"linhas": ["Entrega prevista do projeto"]})
+        client.patch(f"/api/projetos/{p['orcamento']}", json={"financiamento": "tbd"})
     assert client.get("/api/planejamento").json()["pendencias"] == 0
     assert client.post("/api/planejamento/concluir", json={"concluido": True, "obs": "ok"}).status_code == 200
     assert client.get("/api/planejamento").json()["concluido"]["obs"] == "ok"
@@ -1029,7 +1030,7 @@ def test_apresentacao_executiva(client):
     r = client.get("/api/export/apresentacao")
     assert r.status_code == 200 and "presentationml" in r.headers["content-type"]
     prs = Presentation(io.BytesIO(r.content))
-    assert len(prs.slides) == 15
+    assert len(prs.slides) == 16
     textos = " ".join(sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame)
     assert "ORÇAMENTO ESR 2027" in textos and "RESUMO EXECUTIVO" in textos and "OBRIGADO" in textos
     assert sum(1 for s in prs.slides for sh in s.shapes if sh.has_chart) >= 4
@@ -1080,3 +1081,30 @@ def test_headcount_vinculado_a_gerencia(client):
     assert "gerência" in sem["faltando"]
     por = {x["gerencia"]: x for x in client.get("/api/headcount").json()["por_gerencia"]}
     assert por["Diretoria Adjunta"]["posicoes"] == 1 and "Sem gerência" in por
+
+
+def test_fonte_de_financiamento_intercompany_e_tbd(client):
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    fomento = next(p for p in ps if p["origem"] in ("Fomento", "FNDCT") and p["tipo"] == "despesa" and p["total_2027"] > 0)
+    assert fomento["financiamento"] == "fomento" and "Fonte de financiamento" not in fomento["pendencias"]      # fomento já tem fonte
+    outro = max((p for p in ps if p["tipo"] == "despesa" and p["origem"] not in ("Fomento", "FNDCT") and p["total_2027"] > 0), key=lambda p: p["total_2027"])
+    assert outro["financiamento"] == "" and "Fonte de financiamento" in outro["pendencias"]
+    q0 = client.get("/api/financiamento").json()
+    assert q0["pendentes"] >= 1 and next(g for g in q0["grupos"] if g["fonte"] == "intercompany")["n"] == 0
+    assert client.patch(f"/api/projetos/{outro['orcamento']}", json={"financiamento": "xpto"}).status_code == 422
+    assert client.patch(f"/api/projetos/{outro['orcamento']}", json={"financiamento": "intercompany", "financiamento_obs": "Repasse das áreas"}).status_code == 200
+    d = client.get(f"/api/projetos/{outro['orcamento']}").json()["projeto"]
+    assert d["financiamento"] == "intercompany" and d["financiamento_obs"] == "Repasse das áreas"
+    q = client.get("/api/financiamento").json()
+    inter = next(g for g in q["grupos"] if g["fonte"] == "intercompany")
+    assert inter["n"] == 1 and inter["valor"] == pytest.approx(outro["total_2027"], abs=0.01) and inter["projetos"][0]["orcamento"] == outro["orcamento"]
+    assert q["pendentes"] == q0["pendentes"] - 1 and q["intercompany_custeado"] == inter["valor"]
+    # a receita intercompany lançada aparece ao lado do que ela custeia
+    r = client.get("/api/receitas").json()
+    assert client.post("/api/receitas", json={"orcamento": r["projetos"][0]["orcamento"], "tipo": "intercompany", "cliente": "Projeto Alfa", "origem_cliente": r["origens"][0], "gestor_cliente": r["gerentes"][0], "valor": 900000}).status_code == 201
+    q2 = client.get("/api/financiamento").json()
+    assert q2["intercompany_receita"] == 900000 and q2["intercompany_saldo"] == pytest.approx(900000 - inter["valor"], abs=0.01)
+    # TBD resolve a pendência sem indicar fonte
+    assert client.patch(f"/api/projetos/{fomento['orcamento']}", json={"financiamento": "tbd"}).status_code == 200
+    assert next(g for g in client.get("/api/financiamento").json()["grupos"] if g["fonte"] == "tbd")["n"] == 1
