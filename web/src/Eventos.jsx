@@ -116,7 +116,7 @@ export default function Eventos({ irProjeto }) {
       <div className="barra-ferramentas">
         <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
           <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select>
-          <select value={tipoF} onChange={(e) => setTipoF(e.target.value)} aria-label="Tipo de evento">
+          <select style={{ width: 260 }} value={tipoF} onChange={(e) => setTipoF(e.target.value)} aria-label="Tipo de evento">
             <option value="todos">Todos os eventos ({dados.itens.length})</option>
             <option value="nac">Eventos nacionais ({dados.itens.filter((e) => e.tipo === "nac").length})</option>
             <option value="int">Eventos internacionais ({dados.itens.filter((e) => e.tipo === "int").length})</option>
