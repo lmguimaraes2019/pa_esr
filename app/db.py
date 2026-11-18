@@ -420,6 +420,8 @@ def init_db() -> None:
         c.execute("UPDATE projetos SET natureza='' WHERE natureza<>''")
         if "evento_id" not in {r[1] for r in c.execute("PRAGMA table_info(viagens)")}:      # migração: viagens vindas de eventos
             c.execute("ALTER TABLE viagens ADD COLUMN evento_id INTEGER")
+        if "rnp" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: evento promovido pela RNP
+            c.execute("ALTER TABLE eventos ADD COLUMN rnp INTEGER NOT NULL DEFAULT 0")
         if "site" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: site do evento
             c.execute("ALTER TABLE eventos ADD COLUMN site TEXT NOT NULL DEFAULT ''")
         pf = {r[1] for r in c.execute("PRAGMA table_info(projetos)")}      # migração: fonte de financiamento do projeto

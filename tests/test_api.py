@@ -1178,3 +1178,13 @@ def test_fontes_de_financiamento_editaveis(client):
     assert client.put("/api/financiamento/fontes/tbd", json={"nome": "A definir"}).status_code == 200
     client.patch(f"/api/projetos/{alvo['orcamento']}", json={"financiamento": "tbd"})
     assert client.delete(f"/api/financiamento/fontes/{cod}").status_code == 200
+
+
+def test_evento_rnp_marcado_e_devolvido(client):
+    entrar(client)
+    h = client.get("/api/eventos").json()
+    orc = h["projetos"][0]["orcamento"]
+    r = client.post("/api/eventos", json={"orcamento": orc, "nome": "Workshop RNP", "tipo": "nac", "rnp": True})
+    assert r.status_code == 201 and r.json()["rnp"] is True
+    eid = r.json()["id"]
+    assert client.put(f"/api/eventos/{eid}", json={"orcamento": orc, "nome": "Workshop RNP", "tipo": "nac", "rnp": False}).json()["rnp"] is False

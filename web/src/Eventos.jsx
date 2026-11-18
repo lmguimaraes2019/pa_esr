@@ -31,7 +31,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
     try {
       await onSalvar({ orcamento: f.orcamento, nome: f.nome, local: f.local, tipo: f.tipo, mes: Number(f.mes), n_pessoas: n, dias: Number(f.dias),
         pernoites: f.pernoites === "" ? null : Number(f.pernoites), inscricao: f.inscricao === "" ? null : insc, moeda: f.moeda,
-        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "", site: f.site || "" });
+        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "", site: f.site || "", rnp: !!f.rnp });
       onFechar();
     } catch (x) { setErro(x.message); }
   };
@@ -43,6 +43,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
         <label><span>Nome do evento <Obrig /></span><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
+        <label className="check"><input type="checkbox" checked={!!f.rnp} onChange={(e) => set("rnp", e.target.checked)} /> Evento da RNP</label>
         <label>Site do evento<input inputMode="url" value={f.site || ""} onChange={(e) => set("site", e.target.value)} placeholder="https://www.evento.com.br" /></label>
         <label><span>Local (cidade e país) <Obrig /></span><input value={f.local} onChange={(e) => set("local", e.target.value)} placeholder="ex.: Recife, Brasil" /></label>
         <label><span>Abrangência <Obrig /></span><select value={f.tipo} onChange={(e) => setF((x) => ({ ...x, tipo: e.target.value, origem: "", destino: "" }))}>
@@ -81,13 +82,15 @@ export default function Eventos({ irProjeto }) {
   const [form, setForm] = useState(null);
   const [proj, setProj] = useState("todos");
   const [soPend, setSoPend] = useState(false);
+  const [tipoF, setTipoF] = useState("todos");
   const [erro, setErro] = useState("");
   const carregar = useCallback(() => api("/eventos").then(setDados).catch((e) => setErro(e.message)), []);
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "", site: "" };
-  const lista = dados.itens.filter((e) => (proj === "todos" || e.orcamento === proj) && (!soPend || !e.completo));
+  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "", site: "", rnp: false };
+  const lista = dados.itens.filter((e) => (proj === "todos" || e.orcamento === proj) && (!soPend || !e.completo)
+    && (tipoF === "todos" || (tipoF === "rnp" ? e.rnp : e.tipo === tipoF)));
   const abrir = (e) => { setForm(e); setTimeout(() => document.getElementById("form-evento")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/eventos/${form.id}`, { method: "PUT", body: b }); else await api("/eventos", { method: "POST", body: b }); carregar(); };
   const excluir = async (e) => {
@@ -112,7 +115,12 @@ export default function Eventos({ irProjeto }) {
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="barra-ferramentas">
         <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
-          <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></div>
+          <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select>
+          <select value={tipoF} onChange={(e) => setTipoF(e.target.value)} aria-label="Tipo de evento">
+            <option value="todos">Todos os eventos ({dados.itens.length})</option>
+            <option value="nac">Eventos nacionais ({dados.itens.filter((e) => e.tipo === "nac").length})</option>
+            <option value="int">Eventos internacionais ({dados.itens.filter((e) => e.tipo === "int").length})</option>
+            <option value="rnp">Eventos RNP ({dados.itens.filter((e) => e.rnp).length})</option></select></div>
         <button className="destaque" onClick={() => abrir(novo)}>+ Novo evento</button>
       </div>
       <p className="legenda-icones"><span><Lapis /> editar o evento</span><span className="perigo"><Lixeira /> excluir</span></p>
@@ -124,7 +132,7 @@ export default function Eventos({ irProjeto }) {
             <tr key={e.id}>
               <td style={{ whiteSpace: "nowrap" }}><div className="barra-icones"><BotaoIcone icone={<Lapis />} dica="Editar o evento" onClick={() => abrir(e)} /><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir o evento" onClick={() => excluir(e)} /></div></td>
               <td>{MESES_N[e.mes - 1].slice(0, 3)}</td>
-              <td><strong>{e.nome || <span className="up">sem nome</span>}</strong>{e.site && <> <a href={e.site} target="_blank" rel="noopener noreferrer" title={e.site}>site</a></>} <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span><br /><span className="mudo">{e.local || "local não informado"}</span>
+              <td><strong>{e.nome || <span className="up">sem nome</span>}</strong>{e.site && <> <a href={e.site} target="_blank" rel="noopener noreferrer" title={e.site}>site</a></>} <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span>{e.rnp && <> <span className="tag ok">RNP</span></>}<br /><span className="mudo">{e.local || "local não informado"}</span>
                 {e.justificativa && <><br /><span className="mudo" title={e.justificativa}>{e.justificativa.length > 90 ? e.justificativa.slice(0, 90) + "…" : e.justificativa}</span></>}</td>
               <td><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button><br /><span className="mudo">{e.projeto}</span></td>
               <td className="n">{e.n_pessoas}<br /><span className="mudo" style={{ fontSize: ".75rem" }}>{e.pessoas.join(", ")}</span></td>
