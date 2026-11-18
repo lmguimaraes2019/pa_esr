@@ -9,6 +9,21 @@ FONTES = {
     "tbd": "A definir (TBD)",
     "": "Fonte não informada",
 }
+ORIGENS_DIRETRIZ = {
+    "fomento": "CG/Fomento Ordinários (001)", "fndct": "CG/Fomento Ordinários (001)",
+    "ra": "CG/Fomento Extraordinários (003)",
+    "associacao": "AsRNP (020)", "conv": "AsRNP CONV (010)",
+}
+
+
+def origem_diretriz(origem: str, conv: bool = False) -> str:
+    """Origem segundo as Diretrizes 2027. O template do PMO segue com as origens antigas; Associação é AsRNP, salvo marcação CONV."""
+    o = (origem or "").strip().lower().replace("ç", "c").replace("ã", "a")
+    if o.startswith("associa"):
+        return ORIGENS_DIRETRIZ["conv" if conv else "associacao"]
+    return ORIGENS_DIRETRIZ.get(o, origem or "")
+
+
 RESERVA = 0.05      # fundo de reserva (Diretrizes 2027)
 ADMIN = 0.11        # operacional administrativo (Diretrizes 2027)
 

@@ -1121,3 +1121,26 @@ def test_memoria_de_calculo_receita_liquida_e_teto(client):
     client.patch(f"/api/projetos/{p['orcamento']}", json={"memoria": "qtd x preço"})
     q = next(x for x in client.get("/api/projetos").json() if x["orcamento"] == p["orcamento"])
     assert "Memória de cálculo" not in q["pendencias"] and q["memoria"] == "qtd x preço"
+
+
+def test_tarifas_2027_e_origem_das_diretrizes(client):
+    from app import fontes
+    assert fontes.origem_diretriz("Associacao") == "AsRNP (020)"
+    assert fontes.origem_diretriz("Associacao", True) == "AsRNP CONV (010)"
+    assert fontes.origem_diretriz("RA").startswith("CG/Fomento Extraordin")
+    assert fontes.origem_diretriz("FNDCT").endswith("(001)")
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    assert all(p["origem_diretriz"] for p in ps)
+    a = next((p for p in ps if p["origem"].lower().startswith("associa")), None)
+    if a:
+        assert client.patch(f"/api/projetos/{a['orcamento']}", json={"asrnp_conv": True}).status_code == 200
+        b = next(p for p in client.get("/api/projetos").json() if p["orcamento"] == a["orcamento"])
+        assert b["origem_diretriz"] == "AsRNP CONV (010)"
+    from app import db
+    with db.tx() as c:
+        c.execute("DELETE FROM meta WHERE chave='tarifas_2027'")
+    db.init_db()      # reaplica a migração das tarifas 2027
+    t = {(x["tipo"], x["origem"], x["destino"]): x for x in client.get("/api/viagens/tarifas").json()}
+    assert t[("nac", "Centro-Oeste", "Centro-Oeste")]["passagem"] == 2176
+    assert t[("nac", "Norte", "Sul")]["aux_transporte"] == 0

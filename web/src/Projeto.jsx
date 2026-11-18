@@ -337,6 +337,12 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       {p.tipo === "despesa" && !p.extinto && <FonteFinanciamento key={p.financiamento_informado + p.financiamento_obs} p={p} onSalvo={carregar} />}
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
       {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}
+      <p className="nota">Origem nas Diretrizes 2027: <strong>{p.origem_diretriz}</strong>
+        {/associa/i.test(p.origem || "") && (
+          <label style={{ marginLeft: 12 }}><input type="checkbox" checked={!!p.asrnp_conv} onChange={async (e) => {
+            try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { asrnp_conv: e.target.checked } }); carregar(); } catch (x) { alert(x.message); }
+          }} /> Emite NF-e/fatura (AsRNP CONV)</label>)}
+      </p>
       <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
       <DescricaoProjeto orcamento={orcamento} atual={p.memoria} onSalvo={carregar} campo="memoria" rotulo="Memória de cálculo (obrigatória)"
         dica="Explique como os valores foram calculados: premissas, quantidades, preços unitários e fontes." />

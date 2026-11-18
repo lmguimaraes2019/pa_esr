@@ -145,6 +145,7 @@ class ProjetoPatch(BaseModel):
     financiamento_obs: str | None = Field(default=None, max_length=300)
     detalhe: str | None = Field(default=None, max_length=3000)
     memoria: str | None = Field(default=None, max_length=3000)
+    asrnp_conv: bool | None = None
 
     @field_validator("n_projeto")
     @classmethod
@@ -381,7 +382,8 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
                               and not financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]) else [])
                            + (["Memória de cálculo"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
                               and not (r["memoria"] or "").strip() else []),
-             "memoria": r["memoria"]} for r in rows]
+             "memoria": r["memoria"], "asrnp_conv": bool(r["asrnp_conv"]),
+             "origem_diretriz": financiamento.origem_diretriz(r["origem_2027"] or r["origem"], bool(r["asrnp_conv"]))} for r in rows]
 
 
 @router.get("/listas")
@@ -440,6 +442,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             if u["perfil"] != "admin":
                 raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
             campos["contingenciado"] = int(campos["contingenciado"])
+        if "asrnp_conv" in campos:
+            campos["asrnp_conv"] = int(campos["asrnp_conv"])
         if "extinto" in campos:
             campos["extinto"] = int(campos["extinto"])
             campos["extinto_em"] = datetime.now().strftime("%Y-%m-%d %H:%M") if campos["extinto"] else ""
@@ -521,7 +525,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
                    | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
-                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "asrnp_conv": bool(p["asrnp_conv"]), "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},

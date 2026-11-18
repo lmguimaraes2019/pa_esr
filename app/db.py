@@ -379,6 +379,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN extinto_por TEXT NOT NULL DEFAULT ''")
         if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
+        if "asrnp_conv" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: Associação CONV (NF-e/fatura) x AsRNP (contrato)
+            c.execute("ALTER TABLE projetos ADD COLUMN asrnp_conv INTEGER NOT NULL DEFAULT 0")
         if "memoria" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: memória de cálculo obrigatória (Diretrizes 2027)
             c.execute("ALTER TABLE projetos ADD COLUMN memoria TEXT NOT NULL DEFAULT ''")
         if "detalhe" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: descrição do projeto escrita pelo gestor
@@ -442,6 +444,15 @@ def init_db() -> None:
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))
+        if c.execute("SELECT 1 FROM viagem_tarifas LIMIT 1").fetchone() and not c.execute("SELECT 1 FROM meta WHERE chave='tarifas_2027'").fetchone():      # uma vez: tarifas de viagens 2027 (planilha nova do PMO)
+            import json
+            for t in json.loads((config.ROOT / "app" / "assets" / "tarifas_2027.json").read_text(encoding="utf-8")):
+                c.execute("UPDATE viagem_tarifas SET passagem=?, hospedagem=?, bagagem=?, aux_transporte=?, ajuda_custo=?, seguro=? WHERE tipo=? AND origem=? AND destino=?",
+                          (t["passagem"], t["hospedagem"], t["bagagem"], t["aux_transporte"], t["ajuda_custo"], t["seguro"], t["tipo"], t["origem"], t["destino"]))
+            if c.execute("SELECT 1 FROM viagens LIMIT 1").fetchone():
+                from . import sync
+                sync.sincronizar_todos(c, "sistema (tarifas 2027)")
+            c.execute("INSERT INTO meta (chave, valor) VALUES ('tarifas_2027', '1')")
         if not c.execute("SELECT 1 FROM meta WHERE chave='viagens_de_eventos'").fetchone():      # uma vez: eventos já cadastrados ganham a viagem na aba Viagens
             if c.execute("SELECT 1 FROM eventos LIMIT 1").fetchone():
                 from . import sync
