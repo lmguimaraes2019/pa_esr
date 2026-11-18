@@ -43,7 +43,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
         <label><span>Nome do evento <Obrig /></span><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
-        <label className="check"><input type="checkbox" checked={!!f.rnp} onChange={(e) => set("rnp", e.target.checked)} /> Evento da RNP</label>
+        <label className="ent-check"><input type="checkbox" checked={!!f.rnp} onChange={(e) => set("rnp", e.target.checked)} /> Evento da RNP</label>
         <label>Site do evento<input inputMode="url" value={f.site || ""} onChange={(e) => set("site", e.target.value)} placeholder="https://www.evento.com.br" /></label>
         <label><span>Local (cidade e país) <Obrig /></span><input value={f.local} onChange={(e) => set("local", e.target.value)} placeholder="ex.: Recife, Brasil" /></label>
         <label><span>Abrangência <Obrig /></span><select value={f.tipo} onChange={(e) => setF((x) => ({ ...x, tipo: e.target.value, origem: "", destino: "" }))}>
