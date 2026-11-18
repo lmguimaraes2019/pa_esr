@@ -284,6 +284,7 @@ PREMISSAS_PADRAO = [
     ("viagens_bagagem_vezes", 1.0, "Quantas vezes a franquia de bagagem entra no custo da viagem (a planilha de 2026 contou 2 no consolidado)"),
     ("dolar", 5.5, "Câmbio USD/BRL usado nas calculadoras (a planilha de parcerias usa 5,50)"),
     ("euro", 6.4, "Câmbio EUR/BRL usado para converter a exposição cambial em euro para reais"),
+    ("teto_pro_rnp", 317520000.0, "Teto de despesa do PRO-RNP 2027 em reais (Diretrizes: 5% acima de 2026); 0 desativa o comparativo"),
     ("libra", 7.3, "Câmbio GBP/BRL usado para converter a exposição cambial em libra para reais"),
 ]
 
@@ -378,6 +379,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN extinto_por TEXT NOT NULL DEFAULT ''")
         if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
+        if "memoria" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: memória de cálculo obrigatória (Diretrizes 2027)
+            c.execute("ALTER TABLE projetos ADD COLUMN memoria TEXT NOT NULL DEFAULT ''")
         if "detalhe" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: descrição do projeto escrita pelo gestor
             c.execute("ALTER TABLE projetos ADD COLUMN detalhe TEXT NOT NULL DEFAULT ''")
         if "gerente_2026" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: gestor de 2027 editável, o de 2026 fica guardado

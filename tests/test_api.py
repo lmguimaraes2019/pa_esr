@@ -1108,3 +1108,16 @@ def test_fonte_de_financiamento_intercompany_e_tbd(client):
     # TBD resolve a pendência sem indicar fonte
     assert client.patch(f"/api/projetos/{fomento['orcamento']}", json={"financiamento": "tbd"}).status_code == 200
     assert next(g for g in client.get("/api/financiamento").json()["grupos"] if g["fonte"] == "tbd")["n"] == 1
+
+
+def test_memoria_de_calculo_receita_liquida_e_teto(client):
+    from app import fontes
+    assert fontes.liquida(1000.0, "Associação")["liquida"] == 840.0
+    assert fontes.liquida(1000.0, "Fomento")["liquida"] == 1000.0
+    entrar(client)
+    assert "teto" in client.get("/api/resumo").json()
+    ps = client.get("/api/projetos").json()
+    p = next(x for x in ps if "Memória de cálculo" in x["pendencias"])
+    client.patch(f"/api/projetos/{p['orcamento']}", json={"memoria": "qtd x preço"})
+    q = next(x for x in client.get("/api/projetos").json() if x["orcamento"] == p["orcamento"])
+    assert "Memória de cálculo" not in q["pendencias"] and q["memoria"] == "qtd x preço"

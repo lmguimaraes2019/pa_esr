@@ -338,6 +338,8 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
       {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}
       <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
+      <DescricaoProjeto orcamento={orcamento} atual={p.memoria} onSalvo={carregar} campo="memoria" rotulo="Memória de cálculo (obrigatória)"
+        dica="Explique como os valores foram calculados: premissas, quantidades, preços unitários e fontes." />
       <Passos ativo={passo} onMudar={setPasso} itens={[["passado", "Passado 2026"], ["plano", "Plano 2027"], ["entregas", "Entregas 2027"], ["resumo", "Resumo e pendências"]]} />
       {p.tipo === "receita" && <div className="nota">Este é um orçamento de <strong>receita</strong>: o total das linhas do plano 2027 entra em Receitas como resultado positivo e não soma nas despesas.</div>}
       {erro && <p className="erro" role="alert">{erro}</p>}
@@ -432,21 +434,21 @@ function NumeroProjeto({ orcamento, atual, contingenciado, novo, onSalvo }) {
   );
 }
 
-function DescricaoProjeto({ orcamento, atual, onSalvo }) {
+function DescricaoProjeto({ orcamento, atual, onSalvo, campo = "detalhe", rotulo = "Descrição do projeto", dica = "Descreva o objetivo do projeto, o que será feito em 2027 e o que justifica os valores planejados." }) {
   const [v, setV] = useState(atual || "");
   const [msg, setMsg] = useState("");
   const [erro, setErro] = useState("");
   useEffect(() => { setV(atual || ""); }, [atual]);
   const salvar = async () => {
     setErro(""); setMsg("");
-    try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { detalhe: v } }); setMsg("Descrição salva."); onSalvo(); } catch (e) { setErro(e.message); }
+    try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { [campo]: v } }); setMsg("Salvo."); onSalvo(); } catch (e) { setErro(e.message); }
   };
   return (
     <section className="cartao descricao-proj">
-      <label>Descrição do projeto
+      <label>{rotulo}
         <textarea rows={4} maxLength={3000} value={v} onChange={(e) => { setV(e.target.value); setMsg(""); }}
-          placeholder="Descreva o objetivo do projeto, o que será feito em 2027 e o que justifica os valores planejados." /></label>
-      <div className="acoes"><button className="primario" disabled={v.trim() === (atual || "").trim()} onClick={salvar}>Salvar descrição</button>
+          placeholder={dica} /></label>
+      <div className="acoes"><button className="primario" disabled={v.trim() === (atual || "").trim()} onClick={salvar}>Salvar</button>
         <small className="mudo">{v.length}/3000</small>{msg && <span className="ok">{msg}</span>}{erro && <span className="erro">{erro}</span>}</div>
     </section>
   );

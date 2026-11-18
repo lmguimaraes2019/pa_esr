@@ -109,6 +109,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
           <p className="mudo">Nasce como cópia do aprovado e recebe os ajustes.</p>
           <div className="kpis">
             <Kpi rotulo="Plano 2027" valor={mi(r.total_plano)} />
+            {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} />}
             <Kpi rotulo="Diferença para 2026" valor={fmt(delta)} sub={r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado" : ""} />
             <Kpi rotulo="Receitas 2027" valor={mi(receitas)} sub={plano ? `${plano.etapas.receitas.n} lançamento(s)` : ""} />
             <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receitas menos despesas" tom={resultado < 0 ? "rneg" : "rpos"} />

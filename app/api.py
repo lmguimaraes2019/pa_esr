@@ -144,6 +144,7 @@ class ProjetoPatch(BaseModel):
     financiamento: str | None = Field(default=None, pattern="^(fomento|intercompany|receita|tbd)?$")      # vazio = ainda não informado
     financiamento_obs: str | None = Field(default=None, max_length=300)
     detalhe: str | None = Field(default=None, max_length=3000)
+    memoria: str | None = Field(default=None, max_length=3000)
 
     @field_validator("n_projeto")
     @classmethod
@@ -241,6 +242,11 @@ def trocar_senha(dados: SenhaIn, u: dict = Depends(usuario_atual)):
 @router.get("/contas")
 def contas(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     return [dict(r) for r in c.execute("SELECT codigo, descricao, grupo FROM contas ORDER BY grupo, descricao")]
+
+
+def _teto(c: sqlite3.Connection) -> float:
+    r = c.execute("SELECT valor FROM premissas WHERE chave='teto_pro_rnp'").fetchone()
+    return float(r["valor"]) if r else 0.0
 
 
 @router.get("/premissas")
@@ -372,7 +378,10 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
              "empenhado_2026": _arred(r["empenhado"]),
              "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] and not r["extinto"] else [])
                            + (["Fonte de financiamento"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
-                              and not financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]) else [])} for r in rows]
+                              and not financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]) else [])
+                           + (["Memória de cálculo"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
+                              and not (r["memoria"] or "").strip() else []),
+             "memoria": r["memoria"]} for r in rows]
 
 
 @router.get("/listas")
@@ -512,7 +521,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
                    | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
-                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},
@@ -845,7 +854,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
             "total_base": tot(origens, "base"), "total_plano": tot(origens, "plano"),
             "total_realizado": tot(origens, "realizado"), "total_empenhado": tot(origens, "empenhado"),
             "total_executado": tot(origens, "executado") if origens else 0.0,
-            "linhas_status": status, "extintos": extintos,
+            "linhas_status": status, "extintos": extintos, "teto": _teto(c),
             "por_origem": origens, "por_grupo": grupos, "por_finalidade": finalidades,
             "mensal_plano": [{"mes": NOMES_MESES[i], "valor": _arred(mensal[m] or 0)} for i, m in enumerate(MESES)]}
 

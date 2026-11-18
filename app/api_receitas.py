@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from . import config
+from . import fontes, config
 from . import export_xlsx
 from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
@@ -78,6 +78,7 @@ def _linha(r: sqlite3.Row, ref: sqlite3.Row | None) -> dict:
            "base_id": r["base_id"], "atualizado_por": r["atualizado_por"], "ref": None,
            "tipo": r["tipo"], "ano": r["ano"], "cliente": r["cliente"], "origem_cliente": r["origem_cliente"],
            "gestor_cliente": r["gestor_cliente"], "calendarizada": r["tipo"] != "intercompany"}
+    out.update(fontes.liquida(out["total"], r["origem"]))
     if ref is not None:
         rm = [_arred(ref[m]) for m in MESES]
         out["ref"] = {"meses": rm, "total": _arred(sum(rm))}
