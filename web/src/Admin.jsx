@@ -473,6 +473,46 @@ export function Referencias() {
       <h2>Tabelas de referência</h2>
       <div className="nota">Edite aqui, valor a valor, ou importe em lote a partir de um arquivo os valores usados nos cálculos: tarifas de viagens, catálogo de equipamentos do headcount e tabela salarial. Cada importação mostra o que muda antes de gravar, e os custos de viagens, eventos e headcount são recalculados depois de importar.</div>
       {lista.map((t) => <CartaoReferencia key={t.tipo} t={t} onImportado={carregar} />)}
+      <FontesFinanciamento />
     </>
+  );
+}
+
+
+/** Fontes de financiamento que o gestor escolhe em cada projeto (Fomento, Intercompany, Receita própria e TBD vêm de base). */
+function FontesFinanciamento() {
+  const [lista, setLista] = useState(null);
+  const [novo, setNovo] = useState("");
+  const [edit, setEdit] = useState({});
+  const [erro, setErro] = useState("");
+  const carregar = () => api("/financiamento/fontes").then(setLista).catch((e) => setErro(e.message));
+  useEffect(() => { carregar(); }, []);
+  const chamar = async (caminho, metodo, corpo) => { setErro(""); try { setLista(await api(caminho, { method: metodo, body: corpo })); return true; } catch (e) { setErro(e.message); return false; } };
+  if (!lista) return null;
+  return (
+    <section className="cartao">
+      <h3>Fontes de financiamento</h3>
+      <p className="mudo">Lista que aparece em cada projeto, no campo "De onde vem o recurso deste projeto", e nos relatórios. As quatro fontes de base podem ser renomeadas, mas não excluídas. Uma fonte só pode ser excluída quando nenhum projeto a usa.</p>
+      <table className="tab">
+        <thead><tr><th>Fonte</th><th className="n">Projetos</th><th></th></tr></thead>
+        <tbody>{lista.map((f) => (
+          <tr key={f.codigo}>
+            <td>{edit[f.codigo] !== undefined
+              ? <input value={edit[f.codigo]} maxLength={60} onChange={(e) => setEdit({ ...edit, [f.codigo]: e.target.value })} />
+              : <>{f.nome} {f.sistema && <span className="tag">base</span>}</>}</td>
+            <td className="n">{f.projetos}</td>
+            <td>{edit[f.codigo] !== undefined
+              ? <><button className="primario" onClick={async () => { if (await chamar(`/financiamento/fontes/${f.codigo}`, "PUT", { nome: edit[f.codigo] })) { const e2 = { ...edit }; delete e2[f.codigo]; setEdit(e2); } }}>Salvar</button>{" "}
+                <button onClick={() => { const e2 = { ...edit }; delete e2[f.codigo]; setEdit(e2); }}>Cancelar</button></>
+              : <><button onClick={() => setEdit({ ...edit, [f.codigo]: f.nome })}>Renomear</button>{" "}
+                {!f.sistema && <button disabled={f.projetos > 0} title={f.projetos > 0 ? "Há projetos usando esta fonte" : ""} onClick={() => { if (window.confirm(`Excluir a fonte "${f.nome}"?`)) chamar(`/financiamento/fontes/${f.codigo}`, "DELETE"); }}>Excluir</button>}</>}</td>
+          </tr>))}</tbody>
+      </table>
+      <div className="acoes" style={{ marginTop: 10 }}>
+        <input value={novo} maxLength={60} placeholder="Nova fonte, ex.: Convênio com a FINEP" onChange={(e) => setNovo(e.target.value)} />
+        <button className="primario" disabled={novo.trim().length < 2} onClick={async () => { if (await chamar("/financiamento/fontes", "POST", { nome: novo })) setNovo(""); }}>Adicionar fonte</button>
+        {erro && <span className="erro">{erro}</span>}
+      </div>
+    </section>
   );
 }

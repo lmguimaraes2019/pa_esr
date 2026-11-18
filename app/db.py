@@ -209,6 +209,13 @@ CREATE TABLE IF NOT EXISTS conclusoes (
 
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
 
+CREATE TABLE IF NOT EXISTS fontes_financiamento (
+    codigo TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    ordem INTEGER NOT NULL DEFAULT 0,
+    sistema INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS execucao (
     orcamento TEXT NOT NULL,
     edt TEXT NOT NULL,
@@ -379,6 +386,9 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN extinto_por TEXT NOT NULL DEFAULT ''")
         if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
+        from .fontes import FONTES
+        for i, k in enumerate(("fomento", "intercompany", "receita", "tbd")):      # fontes de base: o nome pode ser editado, mas não saem
+            c.execute("INSERT OR IGNORE INTO fontes_financiamento (codigo, nome, ordem, sistema) VALUES (?,?,?,1)", (k, FONTES[k], i))
         for col, ddl in (("recurso_situacao", "TEXT NOT NULL DEFAULT ''"), ("recurso_1q", "INTEGER NOT NULL DEFAULT 0")):      # Associação: contrato assinado ou caixa; recebimento no 1º quadrimestre
             if col not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:
                 c.execute(f"ALTER TABLE projetos ADD COLUMN {col} {ddl}")

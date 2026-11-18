@@ -26,6 +26,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
     ids = sorted(ids)
     marks = ",".join("?" for _ in ids) or "''"
     nomes = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, novo, tipo, contingenciado, finalidade, financiamento, COALESCE(NULLIF(origem_2027, ''), origem) AS origem FROM projetos WHERE orcamento IN ({marks})", ids)}
+    fnomes = {f["codigo"]: f["nome"] for f in fontes.lista_fontes(c)}
     out = {o: {"orcamento": o, "projeto": nomes[o]["descricao"], "gerente": nomes[o]["gerente"], "novo": bool(nomes[o]["novo"]),
                "despesas": {"aprovado": 0.0, "plano": 0.0, "linhas": 0, "ajustadas": 0, "novas": 0, "excluidas": 0, "bloqueadas": 0},
                "receitas": {"n": 0, "total": 0.0},
@@ -33,7 +34,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
                "eventos": {"n": 0, "total": 0.0, "pendentes": 0},
                "headcount": {"n": 0, "total": 0.0, "pendentes": 0},
                "entregas": {"n": 0, "sem_conexao": 0, "pendentes": 0, "vinculado": False, "motivo": ""},
-               "financiamento": {"fonte": fontes.efetivo(nomes[o]["origem"], nomes[o]["financiamento"]), "pendentes": 0}} for o in ids if o in nomes}
+               "financiamento": {"fonte": fontes.efetivo(nomes[o]["origem"], nomes[o]["financiamento"]), "nome": fnomes.get(fontes.efetivo(nomes[o]["origem"], nomes[o]["financiamento"]), ""), "pendentes": 0}} for o in ids if o in nomes}
 
     # despesas: compara cada linha de 2027 com a de 2026
     usadas: set[int] = set()

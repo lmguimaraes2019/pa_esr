@@ -40,6 +40,11 @@ def liquida(total: float, origem: str) -> dict:
     return {"liquida": round(total * (1 - RESERVA - ADMIN), 2), "reserva": round(total * RESERVA, 2), "admin": round(total * ADMIN, 2)}
 
 
+def lista_fontes(c) -> list[dict]:
+    """Fontes cadastradas (as quatro de base e as criadas pelo administrador), em ordem."""
+    return [{"codigo": r[0], "nome": r[1], "sistema": bool(r[2])} for r in c.execute("SELECT codigo, nome, sistema FROM fontes_financiamento ORDER BY ordem, codigo")]
+
+
 ORDEM = ["fomento", "intercompany", "receita", "tbd", ""]
 
 

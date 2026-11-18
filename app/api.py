@@ -141,7 +141,7 @@ class ProjetoPatch(BaseModel):
     finalidade: str | None = Field(default=None, pattern=_FIN)
     contingenciado: bool | None = None
     extinto: bool | None = None
-    financiamento: str | None = Field(default=None, pattern="^(fomento|intercompany|receita|tbd)?$")      # vazio = ainda não informado
+    financiamento: str | None = Field(default=None, max_length=40)      # vazio = ainda não informado
     financiamento_obs: str | None = Field(default=None, max_length=300)
     detalhe: str | None = Field(default=None, max_length=3000)
     memoria: str | None = Field(default=None, max_length=3000)
@@ -467,6 +467,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             if u["perfil"] != "admin":
                 raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
             campos["contingenciado"] = int(campos["contingenciado"])
+        if campos.get("financiamento") and not c.execute("SELECT 1 FROM fontes_financiamento WHERE codigo=?", (campos["financiamento"],)).fetchone():
+            raise HTTPException(422, "Fonte de financiamento inexistente. Veja Administração, Tabelas de referência.")
         if "recurso_1q" in campos:
             campos["recurso_1q"] = int(campos["recurso_1q"])
         if "asrnp_conv" in campos:

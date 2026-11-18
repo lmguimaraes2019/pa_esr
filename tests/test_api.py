@@ -1158,3 +1158,23 @@ def test_diretrizes_pessoal_recurso_e_premissas(client):
         assert client.patch(f"/api/projetos/{a['orcamento']}", json={"recurso_situacao": "assinado"}).status_code == 200
         b = client.get(f"/api/projetos/{a['orcamento']}").json()["projeto"]
         assert b["recurso_situacao"] == "assinado" and any("aditivado" in x for x in b["alertas"])
+
+
+def test_fontes_de_financiamento_editaveis(client):
+    entrar(client)
+    base = client.get("/api/financiamento/fontes").json()
+    assert [f["codigo"] for f in base][:4] == ["fomento", "intercompany", "receita", "tbd"]
+    r = client.post("/api/financiamento/fontes", json={"nome": "Convênio FINEP"})
+    assert r.status_code == 201
+    cod = next(f["codigo"] for f in r.json() if f["nome"] == "Convênio FINEP")
+    assert client.post("/api/financiamento/fontes", json={"nome": "convênio finep"}).status_code == 409
+    alvo = next(p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0 and not p["financiamento"])
+    assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"financiamento": cod}).status_code == 200
+    q = client.get("/api/financiamento").json()
+    assert any(g["fonte"] == cod and g["n"] == 1 and g["nome"] == "Convênio FINEP" for g in q["grupos"])
+    assert client.delete(f"/api/financiamento/fontes/{cod}").status_code == 409      # em uso
+    assert client.delete("/api/financiamento/fontes/fomento").status_code == 409     # base
+    assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"financiamento": "inexistente"}).status_code == 422
+    assert client.put("/api/financiamento/fontes/tbd", json={"nome": "A definir"}).status_code == 200
+    client.patch(f"/api/projetos/{alvo['orcamento']}", json={"financiamento": "tbd"})
+    assert client.delete(f"/api/financiamento/fontes/{cod}").status_code == 200

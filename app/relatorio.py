@@ -283,6 +283,9 @@ def _parte1(doc: Doc, d: dict) -> None:
             txt += f", **{mi(gr['intercompany']['valor'])}** em {_plural(gr['intercompany']['n'], 'projeto custeado', 'projetos custeados')} pelas transferências intercompany ({pct_(gr['intercompany']['valor'])})"
         if gr["receita"]["n"]:
             txt += f", **{mi(gr['receita']['valor'])}** em projetos custeados por receita própria ({pct_(gr['receita']['valor'])})"
+        for g_ in fin["grupos"]:
+            if g_["fonte"] not in ("fomento", "intercompany", "receita", "tbd", "") and g_["n"]:
+                txt += f", **{mi(g_['valor'])}** em {g_['nome']} ({pct_(g_['valor'])})"
         if gr["tbd"]["n"]:
             txt += f", **{mi(gr['tbd']['valor'])}** com fonte a definir, TBD ({pct_(gr['tbd']['valor'])})"
         if gr[""]["n"]:

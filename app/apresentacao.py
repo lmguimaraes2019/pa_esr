@@ -406,13 +406,14 @@ def _slide_financiamento(prs, d, n):
     s = _novo(prs, "Estratégia de financiamento", n)
     tot = fin["total"] or 1.0
     p_ = lambda v: f"{v / tot * 100:.0f}%".replace(".", ",")
-    outras = gr["tbd"]["valor"] + gr[""]["valor"]
-    n_outras = gr["tbd"]["n"] + gr[""]["n"]
+    extras = [g_ for g_ in fin["grupos"] if g_["fonte"] not in ("fomento", "intercompany", "receita", "tbd", "")]
+    outras = gr["tbd"]["valor"] + gr[""]["valor"] + sum(g_["valor"] for g_ in extras)
+    n_outras = gr["tbd"]["n"] + gr[""]["n"] + sum(g_["n"] for g_ in extras)
     w = 2.2
     _kpi(s, L, TOPO, w, 1.3, mi(gr["fomento"]["valor"]), "Fomento", f"{_pl(gr['fomento']['n'], 'projeto', 'projetos')} | {p_(gr['fomento']['valor'])}")
     _kpi(s, L + 2.4, TOPO, w, 1.3, mi(gr["intercompany"]["valor"]), "Intercompany", f"{_pl(gr['intercompany']['n'], 'projeto', 'projetos')} | {p_(gr['intercompany']['valor'])}", laranja=True)
     _kpi(s, L + 4.8, TOPO, w, 1.3, mi(gr["receita"]["valor"]), "Receita própria", f"{_pl(gr['receita']['n'], 'projeto', 'projetos')} | {p_(gr['receita']['valor'])}")
-    _kpi(s, L + 7.2, TOPO, w, 1.3, mi(outras), "A definir (TBD)", f"{_pl(n_outras, 'projeto', 'projetos')} | {p_(outras)}", laranja=True)
+    _kpi(s, L + 7.2, TOPO, w, 1.3, mi(outras), "Outras e a definir" if extras else "A definir (TBD)", f"{_pl(n_outras, 'projeto', 'projetos')} | {p_(outras)}", laranja=True)
     ic = gr["intercompany"]
     y = TOPO + 1.5
     if ic["n"]:

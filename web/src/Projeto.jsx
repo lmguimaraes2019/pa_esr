@@ -388,13 +388,14 @@ function FaixaEstrategia({ orcamento, abrir }) {
   );
 }
 
-const FONTES_FIN = [["fomento", "Fomento"], ["intercompany", "Transferência intercompany"], ["receita", "Receita própria (externa)"], ["tbd", "A definir (TBD)"]];
 
 /** De onde vem o recurso que paga o projeto. Fomento já é uma fonte; os demais indicam intercompany, receita própria ou TBD. */
 function FonteFinanciamento({ p, onSalvo }) {
   const [fonte, setFonte] = useState(p.financiamento_informado || "");
   const [obs, setObs] = useState(p.financiamento_obs || "");
   const [erro, setErro] = useState("");
+  const [fontesFin, setFontesFin] = useState([]);
+  useEffect(() => { api("/financiamento/fontes").then((l) => setFontesFin(l.map((f) => [f.codigo, f.nome]))).catch(() => {}); }, []);
   const pendente = !p.financiamento;
   const salvar = async () => { setErro(""); try { await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: { financiamento: fonte, financiamento_obs: obs } }); onSalvo(); } catch (e) { setErro(e.message); } };
   const mudou = fonte !== (p.financiamento_informado || "") || obs.trim() !== (p.financiamento_obs || "");
@@ -405,7 +406,7 @@ function FonteFinanciamento({ p, onSalvo }) {
         <label><span>De onde vem o recurso deste projeto</span>
           <select value={fonte} onChange={(e) => setFonte(e.target.value)}>
             <option value="">{p.financiamento === "fomento" ? "Fomento (pela origem de recursos)" : "Selecione…"}</option>
-            {FONTES_FIN.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
+            {fontesFin.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
         <label><span>Detalhe (opcional)</span><input value={obs} maxLength={300} onChange={(e) => setObs(e.target.value)} placeholder={fonte === "intercompany" ? "Ex.: repasse das áreas à ESR" : fonte === "receita" ? "Ex.: cliente ou contrato" : ""} /></label>
         <div className="acoes" style={{ alignSelf: "end" }}><button className="primario" disabled={!mudou} onClick={salvar}>Salvar fonte</button></div>
       </div>

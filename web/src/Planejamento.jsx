@@ -109,7 +109,7 @@ export function ResumoProjeto({ orcamento, irEtapa }) {
     ["viagens", "Viagens", fmt(d.viagens.total), `${d.viagens.n} viagem(ns)`, d.viagens.pendentes],
     ["eventos", "Eventos", fmt(d.eventos.total), `${d.eventos.n} evento(s)`, d.eventos.pendentes],
     ["headcount", "Headcount", fmt(d.headcount.total), `${d.headcount.n} posição(ões) | custo em 2027`, d.headcount.pendentes],
-    ["financiamento", "Fonte de financiamento", d.financiamento.fonte ? ({ fomento: "Fomento", intercompany: "Intercompany", receita: "Receita própria", tbd: "TBD" }[d.financiamento.fonte]) : "Não informada", d.financiamento.fonte === "intercompany" ? "Custeado pelas transferências intercompany" : d.financiamento.fonte ? "Estratégia de financiamento" : "Indique a fonte do recurso", d.financiamento.pendentes],
+    ["financiamento", "Fonte de financiamento", d.financiamento.fonte ? (d.financiamento.nome || d.financiamento.fonte) : "Não informada", d.financiamento.fonte === "intercompany" ? "Custeado pelas transferências intercompany" : d.financiamento.fonte ? "Estratégia de financiamento" : "Indique a fonte do recurso", d.financiamento.pendentes],
     ["entregas", "Entregas", `${d.entregas.n}`, d.entregas.motivo === "sem vínculo estratégico" ? "Falta vincular o orçamento ao PO e ao CG" : d.entregas.n ? `${d.entregas.n - d.entregas.sem_conexao} com KPI ou conexão estratégica` : "Nenhuma entrega informada", d.entregas.pendentes],
   ];
   return (
