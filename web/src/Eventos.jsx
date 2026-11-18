@@ -123,28 +123,37 @@ export default function Eventos({ irProjeto }) {
             <option value="rnp">Eventos RNP ({dados.itens.filter((e) => e.rnp).length})</option></select></div>
         <button className="destaque" onClick={() => abrir(novo)}>+ Novo evento</button>
       </div>
-      <p className="legenda-icones"><span><Lapis /> editar o evento</span><span className="perigo"><Lixeira /> excluir</span></p>
-      <div className="rolagem"><table className="tab">
-        <thead><tr><th>Ações</th><th>Mês</th><th>Evento</th><th>Projeto</th><th className="n">Pessoas</th><th className="n">Dias</th><th className="n">Inscrição</th><th className="n">Viagem</th><th className="n">Total</th><th>Situação</th></tr></thead>
-        <tbody>
-          {lista.length === 0 && <tr><td colSpan={10} className="mudo">Nenhum evento neste filtro. Use "+ Novo evento".</td></tr>}
-          {lista.map((e) => (
-            <tr key={e.id}>
-              <td style={{ whiteSpace: "nowrap" }}><div className="barra-icones"><BotaoIcone icone={<Lapis />} dica="Editar o evento" onClick={() => abrir(e)} /><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir o evento" onClick={() => excluir(e)} /></div></td>
-              <td>{MESES_N[e.mes - 1].slice(0, 3)}</td>
-              <td><strong>{e.nome || <span className="up">sem nome</span>}</strong>{e.site && <> <a href={e.site} target="_blank" rel="noopener noreferrer" title={e.site}>site</a></>} <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span>{e.rnp && <> <span className="tag ok">RNP</span></>}<br /><span className="mudo">{e.local || "local não informado"}</span>
-                {e.justificativa && <><br /><span className="mudo" title={e.justificativa}>{e.justificativa.length > 90 ? e.justificativa.slice(0, 90) + "…" : e.justificativa}</span></>}</td>
-              <td><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button><br /><span className="mudo">{e.projeto}</span></td>
-              <td className="n">{e.n_pessoas}<br /><span className="mudo" style={{ fontSize: ".75rem" }}>{e.pessoas.join(", ")}</span></td>
-              <td className="n">{e.dias}</td>
-              <td className="n">{fmtN(e.inscricao_total)}{e.moeda === "USD" && <><br /><span className="mudo">US$ {fmtN(e.inscricao)} por pessoa</span></>}</td>
-              <td className="n">{e.viagem.total ? fmtN(e.viagem.total) : "-"}{e.origem && <><br /><span className="mudo" style={{ fontSize: ".75rem" }}>{e.origem} para {e.destino}</span></>}</td>
-              <td className="n"><strong>{fmtN(e.total)}</strong></td>
-              <td>{e.completo ? <span className="tag ok">completo</span> : <><span className="tag aviso">pendente</span><div className="pend-lista">{e.faltando.map((x) => <span key={x}>{x}</span>)}</div></>}</td>
-            </tr>))}
-        </tbody>
-        <tfoot><tr><td colSpan={6}>Total do filtro</td><td className="n">{fmtN(lista.reduce((a, e) => a + e.inscricao_total, 0))}</td><td className="n">{fmtN(lista.reduce((a, e) => a + e.viagem.total, 0))}</td><td className="n">{fmtN(lista.reduce((a, e) => a + e.total, 0))}</td><td /></tr></tfoot>
-      </table></div>
+      <div className="evt-lista">
+        {lista.length === 0 && <p className="mudo">Nenhum evento neste filtro. Use "+ Novo evento".</p>}
+        {lista.map((e) => (
+          <article key={e.id} className={"evt " + (e.completo ? "" : "pend")}>
+            <div className="evt-mes"><strong>{MESES_N[e.mes - 1].slice(0, 3)}</strong><small>2027</small></div>
+            <div className="evt-corpo">
+              <h4>{e.nome || <span className="up">sem nome</span>}
+                <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span>{e.rnp && <span className="tag ok">RNP</span>}
+                {e.completo ? <span className="tag ok">completo</span> : <span className="tag aviso">pendente</span>}</h4>
+              <p className="evt-sub">{e.local || "local não informado"}{e.site && <> · <a href={e.site} target="_blank" rel="noopener noreferrer">site do evento</a></>}</p>
+              <p className="evt-proj"><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button> <span className="mudo">{e.projeto}</span></p>
+              {e.justificativa && <p className="evt-just" title={e.justificativa}>{e.justificativa}</p>}
+              {e.pessoas.length > 0 && <details className="evt-pessoas"><summary>{e.n_pessoas} participante(s)</summary><div>{e.pessoas.map((p) => <span key={p} className="chip">{p}</span>)}</div></details>}
+              {!e.completo && <div className="pend-lista">{e.faltando.map((x) => <span key={x}>{x}</span>)}</div>}
+            </div>
+            <div className="evt-num">
+              <dl>
+                <div><dt>Pessoas</dt><dd>{e.n_pessoas}</dd></div>
+                <div><dt>Dias</dt><dd>{e.dias}</dd></div>
+                <div><dt>Inscrição</dt><dd>{fmtN(e.inscricao_total)}{e.moeda === "USD" && <small>US$ {fmtN(e.inscricao)} por pessoa</small>}</dd></div>
+                <div><dt>Viagem</dt><dd>{e.viagem.total ? fmtN(e.viagem.total) : "-"}{e.origem && <small>{e.origem} para {e.destino}</small>}</dd></div>
+              </dl>
+              <div className="evt-total"><span>Total</span><strong>{fmtN(e.total)}</strong></div>
+            </div>
+            <div className="barra-icones evt-acoes"><BotaoIcone icone={<Lapis />} dica="Editar o evento" onClick={() => abrir(e)} /><BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir o evento" onClick={() => excluir(e)} /></div>
+          </article>))}
+      </div>
+      <div className="evt-rodape"><span>Total do filtro ({lista.length} evento(s))</span>
+        <span>Inscrições <strong>{fmtN(lista.reduce((a, e) => a + e.inscricao_total, 0))}</strong></span>
+        <span>Viagens <strong>{fmtN(lista.reduce((a, e) => a + e.viagem.total, 0))}</strong></span>
+        <span>Total <strong>{fmtN(lista.reduce((a, e) => a + e.total, 0))}</strong></span></div>
       {form && <Formulario key={form.id ?? "novo"} inicial={form} dados={dados} onFechar={() => setForm(null)} onSalvar={salvar} />}
       {dados.por_projeto.length > 0 && (
         <section className="cartao"><h3>Por projeto</h3><div className="rolagem"><table className="tab">
