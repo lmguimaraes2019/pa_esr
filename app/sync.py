@@ -22,7 +22,7 @@ CONTA_INSCRICAO = "51040104"
 CONTAS_PESSOAL = {
     "salario": "51010101", "inss": "51010401", "fgts": "51010402", "pis": "51010403",
     "vr": "51010503", "plano_saude": "51010502", "seguro_vida": "51010506", "vt": "51010507",
-    "internet": "51010518", "provisao_ferias": "51020101", "provisao_13": "51020201",
+    "provisao_ferias": "51010104", "provisao_13": "51010110",      # Diretrizes 2027: férias e 13º em contas de folha; sem internet (51010518)
 }
 
 PADRAO_TAREFA = {"eventos": r"EVENT|CAPACIT|TREINAM|CONGRESS|PARTICIP", "headcount": r"PESSOA|RH|CONTRAT|FOLHA|QUADRO|HEADCOUNT|SALARI"}

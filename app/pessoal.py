@@ -83,7 +83,7 @@ def custo_mensal(salario: float, p: dict[str, float]) -> dict[str, float]:
     encargos = j + inss + fgts + pis                                     # N
     vr = p["vr_dia"] * p["vr_dias"] + p["vr_extra"]                      # O
     seguro = j * p["seguro_vida"] / 100                                  # R
-    beneficios = vr + p["vt"] + p["plano_saude"] + seguro + p["internet"]  # T
+    beneficios = vr + p["vt"] + p["plano_saude"] + seguro                 # T (Diretrizes 2027 não preveem ajuda de internet)
     abono = (j / 30 * 10) / 12                                           # U
     ferias = ((j / 12) + abono) / 3                                      # V
     decimo = j / 12                                                      # W
@@ -91,6 +91,6 @@ def custo_mensal(salario: float, p: dict[str, float]) -> dict[str, float]:
     total = beneficios + encargos + provisoes                            # Y
     return {"salario": round(j, 2), "inss": round(inss, 2), "fgts": round(fgts, 2), "pis": round(pis, 2),
             "vr": round(vr, 2), "vt": round(p["vt"], 2), "plano_saude": round(p["plano_saude"], 2), "seguro_vida": round(seguro, 2),
-            "internet": round(p["internet"], 2), "provisao_ferias": round(abono + ferias, 2), "provisao_13": round(decimo, 2),
+            "internet": 0.0, "provisao_ferias": round(abono + ferias, 2), "provisao_13": round(decimo, 2),
             "salario_encargos": round(encargos, 2), "beneficios": round(beneficios, 2), "provisoes": round(provisoes, 2),
             "mensal": round(total, 2), "anual": round(total * 12, 2)}

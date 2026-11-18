@@ -251,7 +251,7 @@ def test_headcount_formulas_da_planilha(client):
     d = r.json()
     assert d["custo"]["salario"] == 6418.58 and d["meses_2027"] == 6 and d["faltando"] == []
     j = 6418.58
-    esperado = (j * 1.269044 + j * 0.09) + (22 * 35 + 299.77 + 1208.5158888888889 + j * 0.005811 + 100) \
+    esperado = (j * 1.269044 + j * 0.09) + (22 * 35 + 299.77 + 1208.5158888888889 + j * 0.005811) \
         + ((j / 30 * 10) / 12 + (j / 12 + (j / 30 * 10) / 12) / 3 + j / 12)
     assert abs(d["custo"]["mensal"] - esperado) < 0.02 and abs(d["anualizado"] - esperado * 12 * 2) < 0.1
     assert abs(d["custo_2027"] - esperado * 6 * 2) < 0.1
@@ -1144,3 +1144,17 @@ def test_tarifas_2027_e_origem_das_diretrizes(client):
     t = {(x["tipo"], x["origem"], x["destino"]): x for x in client.get("/api/viagens/tarifas").json()}
     assert t[("nac", "Centro-Oeste", "Centro-Oeste")]["passagem"] == 2176
     assert t[("nac", "Norte", "Sul")]["aux_transporte"] == 0
+
+
+def test_diretrizes_pessoal_recurso_e_premissas(client):
+    from app import sync
+    assert sync.CONTAS_PESSOAL["provisao_ferias"] == "51010104" and sync.CONTAS_PESSOAL["provisao_13"] == "51010110"
+    assert "internet" not in sync.CONTAS_PESSOAL
+    entrar(client)
+    prem = client.get("/api/premissas").json()
+    assert prem["dolar"]["valor"] == 5.45
+    a = next((p for p in client.get("/api/projetos").json() if p["origem_diretriz"].startswith("AsRNP") and "Situação do recurso (Associação)" in p["pendencias"]), None)
+    if a:
+        assert client.patch(f"/api/projetos/{a['orcamento']}", json={"recurso_situacao": "assinado"}).status_code == 200
+        b = client.get(f"/api/projetos/{a['orcamento']}").json()["projeto"]
+        assert b["recurso_situacao"] == "assinado" and any("aditivado" in x for x in b["alertas"])

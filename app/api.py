@@ -146,6 +146,8 @@ class ProjetoPatch(BaseModel):
     detalhe: str | None = Field(default=None, max_length=3000)
     memoria: str | None = Field(default=None, max_length=3000)
     asrnp_conv: bool | None = None
+    recurso_situacao: str | None = Field(default=None, pattern="^(caixa|assinado|contratado)?$")
+    recurso_1q: bool | None = None
 
     @field_validator("n_projeto")
     @classmethod
@@ -243,6 +245,27 @@ def trocar_senha(dados: SenhaIn, u: dict = Depends(usuario_atual)):
 @router.get("/contas")
 def contas(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     return [dict(r) for r in c.execute("SELECT codigo, descricao, grupo FROM contas ORDER BY grupo, descricao")]
+
+
+# grupos das Diretrizes 2027 por finalidade do app
+GRUPO_DIRETRIZ = {"headcount": "Pessoal", "gestao": "Gastos administrativos", "sustentacao": "Gastos administrativos", "investimento": "TI / investimento",
+                  "caixa": "Custos finalísticos", "crescimento": "Custos finalísticos", "capacitacao": "Custos finalísticos"}
+
+
+def _alertas(c: sqlite3.Connection, p: sqlite3.Row) -> list[str]:
+    """Orientações das Diretrizes 2027 que se aplicam ao projeto, pelas contas que ele usa e pela origem."""
+    usa = {r[0] for r in c.execute("SELECT DISTINCT conta_codigo FROM linhas WHERE ciclo=? AND orcamento=? AND (%s)<>0" % "+".join(MESES), (config.CICLO_PLANO, p["orcamento"]))}
+    out = []
+    if "51010509" in usa:
+        out.append("Prêmio de desempenho (51010509): orçamento descentralizado junto com a folha; a movimentação continua na Associação.")
+    if usa & {"13020101", "51030603"}:
+        out.append("Software: licença com direito de uso por período é OPEX (51030603); aquisição ou desenvolvimento ativável é CAPEX (13020101).")
+    o = financiamento.origem_diretriz(p["origem_2027"] or p["origem"])
+    if o.startswith("AsRNP"):
+        out.append("Recurso aditivado: só entra com contrato assinado ou caixa; recurso contratado só se o recebimento estiver previsto no 1º quadrimestre.")
+        if p["recurso_situacao"] == "contratado" and not p["recurso_1q"]:
+            out.append("Recurso contratado sem recebimento previsto no 1º quadrimestre: não deve compor o plano.")
+    return out
 
 
 def _teto(c: sqlite3.Connection) -> float:
@@ -381,8 +404,10 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
                            + (["Fonte de financiamento"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
                               and not financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]) else [])
                            + (["Memória de cálculo"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
-                              and not (r["memoria"] or "").strip() else []),
-             "memoria": r["memoria"], "asrnp_conv": bool(r["asrnp_conv"]),
+                              and not (r["memoria"] or "").strip() else [])
+                           + (["Situação do recurso (Associação)"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
+                              and financiamento.origem_diretriz(r["origem_2027"] or r["origem"]).startswith("AsRNP") and not r["recurso_situacao"] else []),
+             "memoria": r["memoria"], "recurso_situacao": r["recurso_situacao"], "recurso_1q": bool(r["recurso_1q"]), "asrnp_conv": bool(r["asrnp_conv"]),
              "origem_diretriz": financiamento.origem_diretriz(r["origem_2027"] or r["origem"], bool(r["asrnp_conv"]))} for r in rows]
 
 
@@ -442,6 +467,8 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             if u["perfil"] != "admin":
                 raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
             campos["contingenciado"] = int(campos["contingenciado"])
+        if "recurso_1q" in campos:
+            campos["recurso_1q"] = int(campos["recurso_1q"])
         if "asrnp_conv" in campos:
             campos["asrnp_conv"] = int(campos["asrnp_conv"])
         if "extinto" in campos:
@@ -525,7 +552,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
                    | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
-                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "asrnp_conv": bool(p["asrnp_conv"]), "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "recurso_situacao": p["recurso_situacao"], "recurso_1q": bool(p["recurso_1q"]), "alertas": _alertas(c, p), "grupo_diretriz": GRUPO_DIRETRIZ.get(p["finalidade"], ""), "asrnp_conv": bool(p["asrnp_conv"]), "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},

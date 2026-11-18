@@ -379,6 +379,9 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN extinto_por TEXT NOT NULL DEFAULT ''")
         if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
+        for col, ddl in (("recurso_situacao", "TEXT NOT NULL DEFAULT ''"), ("recurso_1q", "INTEGER NOT NULL DEFAULT 0")):      # Associação: contrato assinado ou caixa; recebimento no 1º quadrimestre
+            if col not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:
+                c.execute(f"ALTER TABLE projetos ADD COLUMN {col} {ddl}")
         if "asrnp_conv" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: Associação CONV (NF-e/fatura) x AsRNP (contrato)
             c.execute("ALTER TABLE projetos ADD COLUMN asrnp_conv INTEGER NOT NULL DEFAULT 0")
         if "memoria" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: memória de cálculo obrigatória (Diretrizes 2027)
@@ -444,6 +447,10 @@ def init_db() -> None:
         for chave, valor, desc in PREMISSAS_PADRAO:
             c.execute("INSERT OR IGNORE INTO premissas (chave, valor, descricao) VALUES (?,?,?)",
                       (chave, valor, desc))
+        if not c.execute("SELECT 1 FROM meta WHERE chave='premissas_focus_2027'").fetchone():      # uma vez: premissas pelo Focus (só se ainda estão no valor inicial)
+            c.execute("UPDATE premissas SET valor=5.45 WHERE chave='dolar' AND valor=5.5")
+            c.execute("UPDATE premissas SET valor=5.0 WHERE chave='reajuste_geral' AND valor=0")
+            c.execute("INSERT INTO meta (chave, valor) VALUES ('premissas_focus_2027', '1')")
         if c.execute("SELECT 1 FROM viagem_tarifas LIMIT 1").fetchone() and not c.execute("SELECT 1 FROM meta WHERE chave='tarifas_2027'").fetchone():      # uma vez: tarifas de viagens 2027 (planilha nova do PMO)
             import json
             for t in json.loads((config.ROOT / "app" / "assets" / "tarifas_2027.json").read_text(encoding="utf-8")):

@@ -79,13 +79,14 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     meus = permitidos(c, u)
     par, reaj = pessoal.parametros(c), _reajuste(c)
     projetos = {r["orcamento"]: r for r in c.execute(
-        "SELECT orcamento, descricao, origem, gerente, tipo FROM projetos ORDER BY orcamento")}
+        "SELECT orcamento, descricao, origem, gerente, tipo, finalidade FROM projetos ORDER BY orcamento")}
     itens = []
     for r in c.execute("SELECT * FROM headcount ORDER BY orcamento, id"):
         if not (u["perfil"] == "admin" or r["orcamento"] in meus or r["criado_por"] == u["login"]):
             continue
         d = _calc(r, par, reaj)
         d["projeto"] = projetos[r["orcamento"]]["descricao"]
+        d["fora_de_pessoal"] = projetos[r["orcamento"]]["finalidade"] != "headcount"
         itens.append(d)
     por_proj: dict[str, dict] = {}
     for d in itens:
@@ -107,7 +108,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         "tabela": pessoal.tabela_salarial(), "tabela_nome": pessoal.tabela_info()["nome"], "reajuste": reaj,
         "catalogo": {"itens": equipamentos.catalogo(), "atualizado_em": equipamentos.carregar()["atualizado_em"]},
         "parametros": [{"chave": k, "valor": par[k], "descricao": v[1], "padrao": v[0]} for k, v in pessoal.PARAMETROS.items()],
-        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "meu": o in meus, "gerencia": _gerencia_do(p["gerente"], ger_de)}
+        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "meu": o in meus, "finalidade": p["finalidade"], "gerencia": _gerencia_do(p["gerente"], ger_de)}
                      for o, p in projetos.items() if p["tipo"] == "despesa"],
         "tarefas": tarefas_dos_projetos(c, "headcount", [o for o, p in projetos.items() if p["tipo"] == "despesa"]),
     }

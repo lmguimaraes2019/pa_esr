@@ -343,6 +343,17 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
             try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { asrnp_conv: e.target.checked } }); carregar(); } catch (x) { alert(x.message); }
           }} /> Emite NF-e/fatura (AsRNP CONV)</label>)}
       </p>
+      {p.grupo_diretriz && <p className="nota">Grupo nas Diretrizes 2027: <strong>{p.grupo_diretriz}</strong></p>}
+      {/^AsRNP/.test(p.origem_diretriz || "") && (
+        <div className="nota">
+          <label>Situação do recurso{" "}
+            <select value={p.recurso_situacao || ""} onChange={async (e) => { try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { recurso_situacao: e.target.value } }); carregar(); } catch (x) { alert(x.message); } }}>
+              <option value="">Não informado</option><option value="assinado">Contrato assinado</option><option value="caixa">Em caixa</option><option value="contratado">Contratado (a receber)</option>
+            </select></label>
+          {p.recurso_situacao === "contratado" && (
+            <label style={{ marginLeft: 12 }}><input type="checkbox" checked={!!p.recurso_1q} onChange={async (e) => { try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { recurso_1q: e.target.checked } }); carregar(); } catch (x) { alert(x.message); } }} /> Recebimento previsto no 1º quadrimestre</label>)}
+        </div>)}
+      {(p.alertas || []).map((a) => <p key={a} className="nota">{a}</p>)}
       <DescricaoProjeto orcamento={orcamento} atual={p.detalhe} onSalvo={carregar} />
       <DescricaoProjeto orcamento={orcamento} atual={p.memoria} onSalvo={carregar} campo="memoria" rotulo="Memória de cálculo (obrigatória)"
         dica="Explique como os valores foram calculados: premissas, quantidades, preços unitários e fontes." />
