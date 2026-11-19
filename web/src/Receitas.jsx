@@ -225,7 +225,6 @@ export default function Receitas({ irProjeto }) {
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const max = Math.max(1, ...dados.mensal.map((m) => Math.max(m.receita, m.despesa)));
   return (
     <>
       <h2>Gestão de receitas 2027</h2>
@@ -236,13 +235,6 @@ export default function Receitas({ irProjeto }) {
         <Kpi rotulo="Receita prevista 2026" valor={fmt(t.receita_2026)} tom="f26" />
         {t.intercompany > 0 && <Kpi rotulo="Transferências intercompany" valor={fmt(t.intercompany)} tom="f27" sub="já incluídas na receita 2027" />}
       </div>
-      <section className="cartao"><h3>Receita e despesa por mês</h3>
-        {t.intercompany > 0 && <p className="mudo">A receita por mês não inclui {fmt(t.intercompany)} de transferências intercompany, que não são calendarizadas.</p>}
-        <div className="legenda"><span><i style={{ background: "var(--laranja)" }} />Receita 2027</span><span><i style={{ background: "var(--azul)" }} />Despesa 2027</span></div>
-        <div className="meses">{dados.mensal.map((m) => (
-          <div key={m.mes} title={`${m.mes}: receita ${fmt(m.receita)} | despesa ${fmt(m.despesa)} | saldo ${fmt(m.receita - m.despesa)}`}><div className="col" style={{ gap: 2 }}>
-            <span style={{ height: (m.receita / max) * 100 + "%" }} /><span style={{ height: (m.despesa / max) * 100 + "%", background: "var(--azul)" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
-      </section>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <Passos ativo={aba} onMudar={setAba} itens={[["lancamentos", "Lançamentos de receita"], ["origem", "Resultado por origem"], ["projeto", "Resultado por projeto"]]} />
       {aba === "lancamentos" && <Lancamentos dados={dados} recarregar={carregar} setErro={setErro} />}

@@ -87,16 +87,20 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
   const ps = todos.filter((p) => p.tipo !== "receita" && (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
-  const soma = (k) => ps.filter((p) => p.tipo !== "receita").reduce((a, p) => a + p[k], 0);
+  const inativo = (p) => p.extinto || p.contingenciado;      // sem previsão de execução em 2027
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
   const ordem = (a, b) => a.localeCompare(b, "pt-BR");
-  const gm = {};
-  ps.forEach((p) => { const g = p.gerencia || "Sem gerência definida", o = p.origem || "Sem origem"; ((gm[g] ||= {})[o] ||= []).push(p); });
-  const grupos = Object.keys(gm).sort((a, b) => (a === "Diretoria Adjunta" ? -1 : b === "Diretoria Adjunta" ? 1 : a === "Sem gerência definida" ? 1 : b === "Sem gerência definida" ? -1 : ordem(a, b))).map((g) => {
-    const origens = Object.keys(gm[g]).sort(ordem).map((o) => ({ chave: g + "|" + o, nome: o, ps: gm[g][o] }));
-    return { chave: g, nome: g, origens, ps: origens.flatMap((o) => o.ps) };
-  });
-  const todasChaves = grupos.flatMap((g) => [g.chave, ...g.origens.map((o) => o.chave)]);
+  const agrupa = (lista, pre) => {
+    const gm = {};
+    lista.forEach((p) => { const g = p.gerencia || "Sem gerência definida", o = p.origem || "Sem origem"; ((gm[g] ||= {})[o] ||= []).push(p); });
+    return Object.keys(gm).sort((a, b) => (a === "Diretoria Adjunta" ? -1 : b === "Diretoria Adjunta" ? 1 : a === "Sem gerência definida" ? 1 : b === "Sem gerência definida" ? -1 : ordem(a, b))).map((g) => {
+      const origens = Object.keys(gm[g]).sort(ordem).map((o) => ({ chave: pre + g + "|" + o, nome: o, ps: gm[g][o] }));
+      return { chave: pre + g, nome: g, origens, ps: origens.flatMap((o) => o.ps) };
+    });
+  };
+  const ativos = ps.filter((p) => !inativo(p)), inativos = ps.filter(inativo);
+  const gAtivos = agrupa(ativos, ""), gInativos = agrupa(inativos, "x:");
+  const todasChaves = [...gAtivos, ...gInativos].flatMap((g) => [g.chave, ...g.origens.map((o) => o.chave)]);
   const subtotal = (lista) => {
     const s = (k) => lista.reduce((a, p) => a + p[k], 0);
     const t26 = s("total_2026"), re = s("realizado_2026");
@@ -117,6 +121,29 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
       <td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td>
     </tr>
   );
+  const tabela = (lista, grupos) => {
+    const soma = (l, k) => l.reduce((a, p) => a + p[k], 0);
+    return (
+      <div className="rolagem"><table className="tab clic pa">
+        <thead>
+          <tr className="grupos"><th colSpan={3} style={{ background: "#fff" }} /><th colSpan={mais ? 5 : 3} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th></tr>
+          <tr><th>Orçamento</th><th>Projeto</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Aprovado</th>{mais && <th className="n g26" title="Empenhado, ainda não realizado. Só informativo: não entra no saldo">Empenhado</th>}<th className="n g26">Realizado</th><th className="n g26" title="Aprovado menos realizado">Saldo</th>{mais && <th className="n g26">% real.</th>}<th className="n g27">Plano</th><th className="n g27" title="Diferença do plano 2027 para o aprovado de 2026">Δ vs 2026</th></tr>
+        </thead>
+        <tbody>{grupos.map((g) => (
+          <React.Fragment key={g.chave}>
+            <tr className="grupo-ger" onClick={() => alterna(g.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(g.chave))} aria-expanded={!fechado[g.chave]}>
+              <td colSpan={3}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
+            {!fechado[g.chave] && g.origens.map((o) => (
+              <React.Fragment key={o.chave}>
+                <tr className="grupo-org" onClick={() => alterna(o.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(o.chave))} aria-expanded={!fechado[o.chave]}>
+                  <td colSpan={3}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="contagem">{o.ps.length} {o.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(o.ps)}</tr>
+                {!fechado[o.chave] && o.ps.map(linhaProjeto)}
+              </React.Fragment>))}
+          </React.Fragment>))}</tbody>
+        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma(lista, "total_2026"))}</td>{mais && <td className="n">{fmt(soma(lista, "empenhado_2026"))}</td>}<td className="n">{fmt(soma(lista, "realizado_2026"))}</td><td className="n">{fmt(soma(lista, "total_2026") - soma(lista, "realizado_2026"))}</td>{mais && <td className="n">{pct(soma(lista, "realizado_2026"), soma(lista, "total_2026"))}</td>}<td className="n"><strong>{fmt(soma(lista, "total_2027"))}</strong></td><td className="n"><Delta de={soma(lista, "total_2026")} para={soma(lista, "total_2027")} /></td></tr></tfoot>
+      </table></div>
+    );
+  };
   return (
     <>
       <div className="cab"><div><h2>PA 2027 por projeto</h2>
@@ -137,24 +164,12 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
         <select value={fFin} onChange={(e) => setFFin(e.target.value)} aria-label="Filtrar por finalidade"><option value="">Todas as finalidades</option>{FINALIDADES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
       </div>
       {!ps.length && <p className="mudo">{todos.length ? "Nenhum projeto neste filtro." : "Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima."}</p>}
-      <div className="rolagem"><table className="tab clic pa">
-        <thead>
-          <tr className="grupos"><th colSpan={3} style={{ background: "#fff" }} /><th colSpan={mais ? 5 : 3} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th></tr>
-          <tr><th>Orçamento</th><th>Projeto</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Aprovado</th>{mais && <th className="n g26" title="Empenhado, ainda não realizado. Só informativo: não entra no saldo">Empenhado</th>}<th className="n g26">Realizado</th><th className="n g26" title="Aprovado menos realizado">Saldo</th>{mais && <th className="n g26">% real.</th>}<th className="n g27">Plano</th><th className="n g27" title="Diferença do plano 2027 para o aprovado de 2026">Δ vs 2026</th></tr>
-        </thead>
-        <tbody>{grupos.map((g) => (
-          <React.Fragment key={g.chave}>
-            <tr className="grupo-ger" onClick={() => alterna(g.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(g.chave))} aria-expanded={!fechado[g.chave]}>
-              <td colSpan={3}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
-            {!fechado[g.chave] && g.origens.map((o) => (
-              <React.Fragment key={o.chave}>
-                <tr className="grupo-org" onClick={() => alterna(o.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(o.chave))} aria-expanded={!fechado[o.chave]}>
-                  <td colSpan={3}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="contagem">{o.ps.length} {o.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(o.ps)}</tr>
-                {!fechado[o.chave] && o.ps.map(linhaProjeto)}
-              </React.Fragment>))}
-          </React.Fragment>))}</tbody>
-        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma("total_2026"))}</td>{mais && <td className="n">{fmt(soma("empenhado_2026"))}</td>}<td className="n">{fmt(soma("realizado_2026"))}</td><td className="n">{fmt(soma("total_2026") - soma("realizado_2026"))}</td>{mais && <td className="n">{pct(soma("realizado_2026"), soma("total_2026"))}</td>}<td className="n"><strong>{fmt(soma("total_2027"))}</strong></td><td className="n"><Delta de={soma("total_2026")} para={soma("total_2027")} /></td></tr></tfoot>
-      </table></div>
+      {gAtivos.length > 0 && tabela(ativos, gAtivos)}
+      {gInativos.length > 0 && <>
+        <h3 className="secao">Projetos extintos ou contingenciados</h3>
+        <p className="mudo" style={{ marginTop: 0 }}>Sem previsão de execução em 2027: as ações extintas migram suas entregas para outros projetos, e os orçamentos contingenciados não estão liberados para execução.</p>
+        {tabela(inativos, gInativos)}
+      </>}
       </>}
       <OutrosProjetos />
     </>
