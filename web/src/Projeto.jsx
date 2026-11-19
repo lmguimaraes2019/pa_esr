@@ -334,7 +334,6 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       </div>
       <ExtincaoProjeto p={p} onSalvo={carregar} />
       <FaixaMigracao p={p} irProjeto={irProjeto} />
-      {p.tipo === "despesa" && !p.extinto && <CentroReceita key={p.centro_receita || "-"} p={p} onSalvo={carregar} />}
       {p.tipo === "despesa" && !p.extinto && <FonteFinanciamento key={p.financiamento_informado + p.financiamento_obs} p={p} onSalvo={carregar} />}
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
       {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}

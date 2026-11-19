@@ -309,9 +309,6 @@ def _parte1(doc: Doc, d: dict) -> None:
                            [[f"{x['orcamento']} | {corta(x['projeto'], 52)}", corta(x["gerente"], 24), n0(x["valor"])] for x in gr[k]["projetos"][:20]],
                            [5000, 2600, 1400], legenda=tit + ", em R$." + (" Os 20 maiores." if gr[k]["n"] > 20 else ""))
         cen = d["centros"]
-        if cen["centros"] or cen["sem_centro"]:
-            doc.p("Cada centro de custo aponta para um centro de receita; projetos de fomento ficam de fora, porque a conta de fomento é única para a RNP."
-                  + (f" **{len(cen['sem_centro'])} centro(s) de custo** ({mi(cen['totais']['sem_centro'])}) ainda não apontam para um centro de receita." if cen["sem_centro"] else ""))
         if cen["centros"]:
             doc.tabela(["Centro de receita", "Receita 2027", "Custos vinculados", "Resultado", "Cobertura"],
                        [[f"{x['orcamento']} | {corta(x['descricao'], 40)}", n0(x["receita"]), n0(x["custo"]), sinal(x["resultado"]), "-" if x["cobertura"] is None else pc(x["cobertura"])] for x in cen["centros"]],

@@ -438,9 +438,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
                            + (["Memória de cálculo"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
                               and not (r["memoria"] or "").strip() else [])
                            + (["Situação do recurso (Associação)"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
-                              and financiamento.origem_diretriz(r["origem_2027"] or r["origem"]).startswith("AsRNP") and not r["recurso_situacao"] else [])
-                           + (["Centro de receita"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
-                              and not financiamento.eh_fomento(r["origem_2027"] or r["origem"]) and not r["centro_receita"] else []),
+                              and financiamento.origem_diretriz(r["origem_2027"] or r["origem"]).startswith("AsRNP") and not r["recurso_situacao"] else []),
              "memoria": r["memoria"], "recurso_situacao": r["recurso_situacao"], "recurso_1q": bool(r["recurso_1q"]), "asrnp_conv": bool(r["asrnp_conv"]), "centro_receita": r["centro_receita"],
              "origem_diretriz": financiamento.origem_diretriz(r["origem_2027"] or r["origem"], bool(r["asrnp_conv"]))} for r in rows]
 

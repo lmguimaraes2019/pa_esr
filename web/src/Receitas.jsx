@@ -1,33 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
-import { NovoOrcamento } from "./Projetos.jsx";
 import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const FONTES_SUGERIDAS = ["Contrato de gestão", "Parcerias", "Growth", "Fomento", "Turmas abertas", "Projetos especiais", "Outras receitas"];
 const vazio = { id: null, tipo: "receita", orcamento: "", fonte: "", descricao: "", obs: "", meses: Array(12).fill(""), ano: 2027, cliente: "", origem_cliente: "", gestor_cliente: "" };
 
-function AvisoCusto({ dados, orcamento, onTrocar }) {
-  const p = dados.projetos.find((x) => x.orcamento === orcamento);
-  if (!p || p.tipo === "receita") return null;
-  const c = p.centro_receita ? dados.projetos.find((x) => x.orcamento === p.centro_receita) : null;
-  return (
-    <div className="nota aviso" role="note">
-      <strong>{p.orcamento} é um projeto de custo.</strong>{" "}
-      {c ? <>A receita deve ficar no centro de receita <strong>{c.orcamento} | {c.descricao}</strong>, para o custo apontar para ela.
-          {onTrocar && <> <button type="button" onClick={() => onTrocar(c.orcamento)}>Lançar no centro de receita</button></>}</>
-        : p.centro_receita ? <>Ele aponta para o centro de receita <strong>{p.centro_receita}{p.centro_nome ? " | " + p.centro_nome : ""}</strong>, que está sob outro gestor: peça a ele para lançar a receita lá.</>
-        : <>Ele ainda não aponta para um centro de receita. Defina o centro na página do projeto (campo "Centro de receita"). Para projetos de fomento isso não é necessário, pois a conta de fomento é única na RNP.</>}
-    </div>);
-}
-
 function SeletorProjeto({ dados, valor, onChange }) {
-  const rec = dados.projetos.filter((p) => p.tipo === "receita"), cus = dados.projetos.filter((p) => p.tipo !== "receita");
-  const op = (p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>;
   return (
     <select value={valor} onChange={(e) => onChange(e.target.value)} required>
       <option value="">Selecione…</option>
-      {rec.length > 0 && <optgroup label="Centros de receita (recomendado)">{rec.map(op)}</optgroup>}
-      <optgroup label="Projetos de custo">{cus.map(op)}</optgroup>
+      {dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}
     </select>);
 }
 
@@ -100,9 +82,8 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
           <div className="acoes"><button className="primario">Salvar transferência</button><button type="button" onClick={onFechar}>Cancelar</button></div>
         </>
       ) : (<>
-      <AvisoCusto dados={dados} orcamento={f.orcamento} onTrocar={(o) => setF({ ...f, orcamento: o })} />
       <div className="grade">
-        <label>Centro de receita<SeletorProjeto dados={dados} valor={f.orcamento} onChange={(v) => setF({ ...f, orcamento: v })} /></label>
+        <label>Projeto (centro de custo)<SeletorProjeto dados={dados} valor={f.orcamento} onChange={(v) => setF({ ...f, orcamento: v })} /></label>
         <label>Fonte da receita<input list="fontes-receita" value={f.fonte} onChange={(e) => setF({ ...f, fonte: e.target.value })} required /></label>
         <datalist id="fontes-receita">{fontes.map((x) => <option key={x} value={x} />)}</datalist>
         <label>Descrição<input value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} placeholder="ex.: turmas AWS, repasse trimestral" /></label>
@@ -133,11 +114,6 @@ function Lancamentos({ dados, recarregar, setErro }) {
   const excluir = async (l) => {
     if (!window.confirm(`Excluir a receita "${l.fonte}" do projeto ${l.orcamento} (${fmt(l.total)})?`)) return;
     try { setErro(""); await api(`/receitas/${l.id}`, { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
-  };
-  const custoDe = (l) => { const p = dados.projetos.find((x) => x.orcamento === l.orcamento); return p && p.tipo !== "receita" ? p : null; };
-  const moverCentro = async (l, centro) => {
-    if (!window.confirm(`Mover a receita "${l.fonte}" do projeto de custo ${l.orcamento} para o centro de receita ${centro}?`)) return;
-    await trocar(l, { orcamento: centro });
   };
   const abrir = (f) => { setForm(f); setTimeout(() => document.getElementById("form-receita")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => {
@@ -171,7 +147,7 @@ function Lancamentos({ dados, recarregar, setErro }) {
                     <BotaoIcone icone={<Lapis />} dica="Editar a receita inteira" onClick={() => abrir(l)} />
                     <BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta receita" onClick={() => excluir(l)} /></div></td>
                   <td className="col-conta" title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
-                    <span className="mudo">{l.orcamento} | {l.projeto}</span>{custoDe(l) && <> <span className="tag aviso" title="Receita lançada em projeto de custo">projeto de custo</span>{custoDe(l).centro_acessivel && <> <button type="button" className="link" onClick={() => moverCentro(l, custoDe(l).centro_receita)}>mover para {custoDe(l).centro_receita}</button></>}</>}<br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
+                    <span className="mudo">{l.orcamento} | {l.projeto}</span><br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
                     {l.descricao && <><br /><span className="mudo">{l.descricao}</span></>}</td>
                   {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
                   <td className="n"><strong>{fmtN(l.total)}</strong></td>
@@ -241,44 +217,10 @@ function PorProjeto({ dados, irProjeto }) {
   );
 }
 
-function Centros({ irProjeto }) {
-  const [d, setD] = useState(null);
-  useEffect(() => { api("/receitas/centros").then(setD); }, []);
-  if (!d) return <p>Carregando…</p>;
-  return (
-    <>
-      <div className="nota">Cada centro de custo aponta para um centro de receita (um orçamento do tipo receita). Aqui você acompanha, para cada centro de receita, a receita prevista em 2027 contra os custos dos centros que dependem dele. Projetos de fomento ficam de fora, porque a conta de fomento é única para a RNP. O vínculo é feito na página de cada projeto.</div>
-      {d.centros.length === 0 && <p className="mudo">Nenhum centro de receita com custos vinculados. Abra um centro de custo e escolha o centro de receita dele.</p>}
-      {d.centros.map((c) => (
-        <section key={c.orcamento} className="cartao">
-          <h3><button className="link" onClick={() => irProjeto(c.orcamento)}>{c.orcamento}</button> {c.descricao} <span className="tag">{c.origem}</span></h3>
-          <div className="kpis">
-            <Kpi rotulo="Receita 2027" valor={"R$ " + fmtN(c.receita)} tom="f27" />
-            <Kpi rotulo="Custos vinculados" valor={"R$ " + fmtN(c.custo)} tom="f27" sub={`${c.vinculados.length} centro(s) de custo`} />
-            <Kpi rotulo="Resultado" valor={"R$ " + fmtN(c.resultado)} tom="f27" sub={c.resultado < 0 ? "custos acima da receita" : "receita cobre os custos"} />
-            <Kpi rotulo="Cobertura" valor={c.cobertura === null ? "-" : c.cobertura.toFixed(0) + "%"} tom="f27" sub="receita sobre custos" />
-          </div>
-          {c.vinculados.length > 0 && <div className="rolagem"><table className="tab"><thead><tr><th>Centro de custo</th><th>Gerente</th><th className="n">Custo 2027</th></tr></thead>
-            <tbody>{c.vinculados.map((v) => <tr key={v.orcamento}><td><button className="link" onClick={() => irProjeto(v.orcamento)}>{v.orcamento}</button> {v.descricao}</td><td>{v.gerente}</td><td className="n">{fmtN(v.custo)}</td></tr>)}
-              {c.outros > 0.5 && <tr><td colSpan={2} className="mudo">Outros centros de custo, de outros gestores</td><td className="n">{fmtN(c.outros)}</td></tr>}</tbody></table></div>}
-        </section>))}
-      {d.sem_centro.length > 0 && (
-        <section className="cartao pend"><h3>Centros de custo sem centro de receita <span className="tag aviso">{d.sem_centro.length}</span></h3>
-          <p className="mudo">Estes projetos não são de fomento e ainda não apontam para um centro de receita. Total de custo sem vínculo: R$ {fmtN(d.totais.sem_centro)}.</p>
-          <div className="rolagem"><table className="tab"><thead><tr><th>Centro de custo</th><th>Gerente</th><th>Origem</th><th className="n">Custo 2027</th></tr></thead>
-            <tbody>{d.sem_centro.map((v) => <tr key={v.orcamento}><td><button className="link" onClick={() => irProjeto(v.orcamento)}>{v.orcamento}</button> {v.descricao}</td><td>{v.gerente}</td><td>{v.origem}</td><td className="n">{fmtN(v.custo)}</td></tr>)}</tbody></table></div>
-        </section>)}
-    </>
-  );
-}
-
 export default function Receitas({ irProjeto }) {
   const [dados, setDados] = useState(null);
   const [aba, setAba] = useState("lancamentos");
   const [erro, setErro] = useState("");
-  const [novoCentro, setNovoCentro] = useState(false);
-  const [listas, setListas] = useState(null);
-  useEffect(() => { api("/listas").then(setListas).catch(() => {}); }, []);
   const carregar = useCallback(() => api("/receitas").then(setDados).catch((e) => setErro(e.message)), []);
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
@@ -286,10 +228,7 @@ export default function Receitas({ irProjeto }) {
   const max = Math.max(1, ...dados.mensal.map((m) => Math.max(m.receita, m.despesa)));
   return (
     <>
-      <div className="cab"><h2>Gestão de receitas 2027</h2>
-        {listas && <div className="acoes"><button onClick={() => setNovoCentro(true)}>+ Novo centro de receita</button></div>}</div>
-      {novoCentro && listas && <NovoOrcamento tipoFixo="receita" listas={listas} onFechar={() => setNovoCentro(false)}
-        onCriar={async (b) => { await api("/projetos", { method: "POST", body: b }); setNovoCentro(false); await carregar(); setAba("centros"); }} />}
+      <h2>Gestão de receitas 2027</h2>
       <div className="kpis">
         <Kpi rotulo="Receita prevista 2027" valor={fmt(t.receita)} tom="f27" sub={t.receita_2026 ? <Delta de={t.receita_2026} para={t.receita} altaBoa /> : `${t.linhas} lançamentos`} />
         <Kpi rotulo="Despesa planejada 2027" valor={fmt(t.despesa)} tom="f27" sub={<Delta de={t.despesa_2026} para={t.despesa} />} />
@@ -305,11 +244,10 @@ export default function Receitas({ irProjeto }) {
             <span style={{ height: (m.receita / max) * 100 + "%" }} /><span style={{ height: (m.despesa / max) * 100 + "%", background: "var(--azul)" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
       </section>
       {erro && <p className="erro" role="alert">{erro}</p>}
-      <Passos ativo={aba} onMudar={setAba} itens={[["lancamentos", "Lançamentos de receita"], ["origem", "Resultado por origem"], ["projeto", "Resultado por projeto"], ["centros", "Centros de receita e custo"]]} />
+      <Passos ativo={aba} onMudar={setAba} itens={[["lancamentos", "Lançamentos de receita"], ["origem", "Resultado por origem"], ["projeto", "Resultado por projeto"]]} />
       {aba === "lancamentos" && <Lancamentos dados={dados} recarregar={carregar} setErro={setErro} />}
       {aba === "origem" && <PorOrigem dados={dados} />}
       {aba === "projeto" && <PorProjeto dados={dados} irProjeto={irProjeto} />}
-      {aba === "centros" && <Centros irProjeto={irProjeto} />}
     </>
   );
 }
