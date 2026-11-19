@@ -486,13 +486,12 @@ function CentroReceita({ p, onSalvo }) {
   return (
     <section className={"cartao fonte-fin " + (pendente ? "pend" : "")}>
       <h3>Centro de receita {pendente && <span className="tag aviso">pendente</span>}</h3>
-      {fomento
-        ? <p className="mudo">Projeto de fomento: a conta de fomento é única para a RNP, então não precisa apontar para um centro de receita.</p>
-        : <>
+      {fomento && <p className="mudo">Projeto de fomento: a conta de fomento é única para a RNP, então apontar para um centro de receita é opcional. Se quiser vincular, escolha o centro abaixo.</p>}
+      {<>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
             <label>A qual centro de receita este centro de custo está ligado
               <select value={valor} onChange={(e) => setValor(e.target.value)}>
-                <option value="">Selecione…</option>
+                <option value="">{fomento ? "Nenhum (fomento)" : "Selecione…"}</option>
                 {opcoes.map((o) => <option key={o.orcamento} value={o.orcamento}>{o.orcamento} | {o.descricao}</option>)}
               </select></label>
             <button className="destaque" disabled={valor === (p.centro_receita || "")} onClick={salvar}>Salvar centro de receita</button>

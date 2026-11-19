@@ -508,12 +508,12 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             campos["centro_receita"] = cr
             if cr:
                 alvo = c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (cr,)).fetchone()
-                atual_ = c.execute("SELECT tipo, financiamento FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
+                atual_ = c.execute("SELECT tipo, financiamento, origem, origem_2027 FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
                 if not alvo or alvo["tipo"] != "receita":
                     raise HTTPException(422, "Escolha um centro de receita: um orçamento do tipo receita.")
                 if atual_["tipo"] != "despesa" or cr == orcamento:
                     raise HTTPException(422, "Só um centro de custo (despesa) aponta para um centro de receita.")
-                if not atual_["financiamento"] and "financiamento" not in campos:
+                if not atual_["financiamento"] and "financiamento" not in campos and not financiamento.eh_fomento(atual_["origem_2027"] or atual_["origem"]):
                     campos["financiamento"] = "receita"      # custo apontado para um centro de receita: fonte padrão é receita própria
         if "recurso_1q" in campos:
             campos["recurso_1q"] = int(campos["recurso_1q"])
