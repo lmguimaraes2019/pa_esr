@@ -89,6 +89,49 @@ _SQL = f"""SELECT r.*, p.descricao AS projeto, COALESCE(NULLIF(p.origem_2027, ''
            WHERE r.ciclo = ?"""
 
 
+@router.get("/centros/opcoes")
+def centros_opcoes(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    """Todos os centros de receita (orçamentos do tipo receita), para o centro de custo apontar para um deles."""
+    return [{"orcamento": r["orcamento"], "descricao": r["descricao"], "gerente": r["gerente"], "origem": r["origem_2027"] or r["origem"]}
+            for r in c.execute("SELECT * FROM projetos WHERE tipo='receita' AND extinto=0 ORDER BY descricao")]
+
+
+@router.get("/centros")
+def centros(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+    """Cada centro de receita com a receita de 2027 e os custos dos centros de custo que apontam para ele.
+    O gestor vê os custos dos seus projetos; o que vem de outros projetos entra só como valor agregado."""
+    return quadro_centros(c, permitidos(c, u), u["perfil"] == "admin")
+
+
+def quadro_centros(c: sqlite3.Connection, meus: set, admin: bool) -> dict:
+    custo = {r["orcamento"]: r for r in c.execute(
+        f"""SELECT p.*, (SELECT COALESCE(SUM({SOMA}),0) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_plano
+            FROM projetos p WHERE p.tipo='despesa' AND p.extinto=0""")}
+    out = []
+    for r in c.execute(
+        f"""SELECT p.*, (SELECT COALESCE(SUM({SOMA}),0) FROM receitas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_rec,
+            (SELECT COALESCE(SUM({SOMA}),0) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_lin
+            FROM projetos p WHERE p.tipo='receita' AND p.extinto=0 ORDER BY p.descricao"""):
+        vinc = [p for p in custo.values() if p["centro_receita"] == r["orcamento"]]
+        total_custo = _arred(sum(p["t_plano"] for p in vinc))
+        receita = _arred(r["t_rec"] + r["t_lin"])
+        visivel = r["orcamento"] in meus or any(p["orcamento"] in meus for p in vinc)
+        if not visivel and not admin:
+            continue
+        proprios = [p for p in vinc if p["orcamento"] in meus or admin]
+        out.append({"orcamento": r["orcamento"], "descricao": r["descricao"], "gerente": r["gerente"], "origem": r["origem_2027"] or r["origem"],
+                    "receita": receita, "custo": total_custo, "resultado": _arred(receita - total_custo),
+                    "cobertura": round(receita / total_custo * 100, 1) if total_custo > 0 else None,
+                    "vinculados": [{"orcamento": p["orcamento"], "descricao": p["descricao"], "gerente": p["gerente"], "custo": _arred(p["t_plano"])} for p in proprios],
+                    "outros": _arred(total_custo - sum(p["t_plano"] for p in proprios))})
+    sem = [{"orcamento": p["orcamento"], "descricao": p["descricao"], "gerente": p["gerente"], "origem": p["origem_2027"] or p["origem"], "custo": _arred(p["t_plano"])}
+           for p in custo.values() if p["orcamento"] in meus and p["t_plano"] and not p["contingenciado"] and not p["centro_receita"]
+           and not fontes.eh_fomento(p["origem_2027"] or p["origem"])]
+    return {"centros": out, "sem_centro": sorted(sem, key=lambda x: -x["custo"]),
+            "totais": {"receita": _arred(sum(x["receita"] for x in out)), "custo": _arred(sum(x["custo"] for x in out)),
+                       "sem_centro": _arred(sum(x["custo"] for x in sem))}}
+
+
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     ids = sorted(permitidos(c, u))

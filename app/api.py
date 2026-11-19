@@ -146,6 +146,7 @@ class ProjetoPatch(BaseModel):
     detalhe: str | None = Field(default=None, max_length=3000)
     memoria: str | None = Field(default=None, max_length=3000)
     asrnp_conv: bool | None = None
+    centro_receita: str | None = Field(default=None, max_length=20)
     recurso_situacao: str | None = Field(default=None, pattern="^(caixa|assinado|contratado)?$")
     recurso_1q: bool | None = None
 
@@ -406,8 +407,10 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
                            + (["Memória de cálculo"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
                               and not (r["memoria"] or "").strip() else [])
                            + (["Situação do recurso (Associação)"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
-                              and financiamento.origem_diretriz(r["origem_2027"] or r["origem"]).startswith("AsRNP") and not r["recurso_situacao"] else []),
-             "memoria": r["memoria"], "recurso_situacao": r["recurso_situacao"], "recurso_1q": bool(r["recurso_1q"]), "asrnp_conv": bool(r["asrnp_conv"]),
+                              and financiamento.origem_diretriz(r["origem_2027"] or r["origem"]).startswith("AsRNP") and not r["recurso_situacao"] else [])
+                           + (["Centro de receita"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]
+                              and not financiamento.eh_fomento(r["origem_2027"] or r["origem"]) and not r["centro_receita"] else []),
+             "memoria": r["memoria"], "recurso_situacao": r["recurso_situacao"], "recurso_1q": bool(r["recurso_1q"]), "asrnp_conv": bool(r["asrnp_conv"]), "centro_receita": r["centro_receita"],
              "origem_diretriz": financiamento.origem_diretriz(r["origem_2027"] or r["origem"], bool(r["asrnp_conv"]))} for r in rows]
 
 
@@ -469,6 +472,18 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
             campos["contingenciado"] = int(campos["contingenciado"])
         if campos.get("financiamento") and not c.execute("SELECT 1 FROM fontes_financiamento WHERE codigo=?", (campos["financiamento"],)).fetchone():
             raise HTTPException(422, "Fonte de financiamento inexistente. Veja Administração, Tabelas de referência.")
+        if "centro_receita" in campos:
+            cr = (campos["centro_receita"] or "").strip()
+            campos["centro_receita"] = cr
+            if cr:
+                alvo = c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (cr,)).fetchone()
+                atual_ = c.execute("SELECT tipo, financiamento FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
+                if not alvo or alvo["tipo"] != "receita":
+                    raise HTTPException(422, "Escolha um centro de receita: um orçamento do tipo receita.")
+                if atual_["tipo"] != "despesa" or cr == orcamento:
+                    raise HTTPException(422, "Só um centro de custo (despesa) aponta para um centro de receita.")
+                if not atual_["financiamento"] and "financiamento" not in campos:
+                    campos["financiamento"] = "receita"      # custo apontado para um centro de receita: fonte padrão é receita própria
         if "recurso_1q" in campos:
             campos["recurso_1q"] = int(campos["recurso_1q"])
         if "asrnp_conv" in campos:
@@ -554,7 +569,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
                    | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
-                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "recurso_situacao": p["recurso_situacao"], "recurso_1q": bool(p["recurso_1q"]), "alertas": _alertas(c, p), "grupo_diretriz": GRUPO_DIRETRIZ.get(p["finalidade"], ""), "asrnp_conv": bool(p["asrnp_conv"]), "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
+                      "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "recurso_situacao": p["recurso_situacao"], "recurso_1q": bool(p["recurso_1q"]), "alertas": _alertas(c, p), "grupo_diretriz": GRUPO_DIRETRIZ.get(p["finalidade"], ""), "asrnp_conv": bool(p["asrnp_conv"]), "centro_receita": p["centro_receita"], "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
                    | {"original_2026": _arred(p["original_2026"])},

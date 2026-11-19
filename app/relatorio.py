@@ -152,7 +152,7 @@ def coletar(c: sqlite3.Connection, u: dict) -> dict:
     ids = [p["orcamento"] for p in projetos]
     d = {"extintos": extintos,
         "resumo": api.resumo(u, c), "projetos": projetos, "receitas": api_receitas.listar(u, c), "viagens": api_viagens.listar(u, c),
-        "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "exposicao": api_exposicao.listar(u, c), "financiamento": financiamento.quadro(c, ids), "cobertura": api_entregas.cobertura(u, c),
+        "eventos": api_eventos.listar(u, c), "headcount": api_headcount.listar(u, c), "exposicao": api_exposicao.listar(u, c), "financiamento": financiamento.quadro(c, ids), "centros": api_receitas.quadro_centros(c, set(ids), u["perfil"] == "admin"), "cobertura": api_entregas.cobertura(u, c),
         "gerencias": api_planejamento._por_gerencia(c), "situacao": api_planejamento.resumir(c, ids),
         "premissas": [dict(r) for r in c.execute("SELECT chave, valor, descricao FROM premissas ORDER BY chave")],
         "catalogo": estrategia.arvore(c), "detalhe": {}, "entregas": {}, "vinculos": {},
@@ -308,6 +308,14 @@ def _parte1(doc: Doc, d: dict) -> None:
                 doc.tabela(["Projeto", "Gerente", "Despesa 2027"],
                            [[f"{x['orcamento']} | {corta(x['projeto'], 52)}", corta(x["gerente"], 24), n0(x["valor"])] for x in gr[k]["projetos"][:20]],
                            [5000, 2600, 1400], legenda=tit + ", em R$." + (" Os 20 maiores." if gr[k]["n"] > 20 else ""))
+        cen = d["centros"]
+        if cen["centros"] or cen["sem_centro"]:
+            doc.p("Cada centro de custo aponta para um centro de receita; projetos de fomento ficam de fora, porque a conta de fomento é única para a RNP."
+                  + (f" **{len(cen['sem_centro'])} centro(s) de custo** ({mi(cen['totais']['sem_centro'])}) ainda não apontam para um centro de receita." if cen["sem_centro"] else ""))
+        if cen["centros"]:
+            doc.tabela(["Centro de receita", "Receita 2027", "Custos vinculados", "Resultado", "Cobertura"],
+                       [[f"{x['orcamento']} | {corta(x['descricao'], 40)}", n0(x["receita"]), n0(x["custo"]), sinal(x["resultado"]), "-" if x["cobertura"] is None else pc(x["cobertura"])] for x in cen["centros"]],
+                       [3600, 1400, 1400, 1400, 1000], legenda="Centros de receita e os custos dos centros de custo ligados a eles, em R$.")
     else:
         doc.p("Nenhum projeto com despesa em 2027 até agora.")
 

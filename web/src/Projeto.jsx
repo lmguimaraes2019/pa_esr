@@ -334,6 +334,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
       </div>
       <ExtincaoProjeto p={p} onSalvo={carregar} />
       <FaixaMigracao p={p} irProjeto={irProjeto} />
+      {p.tipo === "despesa" && !p.extinto && <CentroReceita key={p.centro_receita || "-"} p={p} onSalvo={carregar} />}
       {p.tipo === "despesa" && !p.extinto && <FonteFinanciamento key={p.financiamento_informado + p.financiamento_obs} p={p} onSalvo={carregar} />}
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
       {!p.replicado_para && <div className="acoes-proj"><ReplicarProjeto p={p} irProjeto={irProjeto} /></div>}
@@ -468,6 +469,37 @@ function DescricaoProjeto({ orcamento, atual, onSalvo, campo = "detalhe", rotulo
           placeholder={dica} /></label>
       <div className="acoes"><button className="primario" disabled={v.trim() === (atual || "").trim()} onClick={salvar}>Salvar</button>
         <small className="mudo">{v.length}/3000</small>{msg && <span className="ok">{msg}</span>}{erro && <span className="erro">{erro}</span>}</div>
+    </section>
+  );
+}
+
+
+/** Cada centro de custo aponta para um centro de receita (orçamento do tipo receita). Fomento não precisa: a conta é única na RNP. */
+function CentroReceita({ p, onSalvo }) {
+  const [opcoes, setOpcoes] = useState([]);
+  const [valor, setValor] = useState(p.centro_receita || "");
+  const [erro, setErro] = useState("");
+  useEffect(() => { api("/receitas/centros/opcoes").then(setOpcoes).catch(() => {}); }, []);
+  const fomento = /^(fomento|fndct)$/i.test(p.origem || "");
+  const pendente = !fomento && !p.centro_receita;
+  const salvar = async () => { setErro(""); try { await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: { centro_receita: valor } }); onSalvo(); } catch (e) { setErro(e.message); } };
+  return (
+    <section className={"cartao fonte-fin " + (pendente ? "pend" : "")}>
+      <h3>Centro de receita {pendente && <span className="tag aviso">pendente</span>}</h3>
+      {fomento
+        ? <p className="mudo">Projeto de fomento: a conta de fomento é única para a RNP, então não precisa apontar para um centro de receita.</p>
+        : <>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label>A qual centro de receita este centro de custo está ligado
+              <select value={valor} onChange={(e) => setValor(e.target.value)}>
+                <option value="">Selecione…</option>
+                {opcoes.map((o) => <option key={o.orcamento} value={o.orcamento}>{o.orcamento} | {o.descricao}</option>)}
+              </select></label>
+            <button className="destaque" disabled={valor === (p.centro_receita || "")} onClick={salvar}>Salvar centro de receita</button>
+          </div>
+          {opcoes.length === 0 && <p className="mudo">Ainda não há centro de receita cadastrado. Crie um orçamento do tipo receita em Despesas, "+ Novo orçamento", e ele aparece aqui.</p>}
+          {erro && <p className="erro">{erro}</p>}
+        </>}
     </section>
   );
 }

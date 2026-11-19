@@ -1202,3 +1202,30 @@ def test_execucao_detalhada_e_saldo_sem_empenhado(client):
         if x["aprovado"] > 0:
             assert abs(x["saldo"] - (x["aprovado"] - x["realizado"])) < 0.02
             break
+
+
+def test_centro_de_custo_aponta_para_centro_de_receita(client):
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    rec = next((p for p in ps if p["tipo"] == "receita"), None)
+    if rec is None:
+        r = client.post("/api/projetos", json={"descricao": "CR teste", "origem": "RA", "gerente": ps[0]["gerente"], "tipo": "receita", "finalidade": "caixa"})
+        assert r.status_code == 201, r.text
+        rec = r.json()
+    cr = rec["orcamento"]
+    ops = client.get("/api/receitas/centros/opcoes").json()
+    assert any(x["orcamento"] == cr for x in ops)
+    despesa = next(p for p in ps if p["tipo"] == "despesa" and p["total_2027"] > 0 and p["origem"].lower() not in ("fomento", "fndct") and "Centro de receita" in p["pendencias"])
+    assert client.patch(f"/api/projetos/{despesa['orcamento']}", json={"centro_receita": despesa["orcamento"]}).status_code == 422
+    assert client.patch(f"/api/projetos/{despesa['orcamento']}", json={"centro_receita": cr}).status_code == 200
+    d = client.get(f"/api/projetos/{despesa['orcamento']}").json()["projeto"]
+    assert d["centro_receita"] == cr
+    q = next(p for p in client.get("/api/projetos").json() if p["orcamento"] == despesa["orcamento"])
+    assert "Centro de receita" not in q["pendencias"]
+    cen = client.get("/api/receitas/centros").json()
+    c1 = next(x for x in cen["centros"] if x["orcamento"] == cr)
+    assert any(v["orcamento"] == despesa["orcamento"] for v in c1["vinculados"]) and c1["custo"] >= despesa["total_2027"] - 0.01
+    assert client.patch(f"/api/projetos/{cr}", json={"centro_receita": cr}).status_code == 422      # receita não aponta para receita
+    fom = next((p for p in ps if p["origem"].lower() == "fomento" and p["tipo"] == "despesa" and p["total_2027"] > 0), None)
+    if fom:
+        assert "Centro de receita" not in fom["pendencias"]

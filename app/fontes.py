@@ -48,6 +48,11 @@ def lista_fontes(c) -> list[dict]:
 ORDEM = ["fomento", "intercompany", "receita", "tbd", ""]
 
 
+def eh_fomento(origem: str) -> bool:
+    """Fomento tem conta única na RNP: não exige centro de receita."""
+    return (origem or "").strip().lower() in FOMENTO_ORIGENS
+
+
 def efetivo(origem: str, financiamento: str) -> str:
     """Fonte considerada para o projeto: a informada pelo gestor ou, se não houver, fomento quando a origem é de fomento."""
     if financiamento:

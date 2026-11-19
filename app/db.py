@@ -419,6 +419,8 @@ def init_db() -> None:
         for col, ddl in (("recurso_situacao", "TEXT NOT NULL DEFAULT ''"), ("recurso_1q", "INTEGER NOT NULL DEFAULT 0")):      # Associação: contrato assinado ou caixa; recebimento no 1º quadrimestre
             if col not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:
                 c.execute(f"ALTER TABLE projetos ADD COLUMN {col} {ddl}")
+        if "centro_receita" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: centro de custo aponta para um centro de receita
+            c.execute("ALTER TABLE projetos ADD COLUMN centro_receita TEXT NOT NULL DEFAULT ''")
         if "asrnp_conv" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: Associação CONV (NF-e/fatura) x AsRNP (contrato)
             c.execute("ALTER TABLE projetos ADD COLUMN asrnp_conv INTEGER NOT NULL DEFAULT 0")
         if "memoria" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: memória de cálculo obrigatória (Diretrizes 2027)

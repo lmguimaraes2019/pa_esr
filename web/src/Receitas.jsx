@@ -210,6 +210,37 @@ function PorProjeto({ dados, irProjeto }) {
   );
 }
 
+function Centros({ irProjeto }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { api("/receitas/centros").then(setD); }, []);
+  if (!d) return <p>Carregando…</p>;
+  return (
+    <>
+      <div className="nota">Cada centro de custo aponta para um centro de receita (um orçamento do tipo receita). Aqui você acompanha, para cada centro de receita, a receita prevista em 2027 contra os custos dos centros que dependem dele. Projetos de fomento ficam de fora, porque a conta de fomento é única para a RNP. O vínculo é feito na página de cada projeto.</div>
+      {d.centros.length === 0 && <p className="mudo">Nenhum centro de receita com custos vinculados. Abra um centro de custo e escolha o centro de receita dele.</p>}
+      {d.centros.map((c) => (
+        <section key={c.orcamento} className="cartao">
+          <h3><button className="link" onClick={() => irProjeto(c.orcamento)}>{c.orcamento}</button> {c.descricao} <span className="tag">{c.origem}</span></h3>
+          <div className="kpis">
+            <Kpi rotulo="Receita 2027" valor={"R$ " + fmtN(c.receita)} tom="f27" />
+            <Kpi rotulo="Custos vinculados" valor={"R$ " + fmtN(c.custo)} tom="f27" sub={`${c.vinculados.length} centro(s) de custo`} />
+            <Kpi rotulo="Resultado" valor={"R$ " + fmtN(c.resultado)} tom="f27" sub={c.resultado < 0 ? "custos acima da receita" : "receita cobre os custos"} />
+            <Kpi rotulo="Cobertura" valor={c.cobertura === null ? "-" : c.cobertura.toFixed(0) + "%"} tom="f27" sub="receita sobre custos" />
+          </div>
+          {c.vinculados.length > 0 && <div className="rolagem"><table className="tab"><thead><tr><th>Centro de custo</th><th>Gerente</th><th className="n">Custo 2027</th></tr></thead>
+            <tbody>{c.vinculados.map((v) => <tr key={v.orcamento}><td><button className="link" onClick={() => irProjeto(v.orcamento)}>{v.orcamento}</button> {v.descricao}</td><td>{v.gerente}</td><td className="n">{fmtN(v.custo)}</td></tr>)}
+              {c.outros > 0.5 && <tr><td colSpan={2} className="mudo">Outros centros de custo, de outros gestores</td><td className="n">{fmtN(c.outros)}</td></tr>}</tbody></table></div>}
+        </section>))}
+      {d.sem_centro.length > 0 && (
+        <section className="cartao pend"><h3>Centros de custo sem centro de receita <span className="tag aviso">{d.sem_centro.length}</span></h3>
+          <p className="mudo">Estes projetos não são de fomento e ainda não apontam para um centro de receita. Total de custo sem vínculo: R$ {fmtN(d.totais.sem_centro)}.</p>
+          <div className="rolagem"><table className="tab"><thead><tr><th>Centro de custo</th><th>Gerente</th><th>Origem</th><th className="n">Custo 2027</th></tr></thead>
+            <tbody>{d.sem_centro.map((v) => <tr key={v.orcamento}><td><button className="link" onClick={() => irProjeto(v.orcamento)}>{v.orcamento}</button> {v.descricao}</td><td>{v.gerente}</td><td>{v.origem}</td><td className="n">{fmtN(v.custo)}</td></tr>)}</tbody></table></div>
+        </section>)}
+    </>
+  );
+}
+
 export default function Receitas({ irProjeto }) {
   const [dados, setDados] = useState(null);
   const [aba, setAba] = useState("lancamentos");
@@ -237,10 +268,11 @@ export default function Receitas({ irProjeto }) {
             <span style={{ height: (m.receita / max) * 100 + "%" }} /><span style={{ height: (m.despesa / max) * 100 + "%", background: "var(--azul)" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
       </section>
       {erro && <p className="erro" role="alert">{erro}</p>}
-      <Passos ativo={aba} onMudar={setAba} itens={[["lancamentos", "Lançamentos de receita"], ["origem", "Resultado por origem"], ["projeto", "Resultado por projeto"]]} />
+      <Passos ativo={aba} onMudar={setAba} itens={[["lancamentos", "Lançamentos de receita"], ["origem", "Resultado por origem"], ["projeto", "Resultado por projeto"], ["centros", "Centros de receita e custo"]]} />
       {aba === "lancamentos" && <Lancamentos dados={dados} recarregar={carregar} setErro={setErro} />}
       {aba === "origem" && <PorOrigem dados={dados} />}
       {aba === "projeto" && <PorProjeto dados={dados} irProjeto={irProjeto} />}
+      {aba === "centros" && <Centros irProjeto={irProjeto} />}
     </>
   );
 }
