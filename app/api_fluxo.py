@@ -36,6 +36,17 @@ def fluxo(c: sqlite3.Connection, ids: list[str]) -> dict:
         elif not p["contingenciado"]:
             g = _gerencia_do(p["gerente"], ger_de) or "Sem gerência"
             custo[(o, g)] = custo.get((o, g), 0.0) + r["t"]
+    base: dict[str, float] = {}                  # aprovado 2026 por gerência (comparação)
+    for r in c.execute(f"SELECT orcamento, SUM({SOMA}) AS t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) GROUP BY orcamento", (config.CICLO_BASE, *ids)):
+        p = proj.get(r["orcamento"])
+        if p and p["tipo"] != "receita" and r["t"]:
+            g = _gerencia_do(p["gerente"], ger_de) or "Sem gerência"
+            base[g] = base.get(g, 0.0) + r["t"]
+    por_ger: dict[str, float] = {}
+    for (o, g), v in custo.items():
+        por_ger[g] = por_ger.get(g, 0.0) + v
+    gerencias = sorted(({"gerencia": g, "custo": _arred(por_ger.get(g, 0.0)), "base": _arred(base.get(g, 0.0))} for g in set(por_ger) | set(base)),
+                       key=lambda x: -max(x["custo"], x["base"]))
     origens = sorted({o for _, o in rec} | {o for o, _ in custo})
     entra = {o: sum(v for (f, oo), v in rec.items() if oo == o) for o in origens}
     sai = {o: sum(v for (oo, g), v in custo.items() if oo == o) for o in origens}
@@ -48,7 +59,7 @@ def fluxo(c: sqlite3.Connection, ids: list[str]) -> dict:
         elif falta < -0.004:
             links_out.append({"de": o, "para": "Receita acima do custo", "valor": _arred(-falta)})
     quadro = [{"origem": o, "receita": _arred(entra[o]), "custo": _arred(sai[o]), "saldo": _arred(entra[o] - sai[o])} for o in origens]
-    return {"entra": links_in, "sai": links_out, "origens": quadro,
+    return {"gerencias": gerencias, "entra": links_in, "sai": links_out, "origens": quadro,
             "total_receita": _arred(sum(entra.values())), "total_custo": _arred(sum(sai.values()))}
 
 

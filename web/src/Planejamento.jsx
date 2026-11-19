@@ -32,34 +32,9 @@ export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
     setErro("");
     try { await api("/planejamento/concluir", { method: "POST", body: { concluido, obs } }); recarregar(); } catch (x) { setErro(x.message); }
   };
-  const itens = [
-    ["projetos", "Despesas", e.despesas.ajustadas ? "ok" : "neutro", e.despesas.ajustadas ? "em dia" : "sem ajustes",
-      `${e.despesas.projetos} projeto(s), ${e.despesas.projetos - e.despesas.sem_ajuste} com ajustes, novas ou excluídas`, e.despesas.plano, "Abrir despesas"],
-    ["receitas", "Receitas", e.receitas.n ? "ok" : "neutro", e.receitas.n ? "em dia" : "opcional",
-      `${e.receitas.n} receita(s) lançada(s)`, e.receitas.total, "Abrir receitas"],
-    ["viagens", "Viagens", e.viagens.pendentes ? "pend" : "ok", e.viagens.pendentes ? `${e.viagens.pendentes} a ajustar` : "em dia",
-      `${e.viagens.n} viagem(ns) planejada(s)`, e.viagens.total, e.viagens.pendentes ? "Resolver" : "Abrir viagens"],
-    ["eventos", "Eventos", e.eventos.pendentes ? "pend" : "ok", e.eventos.pendentes ? `${e.eventos.pendentes} a ajustar` : e.eventos.n ? "em dia" : "nenhum",
-      `${e.eventos.n} evento(s)`, e.eventos.total, e.eventos.pendentes ? "Completar" : "Abrir eventos"],
-    ["headcount", "Headcount", e.headcount.pendentes ? "pend" : "ok", e.headcount.pendentes ? `${e.headcount.pendentes} a ajustar` : e.headcount.n ? "em dia" : "nenhuma",
-      `${e.headcount.n} posição(ões) nova(s), custo em 2027`, e.headcount.total, e.headcount.pendentes ? "Completar" : "Abrir headcount"],
-    ["entregas", "Entregas e conexão estratégica", e.entregas.pendentes ? "pend" : "ok", e.entregas.pendentes ? `${e.entregas.pendentes} projeto(s) a ajustar` : "em dia",
-      `${e.entregas.n} entrega(s) nos projetos${e.entregas.sem_conexao ? `, ${e.entregas.sem_conexao} sem KPI nem conexão com PO e CG` : ""}`, null,
-      e.entregas.pendentes ? "Informar entregas" : "Revisar nos projetos"],
-    ["financiamento", "Fonte de financiamento", e.financiamento.pendentes ? "pend" : "ok", e.financiamento.pendentes ? `${e.financiamento.pendentes} projeto(s) a ajustar` : "em dia",
-      `${e.financiamento.intercompany} projeto(s) custeado(s) por intercompany${e.financiamento.tbd ? `, ${e.financiamento.tbd} a definir (TBD)` : ""}`, null,
-      e.financiamento.pendentes ? "Indicar fonte" : "Revisar nos projetos"],
-  ];
-  const feitas = itens.filter((i) => i[2] !== "pend").length;
   return (
     <section className="cartao meu-plano">
-      <div className="cab">
-        <div><h3 style={{ margin: 0 }}>Etapas do plano 2027</h3>
-          <p className="mudo">Percorra as etapas em ordem. Os valores de Viagens, Eventos e Headcount entram sozinhos no orçamento de cada projeto. As entregas são informadas dentro de cada projeto, na aba "Entregas 2027".</p></div>
-        <div className="progresso" title={`${feitas} de ${itens.length} etapas sem pendência`}><span style={{ width: (feitas / itens.length) * 100 + "%" }} /><small>{feitas} de {itens.length} em dia</small></div>
-      </div>
-      <div className="legenda-etapas"><span><i style={{ background: "#D96A00" }} />Precisa de ajuste</span><span><i style={{ background: "#1E8E3E" }} />Em dia</span></div>
-      <ol className="etapas-lista">{itens.map(([k, t, tom, est, txt, val, ac], i) => <Etapa key={k} n={i + 1} titulo={t} tom={tom} estado={est} texto={txt} valor={val} acao={ac} onAcao={() => (k === "entregas" ? ir("projetos", null, e.entregas.pendentes > 0 ? "entregas" : false) : k === "financiamento" ? ir("projetos", null, e.financiamento.pendentes > 0 ? "financiamento" : false) : ir(k))} />)}</ol>
+      <h3 style={{ margin: "0 0 6px" }}>Status do planejamento 2027</h3>
       <div className="concluir">
         {plano.concluido ? (
           <><p><Estado tom="ok">concluído</Estado> Você marcou o planejamento como concluído em {quando(plano.concluido.concluido_em)}.{plano.concluido.obs && ` Observação: ${plano.concluido.obs}`}</p>

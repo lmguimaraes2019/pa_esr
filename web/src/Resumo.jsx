@@ -3,7 +3,7 @@ import { api, fmt, mi } from "./api.js";
 import { Kpi, Delta, pct, Selo } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 import OutrosProjetos from "./OutrosProjetos.jsx";
-import FluxoRecursos from "./FluxoRecursos.jsx";
+import useFluxo, { OrigemDosRecursos, CustoPorGerencia } from "./FluxoRecursos.jsx";
 
 function Quadro({ itens, rotulo, aninhado }) {
   const [fechado, setFechado] = useState({});
@@ -91,6 +91,7 @@ function EstrategiaFinanciamento() {
 export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   const [r, setR] = useState(null);
   const [erro, setErro] = useState("");
+  const fluxo = useFluxo();
   useEffect(() => { api("/resumo").then(setR).catch((e) => setErro(e.message)); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!r) return <p>Carregando…</p>;
@@ -103,33 +104,19 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
     <>
       <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
       <MeuPlanejamento plano={plano} recarregar={recarregarPlano} admin={admin} ir={ir} />
-      <FluxoRecursos />
-      <h3 className="secao">Visão financeira</h3>
-      <div className="duas">
-        <section className="lado passado">
-          <h3><Selo ano={2026} /> O que foi aprovado e executado</h3>
-          <p className="mudo">Base de comparação. Não é alterada.</p>
-          <div className="kpis">
-            <Kpi rotulo="Orçamento aprovado" valor={mi(r.total_base)} />
-            <Kpi rotulo="Realizado" valor={mi(r.total_realizado)} />
-            <Kpi rotulo="Empenhado" valor={mi(r.total_empenhado)} />
-            <Kpi rotulo="Executado / aprovado" valor={pct(r.total_executado, r.total_base)} sub="realizado + empenhado" />
-          </div>
-        </section>
-        <section className="lado futuro">
-          <h3><Selo ano={2027} /> O que você está planejando</h3>
-          <p className="mudo">Nasce como cópia do aprovado e recebe os ajustes.</p>
-          <div className="kpis">
-            <Kpi rotulo="Plano 2027" valor={mi(r.total_plano)} />
-            {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} />}
-            <Kpi rotulo="Diferença para 2026" valor={fmt(delta)} sub={r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado" : ""} />
-            <Kpi rotulo="Receitas 2027" valor={mi(receitas)} sub={plano ? `${plano.etapas.receitas.n} lançamento(s)` : ""} />
-            <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receitas menos despesas" tom={resultado < 0 ? "rneg" : "rpos"} />
-            <Kpi rotulo="Linhas ajustadas" valor={s.ajustada + s.nova} sub={`${s.mantida} mantidas de 2026`} />
-            <Kpi rotulo="Vindas de viagens, eventos e headcount" valor={s.viagens} />
-          </div>
-        </section>
+      <h3 className="secao">Visão executiva do orçamento</h3>
+      <div className="kpis">
+        <Kpi rotulo="Despesa planejada 2027" valor={mi(r.total_plano)} tom="f27" sub={<>{r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado de 2026" : ""}</>} />
+        <Kpi rotulo="Receita prevista 2027" valor={mi(receitas)} tom="f27" sub={plano ? `${plano.etapas.receitas.n} lançamento(s)` : ""} />
+        <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receita menos despesa" tom={resultado < 0 ? "rneg" : "rpos"} />
+        {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} tom={r.total_plano <= r.teto ? "rpos" : "rneg"} />}
+        <Kpi rotulo="Aprovado 2026" valor={mi(r.total_base)} tom="f26" sub={`${mi(r.total_realizado)} realizados (${pct(r.total_realizado, r.total_base)})`} />
       </div>
+      {fluxo && fluxo.origens.length > 0 && <><OrigemDosRecursos d={fluxo} /><CustoPorGerencia d={fluxo} /></>}
+      <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>
+        <div className="meses">{r.mensal_plano.map((m) => (
+          <div key={m.mes} title={fmt(m.valor)}><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
+      </section>
       <Cobertura admin={admin} />
       <EstrategiaFinanciamento />
       {r.extintos && r.extintos.n > 0 && (
@@ -140,12 +127,12 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
             <tbody>{r.extintos.lista.map((x) => <tr key={x.orcamento}><td>{x.orcamento} | {x.descricao}</td><td>{x.gerente}</td><td className="n">{fmt(x.aprovado_2026)}</td><td className="n">{fmt(x.executado_2026)}</td><td className="n">{fmt(0)}</td></tr>)}</tbody>
             <tfoot><tr><td colSpan="2">Total</td><td className="n">{fmt(r.extintos.aprovado_2026)}</td><td className="n">{fmt(r.extintos.executado_2026)}</td><td className="n">{fmt(0)}</td></tr></tfoot></table>
         </section>)}
-      <section className="cartao"><h3>Por origem de recurso e finalidade</h3><Quadro itens={r.por_origem} rotulo="Origem / finalidade" aninhado /></section>
-      <section className="cartao"><h3>Por grupo de despesa</h3><Quadro itens={r.por_grupo} rotulo="Grupo" /></section>
-      <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>
-        <div className="meses">{r.mensal_plano.map((m) => (
-          <div key={m.mes} title={fmt(m.valor)}><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
-      </section>
+      <details className="cartao" style={{ padding: "12px 16px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Detalhamento: 2026 e 2027 por origem, finalidade e grupo de despesa</summary>
+        <h4>Por origem de recurso e finalidade</h4><Quadro itens={r.por_origem} rotulo="Origem / finalidade" aninhado />
+        <h4>Por grupo de despesa</h4><Quadro itens={r.por_grupo} rotulo="Grupo" />
+        <p className="mudo">{s.ajustada + s.nova} linhas ajustadas ou novas, {s.mantida} mantidas de 2026, {s.viagens} vindas de viagens, eventos e headcount.</p>
+      </details>
       <OutrosProjetos />
     </>
   );
