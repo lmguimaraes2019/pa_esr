@@ -5,6 +5,31 @@ import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira } from "./ui.jsx
 const FONTES_SUGERIDAS = ["Contrato de gestão", "Parcerias", "Growth", "Fomento", "Turmas abertas", "Projetos especiais", "Outras receitas"];
 const vazio = { id: null, tipo: "receita", orcamento: "", fonte: "", descricao: "", obs: "", meses: Array(12).fill(""), ano: 2027, cliente: "", origem_cliente: "", gestor_cliente: "" };
 
+function AvisoCusto({ dados, orcamento, onTrocar }) {
+  const p = dados.projetos.find((x) => x.orcamento === orcamento);
+  if (!p || p.tipo === "receita") return null;
+  const c = p.centro_receita ? dados.projetos.find((x) => x.orcamento === p.centro_receita) : null;
+  return (
+    <div className="nota aviso" role="note">
+      <strong>{p.orcamento} é um projeto de custo.</strong>{" "}
+      {c ? <>A receita deve ficar no centro de receita <strong>{c.orcamento} | {c.descricao}</strong>, para o custo apontar para ela.
+          {onTrocar && <> <button type="button" onClick={() => onTrocar(c.orcamento)}>Lançar no centro de receita</button></>}</>
+        : p.centro_receita ? <>Ele aponta para o centro de receita <strong>{p.centro_receita}{p.centro_nome ? " | " + p.centro_nome : ""}</strong>, que está sob outro gestor: peça a ele para lançar a receita lá.</>
+        : <>Ele ainda não aponta para um centro de receita. Defina o centro na página do projeto (campo "Centro de receita"). Para projetos de fomento isso não é necessário, pois a conta de fomento é única na RNP.</>}
+    </div>);
+}
+
+function SeletorProjeto({ dados, valor, onChange }) {
+  const rec = dados.projetos.filter((p) => p.tipo === "receita"), cus = dados.projetos.filter((p) => p.tipo !== "receita");
+  const op = (p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>;
+  return (
+    <select value={valor} onChange={(e) => onChange(e.target.value)} required>
+      <option value="">Selecione…</option>
+      {rec.length > 0 && <optgroup label="Centros de receita (recomendado)">{rec.map(op)}</optgroup>}
+      <optgroup label="Projetos de custo">{cus.map(op)}</optgroup>
+    </select>);
+}
+
 function Formulario({ inicial, dados, onSalvar, onFechar }) {
   const [f, setF] = useState({ ...inicial, meses: inicial.meses.map((v) => (v ? String(v).replace(".", ",") : "")), valor: inicial.id && inicial.total ? String(inicial.total).replace(".", ",") : "" });
   const inter = f.tipo === "intercompany";
@@ -74,9 +99,9 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
           <div className="acoes"><button className="primario">Salvar transferência</button><button type="button" onClick={onFechar}>Cancelar</button></div>
         </>
       ) : (<>
+      <AvisoCusto dados={dados} orcamento={f.orcamento} onTrocar={(o) => setF({ ...f, orcamento: o })} />
       <div className="grade">
-        <label>Projeto<select value={f.orcamento} onChange={(e) => setF({ ...f, orcamento: e.target.value })} required>
-          <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
+        <label>Centro de receita<SeletorProjeto dados={dados} valor={f.orcamento} onChange={(v) => setF({ ...f, orcamento: v })} /></label>
         <label>Fonte da receita<input list="fontes-receita" value={f.fonte} onChange={(e) => setF({ ...f, fonte: e.target.value })} required /></label>
         <datalist id="fontes-receita">{fontes.map((x) => <option key={x} value={x} />)}</datalist>
         <label>Descrição<input value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} placeholder="ex.: turmas AWS, repasse trimestral" /></label>
@@ -107,6 +132,11 @@ function Lancamentos({ dados, recarregar, setErro }) {
   const excluir = async (l) => {
     if (!window.confirm(`Excluir a receita "${l.fonte}" do projeto ${l.orcamento} (${fmt(l.total)})?`)) return;
     try { setErro(""); await api(`/receitas/${l.id}`, { method: "DELETE" }); recarregar(); } catch (e) { setErro(e.message); }
+  };
+  const custoDe = (l) => { const p = dados.projetos.find((x) => x.orcamento === l.orcamento); return p && p.tipo !== "receita" ? p : null; };
+  const moverCentro = async (l, centro) => {
+    if (!window.confirm(`Mover a receita "${l.fonte}" do projeto de custo ${l.orcamento} para o centro de receita ${centro}?`)) return;
+    await trocar(l, { orcamento: centro });
   };
   const abrir = (f) => { setForm(f); setTimeout(() => document.getElementById("form-receita")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => {
@@ -140,7 +170,7 @@ function Lancamentos({ dados, recarregar, setErro }) {
                     <BotaoIcone icone={<Lapis />} dica="Editar a receita inteira" onClick={() => abrir(l)} />
                     <BotaoIcone icone={<Lixeira />} tom="perigo" dica="Excluir esta receita" onClick={() => excluir(l)} /></div></td>
                   <td className="col-conta" title={l.atualizado_por ? `Última edição: ${l.atualizado_por}` : ""}>
-                    <span className="mudo">{l.orcamento} | {l.projeto}</span><br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
+                    <span className="mudo">{l.orcamento} | {l.projeto}</span>{custoDe(l) && <> <span className="tag aviso" title="Receita lançada em projeto de custo">projeto de custo</span>{custoDe(l).centro_acessivel && <> <button type="button" className="link" onClick={() => moverCentro(l, custoDe(l).centro_receita)}>mover para {custoDe(l).centro_receita}</button></>}</>}<br /><strong>{l.fonte}</strong><span className="tag">{l.origem}</span>
                     {l.descricao && <><br /><span className="mudo">{l.descricao}</span></>}</td>
                   {l.meses.map((v, i) => <td key={i} className="n"><Celula valor={v} onSalvar={(n) => { const m = [...l.meses]; m[i] = n; trocar(l, { meses: m }); }} /></td>)}
                   <td className="n"><strong>{fmtN(l.total)}</strong></td>

@@ -35,14 +35,22 @@ function Quadro({ itens, rotulo, aninhado }) {
 function Cobertura({ admin }) {
   const [c, setC] = useState(null);
   const [aberto, setAberto] = useState(null);
+  const [exp, setExp] = useState(new Set());      // diretrizes e REs abertos: tudo começa recolhido
+  const alterna = (id) => setExp((x) => { const n = new Set(x); n.has(id) ? n.delete(id) : n.add(id); return n; });
   useEffect(() => { api("/estrategia/cobertura").then(setC).catch(() => setC(false)); }, []);
   if (!c) return null;
   const rot = (i) => (/^\d/.test(i.codigo) ? ({ diretriz: "Diretriz", re: "RE", po: "RO", cg: "CG" }[i.tipo] + " " + i.codigo) : i.codigo);
   const nivel = { diretriz: 0, re: 1, po: 2, cg: 0 };
-  const linha = (i) => (
+  const filhos = {};      // itens da hierarquia vêm em ordem: diretriz, seus REs, os ROs de cada RE
+  { let dir = null, re = null; c.itens.filter((x) => x.tipo !== "cg").forEach((x) => {
+    if (x.tipo === "diretriz") { dir = x.id; re = null; } else if (x.tipo === "re") { x.pai = dir; re = x.id; } else x.pai = re || dir;
+    if (x.pai != null) (filhos[x.pai] = filhos[x.pai] || []).push(x.id); }); }
+  const visivel = (i) => i.tipo === "cg" || i.tipo === "diretriz" || (i.pai != null && exp.has(i.pai) && (i.tipo === "re" || visivel(c.itens.find((x) => x.id === i.pai))));
+  const tem = (i) => (filhos[i.id] || []).length > 0;
+  const linha = (i) => !visivel(i) ? null : (
     <React.Fragment key={i.id}>
-      <tr className={"cob n" + nivel[i.tipo] + " " + i.tipo + (i.projetos ? "" : " sem-cobertura")} onClick={() => i.projetos && setAberto(aberto === i.id ? null : i.id)} style={{ cursor: i.projetos ? "pointer" : "default" }}>
-        <td><b>{rot(i)}</b> {i.descricao}{i.tipo === "po" && i.responsavel && <span className="chip">{i.responsavel}</span>}{i.tipo === "po" && i.conclusao && <span className="chip mes">{i.conclusao}</span>}</td>
+      <tr className={"cob n" + nivel[i.tipo] + " " + i.tipo + (i.projetos ? "" : " sem-cobertura")} onClick={() => tem(i) ? alterna(i.id) : i.projetos && setAberto(aberto === i.id ? null : i.id)} style={{ cursor: tem(i) || i.projetos ? "pointer" : "default" }}>
+        <td>{tem(i) && <span className="mudo" style={{ marginRight: 6 }}>{exp.has(i.id) ? "▾" : "▸"}</span>}<b>{rot(i)}</b> {i.descricao}{tem(i) && <span className="mudo"> ({filhos[i.id].length} {i.tipo === "diretriz" ? "itens" : "ROs"})</span>}{tem(i) && i.projetos > 0 && <button type="button" className="link" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); setAberto(aberto === i.id ? null : i.id); }}>{aberto === i.id ? "ocultar projetos" : "ver projetos"}</button>}{i.tipo === "po" && i.responsavel && <span className="chip">{i.responsavel}</span>}{i.tipo === "po" && i.conclusao && <span className="chip mes">{i.conclusao}</span>}</td>
         <td className="n">{i.entregas || <span className="mudo">0</span>}</td><td className="n">{i.projetos || <strong className="aviso-txt">nenhum</strong>}</td><td className="n">{i.projetos ? fmt(i.plano_projetos) : <span className="mudo">-</span>}</td>
       </tr>
       {aberto === i.id && <tr className="cob-det"><td colSpan={4}>{i.lista_projetos.map((p) => <span key={p.orcamento} className="chip">{p.projeto} <span className="mudo">{fmt(p.plano)}</span></span>)}</td></tr>}
@@ -50,10 +58,11 @@ function Cobertura({ admin }) {
   const hier = c.itens.filter((i) => i.tipo !== "cg"), cg = c.itens.filter((i) => i.tipo === "cg");
   return (
     <section className="cartao"><h3>Conexão estratégica</h3>
-      <p className="mudo">Do direcionador ao indicador do Contrato de Gestão: quais projetos e entregas sustentam cada item e quanto do plano 2027 está ligado a ele. Clique numa linha para ver os projetos. Um projeto pode servir a mais de um item, então os valores não se somam.</p>
-      {c.catalogo_vazio ? <p className="mudo">Cadastre os itens em Administração, Tabelas de referência, "Estratégia".</p> : (
+      <p className="mudo">Do direcionador ao indicador do Contrato de Gestão: quais projetos e entregas sustentam cada item e quanto do plano 2027 está ligado a ele. Tudo começa recolhido: clique numa diretriz para abrir os REs, e num RE para ver os ROs. Num RO (ou em "ver projetos") aparecem os projetos. Um projeto pode servir a mais de um item, então os valores não se somam.</p>
+      {c.catalogo_vazio ? <p className="mudo">Cadastre os itens em Administração, Tabelas de referência, "Estratégia".</p> : (<>
+        <div className="acoes" style={{ margin: "4px 0" }}><button type="button" onClick={() => setExp(new Set(c.itens.filter((x) => x.tipo !== "cg" && (filhos[x.id] || []).length).map((x) => x.id)))}>Expandir tudo</button><button type="button" onClick={() => { setExp(new Set()); setAberto(null); }}>Recolher tudo</button></div>
         <div className="rolagem"><table className="tab"><thead><tr><th>Item</th><th className="n">Entregas</th><th className="n">Projetos</th><th className="n">Plano 2027 dos projetos</th></tr></thead>
-          <tbody>{hier.map(linha)}{cg.length > 0 && <tr><td colSpan={4}><strong>Indicadores do Contrato de Gestão</strong></td></tr>}{cg.map(linha)}</tbody></table></div>)}
+          <tbody>{hier.map(linha)}{cg.length > 0 && <tr><td colSpan={4}><strong>Indicadores do Contrato de Gestão</strong></td></tr>}{cg.map(linha)}</tbody></table></div></>)}
       {admin && !c.catalogo_vazio && c.sem_vinculo.length > 0 && (
         <div className="nota aviso"><strong>{c.sem_vinculo.length}</strong> projeto(s) com plano 2027 de <strong>{fmt(c.plano_sem_vinculo)}</strong> sem nenhum vínculo estratégico (de {fmt(c.plano_total)} no total):{" "}
           {c.sem_vinculo.slice(0, 15).map((p) => p.projeto || p.orcamento).join("; ")}{c.sem_vinculo.length > 15 ? "…" : ""}</div>)}

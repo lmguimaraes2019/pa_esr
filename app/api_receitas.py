@@ -158,7 +158,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         f"SELECT orcamento, {', '.join(f'SUM({m}) {m}' for m in MESES)} FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) "
         "AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='receita') GROUP BY orcamento", (config.CICLO_PLANO, *ids))}
     projetos = {r["orcamento"]: r for r in c.execute(
-        f"SELECT orcamento, descricao, tipo, COALESCE(NULLIF(origem_2027, ''), origem) AS origem, origem AS origem_2026, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
+        f"SELECT orcamento, descricao, tipo, centro_receita, COALESCE(NULLIF(origem_2027, ''), origem) AS origem, origem AS origem_2026, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
 
     rec_proj: dict[str, float] = {}
     ref_proj: dict[str, float] = {}
@@ -198,7 +198,11 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     return {
         "linhas": linhas, "origens": export_xlsx._listas_template()["origens"], "gerentes": export_xlsx._listas_template()["gerentes"],
         "fontes": sorted({l["fonte"] for l in linhas}),
-        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"]} for o, p in projetos.items()],
+        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "tipo": p["tipo"],
+                      "centro_receita": p["centro_receita"] or "",
+                      "centro_nome": (c.execute("SELECT descricao FROM projetos WHERE orcamento=?", (p["centro_receita"],)).fetchone() or [""])[0] if p["centro_receita"] else "",
+                      "centro_acessivel": bool(p["centro_receita"]) and p["centro_receita"] in projetos}
+                     for o, p in projetos.items()],
         "por_projeto": por_projeto, "por_origem": sorted(por_origem.values(), key=lambda d: d["origem"]),
         "mensal": [{"mes": NOMES_MESES[i], "receita": _arred(rec_mes[i]), "despesa": _arred(despesa_mes[m])} for i, m in enumerate(MESES)],
         "totais": {"receita": tot_rec, "receita_2026": _arred(ref_total), "despesa": tot_desp,

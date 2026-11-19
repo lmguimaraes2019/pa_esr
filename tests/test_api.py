@@ -1260,3 +1260,9 @@ def test_projeto_da_diretoria_fica_em_outros_projetos(client):
     x = next(p for p in o["projetos"] if p["orcamento"] == orc)
     assert x["eventos"] > 0 and o["total"] >= x["total"] > 0
     assert client.delete(f"/api/eventos/{r.json()['id']}").status_code == 200
+
+
+def test_receitas_informam_tipo_e_centro_do_projeto(client):
+    entrar(client)
+    d = client.get("/api/receitas").json()
+    assert d["projetos"] and all({"tipo", "centro_receita", "centro_nome", "centro_acessivel"} <= set(p) for p in d["projetos"])
