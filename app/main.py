@@ -20,6 +20,7 @@ from .api_planejamento import router as planejamento_router
 from .api_referencias import router as referencias_router
 from .api_entregas import router as entregas_router
 from .api_replicar import router as replicar_router
+from .api_execucao import router as execucao_router
 from .financiamento import router as financiamento_router
 from .db import init_db
 
@@ -72,6 +73,7 @@ app.include_router(referencias_router)
 app.include_router(entregas_router)
 app.include_router(replicar_router)
 app.include_router(financiamento_router)
+app.include_router(execucao_router)
 
 if config.WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=config.WEB_DIST / "assets"), name="assets")

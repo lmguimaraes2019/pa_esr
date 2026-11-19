@@ -1188,3 +1188,17 @@ def test_evento_rnp_marcado_e_devolvido(client):
     assert r.status_code == 201 and r.json()["rnp"] is True
     eid = r.json()["id"]
     assert client.put(f"/api/eventos/{eid}", json={"orcamento": orc, "nome": "Workshop RNP", "tipo": "nac", "rnp": False}).json()["rnp"] is False
+
+
+def test_execucao_detalhada_e_saldo_sem_empenhado(client):
+    entrar(client)
+    d = client.get("/api/execucao-detalhe").json()
+    assert d["carregado"] and d["itens"]
+    cf = d["conferencia"]
+    assert abs(cf["realizado_execucao"] - cf["realizado_lancamentos"]) < 1 and abs(cf["empenhado_execucao"] - cf["empenhado_lancamentos"]) < 1
+    assert {x["tipo"] for x in d["itens"]} <= {"Realizado", "Empenhado"} and all(x["gerencia"] for x in d["itens"])
+    o = next(p for p in client.get("/api/projetos").json() if p["realizado_2026"] > 0 and p["empenhado_2026"] > 0)["orcamento"]
+    for x in client.get(f"/api/projetos/{o}").json()["passado"]:
+        if x["aprovado"] > 0:
+            assert abs(x["saldo"] - (x["aprovado"] - x["realizado"])) < 0.02
+            break

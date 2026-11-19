@@ -27,6 +27,7 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
     projetos = importers.build_projetos(df, importers.load_projetos_pa(pa))
     base = importers.build_linhas_base(df, contas_map)
     execucao = importers.build_execucao(df)
+    lancamentos = importers.build_lancamentos(df)
 
     cols = ", ".join(MESES)
     marks = ", ".join("?" for _ in MESES)
@@ -36,7 +37,7 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
         if c.execute("SELECT COUNT(*) FROM projetos").fetchone()[0]:
             if not reset:
                 raise SystemExit("O banco já tem dados. Use --reset para recarregar (apaga linhas e usuários).")
-            for t in ("auditoria", "receitas", "meta", "user_gerentes", "user_projetos", "linhas", "execucao", "projetos", "contas", "users"):
+            for t in ("auditoria", "receitas", "meta", "user_gerentes", "user_projetos", "linhas", "execucao", "lancamentos", "projetos", "contas", "users"):
                 c.execute(f"DELETE FROM {t}")
 
         c.executemany("INSERT INTO contas (codigo, descricao, grupo) VALUES (?,?,?)", contas)
@@ -60,6 +61,7 @@ def seed(protheus: Path, template: Path, pa: Path, admin_login: str = "leandro",
         c.executemany(
             "INSERT OR REPLACE INTO execucao (orcamento, edt, tarefa, conta_codigo, realizado, empenhado) "
             "VALUES (:orcamento,:edt,:tarefa,:conta_codigo,:realizado,:empenhado)", execucao)
+        importers.grava_lancamentos(c, lancamentos, {p["orcamento"] for p in projetos})
 
         # usuários: administrador + um gestor para cada gerente de projeto
         senha_admin = admin_senha or os.environ.get("ORC_ADMIN_PASSWORD") or senha_temporaria()

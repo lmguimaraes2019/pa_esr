@@ -96,13 +96,13 @@ function Passado({ d, irPlano, recarregar, setErro }) {
       <div className="kpis">
         <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
         <Kpi rotulo="Realizado" valor={fmt(t.realizado)} tom="f26" />
-        <Kpi rotulo="Empenhado" valor={fmt(t.empenhado)} tom="f26" />
-        <Kpi rotulo="Saldo não executado" valor={fmt(t.base - exec)} tom="f26" sub={`${pct(exec, t.base)} executado`} />
+        <Kpi rotulo="Empenhado (informativo)" valor={fmt(t.empenhado)} tom="f26" sub="não entra no saldo" />
+        <Kpi rotulo="Saldo não executado" valor={fmt(t.base - t.realizado)} tom="f26" sub={`${pct(t.realizado, t.base)} executado`} />
       </div>
       <div className="acoes"><label style={{ flexDirection: "row", alignItems: "center", gap: 8, textTransform: "none" }}><input type="checkbox" style={{ width: "auto" }} checked={meses} onChange={(e) => setMeses(e.target.checked)} />Mostrar o aprovado mês a mês</label></div>
       <div className="rolagem">
         <table className="tab">
-          <thead><tr><th>Conta</th><th className="n">Aprovado</th><th className="n">Realizado</th><th className="n">Empenhado</th><th className="n">Saldo</th><th className="n">% exec.</th><th className="n">Em 2027</th><th>Situação</th>
+          <thead><tr><th>Conta</th><th className="n">Aprovado</th><th className="n">Realizado</th><th className="n" title="Informativo: não entra no saldo">Empenhado (info)</th><th className="n" title="Aprovado menos realizado">Saldo</th><th className="n">% exec.</th><th className="n">Em 2027</th><th>Situação</th>
             {meses && MESES.map((m) => <th key={m} className="n">{m}</th>)}</tr></thead>
           <tbody>
             {grupos.map(([k, ls], gi) => (

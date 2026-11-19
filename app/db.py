@@ -226,6 +226,33 @@ CREATE TABLE IF NOT EXISTS execucao (
     PRIMARY KEY (orcamento, edt, tarefa, conta_codigo)
 );
 
+CREATE TABLE IF NOT EXISTS lancamentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,                 -- Realizado ou Empenhado (base do Protheus 2026)
+    orcamento TEXT NOT NULL,
+    centro_custo TEXT NOT NULL DEFAULT '',
+    diretoria TEXT NOT NULL DEFAULT '',
+    gerente TEXT NOT NULL DEFAULT '',
+    edt TEXT NOT NULL DEFAULT '',
+    tarefa TEXT NOT NULL DEFAULT '',
+    emissao TEXT NOT NULL DEFAULT '',
+    digitacao TEXT NOT NULL DEFAULT '',
+    vencimento TEXT NOT NULL DEFAULT '',
+    baixa TEXT NOT NULL DEFAULT '',
+    sc TEXT NOT NULL DEFAULT '',
+    nota_fiscal TEXT NOT NULL DEFAULT '',
+    fornecedor TEXT NOT NULL DEFAULT '',
+    valor REAL NOT NULL DEFAULT 0,
+    grupo TEXT NOT NULL DEFAULT '',
+    conta_codigo TEXT NOT NULL DEFAULT '',
+    conta_desc TEXT NOT NULL DEFAULT '',
+    produto TEXT NOT NULL DEFAULT '',
+    solicitante TEXT NOT NULL DEFAULT '',
+    contrato TEXT NOT NULL DEFAULT '',
+    obs TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_lanc_orc ON lancamentos (orcamento);
+
 CREATE TABLE IF NOT EXISTS premissas (
     chave TEXT PRIMARY KEY,
     valor REAL NOT NULL,

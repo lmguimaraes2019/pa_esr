@@ -133,6 +133,42 @@ def build_execucao(df: pd.DataFrame) -> list[dict]:
     return out
 
 
+def build_lancamentos(df: pd.DataFrame) -> list[dict]:
+    """Lançamentos de realizado e empenhado de 2026, um por linha da base do Protheus (valores positivos), para o gestor conferir."""
+    ex = df[df["Tipo de Lançamento"].isin(["Realizado", "Empenhado"])]
+
+    def t(col):
+        return _txt(ex[col]) if col in ex.columns else pd.Series([""] * len(ex), index=ex.index)
+
+    def d(col):
+        if col not in ex.columns:
+            return pd.Series([""] * len(ex), index=ex.index)
+        return pd.to_datetime(ex[col], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
+
+    out = pd.DataFrame({
+        "tipo": ex["Tipo de Lançamento"].astype(str), "orcamento": ex["Nº do Orçamento"], "centro_custo": t("Centro de Custo"),
+        "diretoria": t("Diretoria Adjunta"), "gerente": ex["Gerente do Projeto"], "edt": ex["EDT"], "tarefa": ex["Tarefa"],
+        "emissao": d("Data de Emissão"), "digitacao": d("Data de Digitação"), "vencimento": d("Data de Vencimento"), "baixa": d("Data da Baixa"),
+        "sc": t("SC e Item da SC"), "nota_fiscal": t("Nota Fiscal"), "fornecedor": t("Descrição do Fornecedor"),
+        "valor": (-ex["Valor"]).round(2), "grupo": t("Grupo de Despesa"), "conta_codigo": ex["Conta Contábil"],
+        "conta_desc": t("Descrição Conta Contábil"), "produto": t("Descrição do Produto"), "solicitante": t("Solicitante da SC"),
+        "contrato": t("Número do Contrato"), "obs": t("Observação da SC"),
+    })
+    return out.to_dict("records")
+
+
+LANC_COLS = ["tipo", "orcamento", "centro_custo", "diretoria", "gerente", "edt", "tarefa", "emissao", "digitacao", "vencimento", "baixa", "sc",
+             "nota_fiscal", "fornecedor", "valor", "grupo", "conta_codigo", "conta_desc", "produto", "solicitante", "contrato", "obs"]
+
+
+def grava_lancamentos(c, lancs: list[dict], orcamentos: set[str] | None = None) -> int:
+    """Substitui os lançamentos detalhados (só de orçamentos conhecidos, se a lista vier)."""
+    c.execute("DELETE FROM lancamentos")
+    rows = [x for x in lancs if orcamentos is None or x["orcamento"] in orcamentos]
+    c.executemany(f"INSERT INTO lancamentos ({', '.join(LANC_COLS)}) VALUES ({', '.join(':' + k for k in LANC_COLS)})", rows)
+    return len(rows)
+
+
 def sem_acento(s: str) -> str:
     import unicodedata
     return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")

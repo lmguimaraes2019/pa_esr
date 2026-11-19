@@ -545,8 +545,8 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
         passado.append({"id": r["id"], "edt": r["edt"], "tarefa": r["tarefa"], "conta_codigo": r["conta_codigo"],
                         "conta_desc": r["conta_desc"], "grupo": r["grupo"], "meses": meses, "aprovado": aprovado,
                         "realizado": real, "empenhado": emp, "executado": _arred(real + emp),
-                        "saldo": _arred(aprovado - real - emp),
-                        "pct": round((real + emp) / aprovado * 100, 1) if aprovado > 0 else None,
+                        "saldo": _arred(aprovado - real),
+                        "pct": round(real / aprovado * 100, 1) if aprovado > 0 else None,
                         "plano_2027": _arred(r["t27"]), "removida": r["n27"] == 0})
     casado_r = sum(x["realizado"] for x in linhas)
     casado_e = sum(x["empenhado"] for x in linhas)
@@ -748,7 +748,9 @@ async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...
         caminho = Path(tmp) / "protheus.xlsx"
         caminho.write_bytes(dados)
         try:
-            novos = importers.build_execucao(importers.load_protheus(caminho))
+            df_ = importers.load_protheus(caminho)
+            novos = importers.build_execucao(df_)
+            lancs = importers.build_lancamentos(df_)
         except Exception:
             raise HTTPException(422, "Não encontrei a aba BASE ESR com as colunas do Protheus (Tipo de Lançamento, Valor, Mês...).")
     with tx() as c:
@@ -776,6 +778,7 @@ async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...
             c.execute("DELETE FROM execucao")
             c.executemany("INSERT OR REPLACE INTO execucao (orcamento, edt, tarefa, conta_codigo, realizado, empenhado) "
                           "VALUES (:orcamento,:edt,:tarefa,:conta_codigo,:realizado,:empenhado)", validos)
+            resumo["lancamentos"] = importers.grava_lancamentos(c, lancs, projetos)
             audit(c, u["login"], "importou realizado e empenhado 2026",
                   detalhe=f"{arquivo.filename}: realizado {resumo['realizado_depois']}, empenhado {resumo['empenhado_depois']}")
     return resumo
