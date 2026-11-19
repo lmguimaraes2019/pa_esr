@@ -3,8 +3,8 @@ import { api, fmt } from "./api.js";
 import OutrosProjetos from "./OutrosProjetos.jsx";
 import { Delta, pct, Selo, FINALIDADES, nomeFinalidade, classeFinalidade } from "./ui.jsx";
 
-function NovoOrcamento({ listas, onCriar, onFechar }) {
-  const [f, setF] = useState({ tipo: "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
+export function NovoOrcamento({ listas, onCriar, onFechar, tipoFixo }) {
+  const [f, setF] = useState({ tipo: tipoFixo || "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
   const [erro, setErro] = useState("");
   const salvar = async (e) => {
     e.preventDefault(); setErro("");
@@ -12,9 +12,7 @@ function NovoOrcamento({ listas, onCriar, onFechar }) {
   };
   return (
     <form className="cartao" onSubmit={salvar}>
-      <h3>Novo orçamento 2027</h3>
-      <div className="passos" role="tablist" style={{ marginTop: 0 }}>
-        {[["despesa", "Orçamento de despesa"], ["receita", "Orçamento de receita"]].map(([k, t]) => <button type="button" key={k} role="tab" aria-selected={f.tipo === k} className={f.tipo === k ? "on" : ""} onClick={() => setF({ ...f, tipo: k })}>{t}</button>)}</div>
+      <h3>{f.tipo === "receita" ? "Novo centro de receita 2027" : "Novo orçamento de despesa 2027"}</h3>
       <p className="mudo">{f.tipo === "receita" ? "O total deste orçamento entra como receita e gera resultado positivo. Ele não conta como despesa e não vai no Template de despesas do PMO." : "Orçamento de despesa: segue a jornada completa, com passado 2026, plano 2027, viagens, eventos e headcount."}</p>
       <p className="mudo">Não precisa de número agora: o orçamento nasce marcado como <span className="tag ok">novo</span>. Na exportação ao PMO ele segue como NOVO; depois do lançamento no PCO o administrador informa o Nº do Projeto.</p>
       <div className="grade">
@@ -41,7 +39,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
-  const ps = todos.filter((p) => (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
+  const ps = todos.filter((p) => p.tipo !== "receita" && (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
   const soma = (k) => ps.filter((p) => p.tipo !== "receita").reduce((a, p) => a + p[k], 0);
   const somaT = (k) => ps.reduce((a, p) => a + p[k], 0);
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
@@ -75,8 +73,8 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   );
   return (
     <>
-      <div className="cab"><div><h2>PA 2027 por projeto</h2>
-        <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027. As receitas lançadas na página Receitas entram no projeto de destino.</p></div>
+      <div className="cab"><div><h2>PA 2027 por projeto (despesas)</h2>
+        <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027. Os centros de receita ficam na página Receitas.</p></div>
         <div className="acoes"><button type="button" onClick={() => setFechado({})}>Expandir tudo</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => !k.includes("|")).map((k) => [k, true])))}>Recolher gerências</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => k.includes("|")).map((k) => [k, true])))}>Recolher origens</button></div>
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       {novo && listas && <NovoOrcamento listas={listas} onFechar={() => setNovo(false)} onCriar={async (b) => { const r = await api("/projetos", { method: "POST", body: b }); abrir(r.orcamento); }} />}

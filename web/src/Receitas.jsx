@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
+import { NovoOrcamento } from "./Projetos.jsx";
 import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
 
 const FONTES_SUGERIDAS = ["Contrato de gestão", "Parcerias", "Growth", "Fomento", "Turmas abertas", "Projetos especiais", "Outras receitas"];
@@ -275,6 +276,9 @@ export default function Receitas({ irProjeto }) {
   const [dados, setDados] = useState(null);
   const [aba, setAba] = useState("lancamentos");
   const [erro, setErro] = useState("");
+  const [novoCentro, setNovoCentro] = useState(false);
+  const [listas, setListas] = useState(null);
+  useEffect(() => { api("/listas").then(setListas).catch(() => {}); }, []);
   const carregar = useCallback(() => api("/receitas").then(setDados).catch((e) => setErro(e.message)), []);
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
@@ -282,7 +286,10 @@ export default function Receitas({ irProjeto }) {
   const max = Math.max(1, ...dados.mensal.map((m) => Math.max(m.receita, m.despesa)));
   return (
     <>
-      <h2>Gestão de receitas 2027</h2>
+      <div className="cab"><h2>Gestão de receitas 2027</h2>
+        {listas && <div className="acoes"><button onClick={() => setNovoCentro(true)}>+ Novo centro de receita</button></div>}</div>
+      {novoCentro && listas && <NovoOrcamento tipoFixo="receita" listas={listas} onFechar={() => setNovoCentro(false)}
+        onCriar={async (b) => { await api("/projetos", { method: "POST", body: b }); setNovoCentro(false); await carregar(); setAba("centros"); }} />}
       <div className="kpis">
         <Kpi rotulo="Receita prevista 2027" valor={fmt(t.receita)} tom="f27" sub={t.receita_2026 ? <Delta de={t.receita_2026} para={t.receita} altaBoa /> : `${t.linhas} lançamentos`} />
         <Kpi rotulo="Despesa planejada 2027" valor={fmt(t.despesa)} tom="f27" sub={<Delta de={t.despesa_2026} para={t.despesa} />} />
