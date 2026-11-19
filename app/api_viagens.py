@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import config, sync, viagens as vg
-from .api import _arred, _conn, exige_admin, permitidos, usuario_liberado
+from .api import _arred, _conn, compartilhados, exige_admin, lancaveis, permitidos, proprios, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
 
 router = APIRouter(prefix="/api/viagens")
@@ -70,10 +70,17 @@ def _json(v: sqlite3.Row, tar, bvezes: float, base: sqlite3.Row | None, nomes: d
             "ref_2026": ref, "evento_id": v["evento_id"], "atualizado_por": v["atualizado_por"]}
 
 
+def _pode_ver(c: sqlite3.Connection, u: dict, v: sqlite3.Row) -> bool:
+    """Viagem do projeto do gestor, ou lançada por ele em projeto da Diretoria."""
+    return v["orcamento"] in permitidos(c, u) or (v["orcamento"] in compartilhados(c) and v["criado_por"] == u["login"])
+
+
 def _visiveis(c: sqlite3.Connection, u: dict, ciclo: int):
     ids = permitidos(c, u)
+    comp = compartilhados(c)
     rows = c.execute("SELECT * FROM viagens WHERE ciclo=? ORDER BY mes, id", (ciclo,)).fetchall()
-    return [v for v in rows if (v["orcamento"] in ids) or (u["perfil"] == "admin" and not v["orcamento"])], ids
+    return [v for v in rows if (v["orcamento"] in ids) or (v["orcamento"] in comp and v["criado_por"] == u["login"])
+            or (u["perfil"] == "admin" and not v["orcamento"])], ids
 
 
 @router.get("")
@@ -81,9 +88,18 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     tar = vg.tarifas_map(c)
     bv = vg.bagagem_vezes(c)
     nomes = {r["orcamento"]: r["descricao"] for r in c.execute("SELECT orcamento, descricao FROM projetos")}
-    rows, ids = _visiveis(c, u, config.CICLO_PLANO)
+    rows, _ = _visiveis(c, u, config.CICLO_PLANO)
+    ids = proprios(c, u)      # os quadros de orçamento mostram só os projetos do gestor; os da Diretoria ficam em "outros"
     bases = {r["id"]: r for r in c.execute("SELECT * FROM viagens WHERE ciclo=?", (config.CICLO_BASE,))}
-    itens = [_json(v, tar, bv, bases.get(v["base_id"]), nomes) for v in rows]
+    todos = [_json(v, tar, bv, bases.get(v["base_id"]), nomes) for v in rows]
+    for i in todos:
+        i["outro"] = bool(i["orcamento"]) and i["orcamento"] not in ids
+    itens = [i for i in todos if not i["outro"]]
+    outros: dict[str, dict] = {}
+    for i in todos:
+        if i["outro"]:
+            x = outros.setdefault(i["orcamento"], {"orcamento": i["orcamento"], "projeto": i["projeto"], "viagens": 0, "plano_2027": 0.0})
+            x["viagens"] += i["n_viagens"]; x["plano_2027"] = _arred(x["plano_2027"] + i["custo"]["total"])
 
     # visão por projeto: plano de viagens x orçamento aprovado x executado x orçamento 2027 atual
     contas = ",".join("?" for _ in vg.CONTAS_VIAGEM)
@@ -116,10 +132,11 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     for i in itens:
         mensal[i["mes"] - 1] += i["custo"]["total"]
         mensal_ref[i["mes"] - 1] += i["ref_2026"] or 0
-    ids_tarefas = _tarefas_por_projeto(c, ids)
+    lanc = lancaveis(c, u) | ids
+    ids_tarefas = _tarefas_por_projeto(c, lanc)
     pend = sum(1 for i in itens if not i["orcamento"] or not i["edt"] or not i["tem_tarifa"])
     return {
-        "viagens": itens, "projetos": projetos,
+        "viagens": todos, "projetos": projetos, "outros": list(outros.values()),
         "mensal": [{"mes": NOMES_MESES[i], "plano": _arred(mensal[i]), "ref": _arred(mensal_ref[i])} for i in range(12)],
         "totais": {"plano": _arred(sum(mensal)), "ref": _arred(sum(mensal_ref)),
                    "aprovado": _arred(sum(aprovado.get(o, 0) for o in ids)),
@@ -129,7 +146,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         "bagagem_vezes": bv,
         "opcoes": {
             "tarifas": [{"tipo": k[0], "origem": k[1], "destino": k[2]} for k in sorted(tar)],
-            "projetos": [{"orcamento": o, "nome": nomes.get(o, o), "tarefas": ids_tarefas[o]} for o in sorted(ids)],
+            "projetos": [{"orcamento": o, "nome": nomes.get(o, o), "tarefas": ids_tarefas[o], "outro": o not in ids} for o in sorted(lanc)],
         },
     }
 
@@ -138,7 +155,7 @@ def _validar(c: sqlite3.Connection, u: dict, d: ViagemIn) -> None:
     if not c.execute("SELECT 1 FROM viagem_tarifas WHERE tipo=? AND origem=? AND destino=?", (d.tipo, d.origem, d.destino)).fetchone():
         raise HTTPException(422, "Não há tarifa cadastrada para esse trecho. O administrador pode incluí-la em Tarifas.")
     if d.orcamento:
-        if d.orcamento not in permitidos(c, u):
+        if d.orcamento not in lancaveis(c, u):
             raise HTTPException(404, "Projeto não encontrado.")
         if (d.edt or d.tarefa) and not c.execute("SELECT 1 FROM linhas WHERE orcamento=? AND edt=? AND tarefa=? LIMIT 1",
                                                  (d.orcamento, d.edt, d.tarefa)).fetchone():
@@ -156,7 +173,7 @@ def _grava(c: sqlite3.Connection, d: ViagemIn) -> tuple:
 
 def _viagem_do_usuario(c: sqlite3.Connection, u: dict, vid: int) -> sqlite3.Row:
     v = c.execute("SELECT * FROM viagens WHERE id=? AND ciclo=?", (vid, config.CICLO_PLANO)).fetchone()
-    if not v or not ((v["orcamento"] in permitidos(c, u)) or (u["perfil"] == "admin" and not v["orcamento"])):
+    if not v or not (_pode_ver(c, u, v) or (u["perfil"] == "admin" and not v["orcamento"])):
         raise HTTPException(404, "Viagem não encontrada.")
     return v
 
@@ -171,8 +188,8 @@ def criar(d: ViagemIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         _validar(c, u, d)
         cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area,"
-                        " orcamento, edt, tarefa, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (config.CICLO_PLANO, *_grava(c, d), u["login"]))
+                        " orcamento, edt, tarefa, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (config.CICLO_PLANO, *_grava(c, d), u["login"], u["login"]))
         audit(c, u["login"], "incluiu viagem", d.orcamento, detalhe=f"{d.origem} para {d.destino}, mês {d.mes}")
         sync.sincronizar_viagens(c, d.orcamento or "", u["login"], True)
     return {"id": cur.lastrowid}

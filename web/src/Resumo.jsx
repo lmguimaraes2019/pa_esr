@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api, fmt, mi } from "./api.js";
 import { Kpi, Delta, pct, Selo } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
+import OutrosProjetos from "./OutrosProjetos.jsx";
 
 function Quadro({ itens, rotulo, aninhado }) {
   const [fechado, setFechado] = useState({});
@@ -134,6 +135,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
         <div className="meses">{r.mensal_plano.map((m) => (
           <div key={m.mes} title={fmt(m.valor)}><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
       </section>
+      <OutrosProjetos />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt } from "./api.js";
+import OutrosProjetos from "./OutrosProjetos.jsx";
 import { Delta, pct, Selo, FINALIDADES, nomeFinalidade, classeFinalidade } from "./ui.jsx";
 
 function NovoOrcamento({ listas, onCriar, onFechar }) {
@@ -107,6 +108,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
           </React.Fragment>))}</tbody>
         <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma("total_2026"))}</td><td className="n">{fmt(soma("empenhado_2026"))}</td><td className="n">{fmt(soma("realizado_2026"))}</td><td className="n">{fmt(soma("total_2026") - soma("realizado_2026"))}</td><td className="n">{pct(soma("realizado_2026"), soma("total_2026"))}</td><td className="n">{fmt(soma("total_2027"))}</td><td className="n"><Delta de={soma("total_2026")} para={soma("total_2027")} /></td><td className="n"><span className="res-pos">+{fmt(somaT("receitas_2027"))}</span></td><td className="n"><strong className={somaT("resultado_2027") < 0 ? "res-neg" : "res-pos"}>{fmt(somaT("resultado_2027"))}</strong></td></tr></tfoot>
       </table></div>
+      <OutrosProjetos />
     </>
   );
 }

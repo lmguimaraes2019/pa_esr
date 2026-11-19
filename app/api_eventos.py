@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from . import sync, viagens as vg
-from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
+from .api import _arred, _conn, compartilhados, exige_acesso, lancaveis, permitidos, proprios, usuario_liberado
 from .db import NOMES_MESES, audit, tx
 
 router = APIRouter(prefix="/api/eventos")
@@ -79,14 +79,27 @@ def _calc(r: sqlite3.Row, tarifas: dict, bv: float, dolar: float) -> dict:
 
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = sorted(permitidos(c, u))
+    meus = proprios(c, u)      # os quadros mostram só os projetos do gestor; os da Diretoria ficam em "outros"
+    ids = sorted(permitidos(c, u) | lancaveis(c, u))
     marks = ",".join("?" for _ in ids) or "''"
     tarifas, bv, dolar = vg.tarifas_map(c), vg.bagagem_vezes(c), _dolar(c)
+    comp = compartilhados(c)
     projetos = {r["orcamento"]: r for r in c.execute(
         f"SELECT orcamento, descricao, origem, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
     itens = []
+    todos = []
     for r in c.execute(f"SELECT * FROM eventos WHERE orcamento IN ({marks}) ORDER BY mes, id", ids):
-        d = _calc(r, tarifas, bv, dolar); d["projeto"] = projetos[r["orcamento"]]["descricao"]; itens.append(d)
+        if r["orcamento"] not in permitidos(c, u) and r["criado_por"] != u["login"]:
+            continue      # em projeto da Diretoria, cada gestor vê só o que lançou
+        d = _calc(r, tarifas, bv, dolar); d["projeto"] = projetos[r["orcamento"]]["descricao"]
+        d["outro"] = r["orcamento"] not in meus
+        todos.append(d)
+    itens = [d for d in todos if not d["outro"]]
+    outros: dict[str, dict] = {}
+    for d in todos:
+        if d["outro"]:
+            x = outros.setdefault(d["orcamento"], {"orcamento": d["orcamento"], "projeto": d["projeto"], "eventos": 0, "total": 0.0})
+            x["eventos"] += 1; x["total"] = _arred(x["total"] + d["total"])
     por_proj: dict[str, dict] = {}
     for d in itens:
         x = por_proj.setdefault(d["orcamento"], {"orcamento": d["orcamento"], "projeto": d["projeto"], "eventos": 0, "pessoas": 0,
@@ -97,14 +110,14 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         for k in ("inscricao", "viagem", "total"): x[k] = _arred(x[k])
     mensal = [{"mes": NOMES_MESES[i], "valor": _arred(sum(d["total"] for d in itens if d["mes"] == i + 1))} for i in range(12)]
     return {
-        "itens": itens, "por_projeto": list(por_proj.values()), "mensal": mensal, "dolar": dolar, "bagagem_vezes": bv,
+        "itens": todos, "outros": list(outros.values()), "por_projeto": list(por_proj.values()), "mensal": mensal, "dolar": dolar, "bagagem_vezes": bv,
         "totais": {"eventos": len(itens), "pessoas": sum(d["n_pessoas"] for d in itens), "inscricao": _arred(sum(d["inscricao_total"] for d in itens)),
                    "viagem": _arred(sum(d["viagem"]["total"] for d in itens)), "total": _arred(sum(d["total"] for d in itens)),
                    "incompletos": sum(1 for d in itens if not d["completo"])},
         "tarifas": [{"tipo": k[0], "origem": k[1], "destino": k[2],
                     **{f: float(tarifas[k][f]) for f in ("passagem", "hospedagem", "bagagem", "aux_transporte", "ajuda_custo", "seguro")}}
                    for k in sorted(tarifas)],
-        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"]} for o, p in projetos.items()],
+        "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "outro": o not in meus} for o, p in projetos.items()],
         "tarefas": tarefas_dos_projetos(c, "eventos", list(projetos)),
     }
 
@@ -129,6 +142,15 @@ def _valores(d: EventoIn, u: dict):
             d.origem, d.destino, json.dumps(d.pessoas, ensure_ascii=False), d.justificativa.strip(), d.edt, d.tarefa, d.site, int(d.rnp), u["login"])
 
 
+def exige_lancamento(c: sqlite3.Connection, u: dict, orcamento: str, criado_por: str | None = None) -> None:
+    """Projeto do gestor, ou projeto da Diretoria (onde o gestor mexe só no que ele mesmo lançou)."""
+    if orcamento in permitidos(c, u, extintos=True):
+        return
+    if orcamento in compartilhados(c) and (criado_por is None or criado_por == u["login"]):
+        return
+    raise HTTPException(404, "Projeto não encontrado.")
+
+
 def _confere_tarefa(c: sqlite3.Connection, d: EventoIn) -> None:
     if (d.edt or d.tarefa) and not c.execute("SELECT 1 FROM linhas WHERE ciclo=2027 AND orcamento=? AND edt=? AND tarefa=? LIMIT 1",
                                              (d.orcamento, d.edt, d.tarefa)).fetchone():
@@ -138,10 +160,10 @@ def _confere_tarefa(c: sqlite3.Connection, d: EventoIn) -> None:
 @router.post("", status_code=201)
 def criar(d: EventoIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:
-        exige_acesso(c, u, d.orcamento)
+        exige_lancamento(c, u, d.orcamento)
         _confere_tarefa(c, d)
         cur = c.execute("INSERT INTO eventos (orcamento, nome, local, tipo, mes, n_pessoas, dias, pernoites, inscricao, moeda, origem, destino, "
-                        "pessoas, justificativa, edt, tarefa, site, rnp, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", _valores(d, u))
+                        "pessoas, justificativa, edt, tarefa, site, rnp, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (*_valores(d, u), u["login"]))
         audit(c, u["login"], "incluiu evento", d.orcamento, detalhe=d.nome)
         sync.sincronizar(c, d.orcamento, u["login"])
         return _uma(c, cur.lastrowid)
@@ -153,7 +175,7 @@ def editar(eid: int, d: EventoIn, u: dict = Depends(usuario_liberado)):
         atual = c.execute("SELECT * FROM eventos WHERE id=?", (eid,)).fetchone()
         if not atual:
             raise HTTPException(404, "Evento não encontrado.")
-        exige_acesso(c, u, atual["orcamento"]); exige_acesso(c, u, d.orcamento)
+        exige_lancamento(c, u, atual["orcamento"], atual["criado_por"]); exige_lancamento(c, u, d.orcamento)
         _confere_tarefa(c, d)
         c.execute("UPDATE eventos SET orcamento=?, nome=?, local=?, tipo=?, mes=?, n_pessoas=?, dias=?, pernoites=?, inscricao=?, moeda=?, "
                   "origem=?, destino=?, pessoas=?, justificativa=?, edt=?, tarefa=?, site=?, rnp=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
@@ -170,7 +192,7 @@ def excluir(eid: int, u: dict = Depends(usuario_liberado)):
         atual = c.execute("SELECT * FROM eventos WHERE id=?", (eid,)).fetchone()
         if not atual:
             raise HTTPException(404, "Evento não encontrado.")
-        exige_acesso(c, u, atual["orcamento"])
+        exige_lancamento(c, u, atual["orcamento"], atual["criado_por"])
         c.execute("DELETE FROM eventos WHERE id=?", (eid,))
         audit(c, u["login"], "excluiu evento", atual["orcamento"], detalhe=f"id {eid}: {atual['nome']}")
         sync.sincronizar(c, atual["orcamento"], u["login"])

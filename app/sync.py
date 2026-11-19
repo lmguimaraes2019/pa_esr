@@ -104,8 +104,8 @@ def vincular_viagens_de_eventos(c: sqlite3.Connection, orcamento: str) -> bool:
             ativos.append(atual["id"])
         else:
             cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area,"
-                            " orcamento, edt, tarefa, evento_id, atualizado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                            (config.CICLO_PLANO, *dados, e["id"], e["atualizado_por"]))
+                            " orcamento, edt, tarefa, evento_id, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (config.CICLO_PLANO, *dados, e["id"], e["atualizado_por"], e["criado_por"]))
             ativos.append(cur.lastrowid)
     marks = ",".join("?" for _ in ativos) or "-1"
     c.execute(f"DELETE FROM viagens WHERE ciclo=? AND orcamento=? AND evento_id IS NOT NULL AND id NOT IN ({marks})",

@@ -5,14 +5,14 @@ import sqlite3
 
 from fastapi import APIRouter, Depends
 
-from .api import _arred, _chave_nome, _conn, _gerencia_do, permitidos, usuario_liberado
+from .api import _arred, _chave_nome, _conn, _gerencia_do, permitidos, proprios, usuario_liberado
 
 router = APIRouter(prefix="/api/execucao-detalhe", tags=["execucao"])
 
 
 @router.get("")
 def detalhe(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = permitidos(c, u, extintos=True)
+    ids = proprios(c, u, extintos=True)
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     proj = {r["orcamento"]: r for r in c.execute("SELECT orcamento, n_projeto, descricao, origem, gerente, extinto FROM projetos")}
     itens = []

@@ -1229,3 +1229,34 @@ def test_centro_de_custo_aponta_para_centro_de_receita(client):
     fom = next((p for p in ps if p["origem"].lower() == "fomento" and p["tipo"] == "despesa" and p["total_2027"] > 0), None)
     if fom:
         assert "Centro de receita" not in fom["pendencias"]
+
+
+def test_projeto_da_diretoria_fica_em_outros_projetos(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    da = next((p for p in h["projetos"] if p["gerencia"] == "Diretoria Adjunta"), None)
+    if da is None:
+        with db.tx() as c:
+            o = c.execute("SELECT orcamento FROM projetos WHERE tipo='despesa' AND extinto=0 AND lower(gerente) NOT LIKE 'leandro%' LIMIT 1").fetchone()[0]
+            c.execute("UPDATE projetos SET gerente='Leandro Guimarães' WHERE orcamento=?", (o,))
+        da = {"orcamento": o}
+    orc = da["orcamento"]
+    gestor_liberado(client, "luciana")
+    assert orc not in {p["orcamento"] for p in client.get("/api/projetos").json()}
+    ev = client.get("/api/eventos").json()
+    assert orc in {p["orcamento"] for p in ev["projetos"] if p["outro"]}          # pode lançar
+    tf = ev["tarefas"][orc]["lista"][0]
+    t = next(x for x in ev["tarifas"] if x["tipo"] == "nac")
+    antes = ev["totais"]["total"]
+    r = client.post("/api/eventos", json={"orcamento": orc, "nome": "Evento DA", "local": "SP", "tipo": "nac", "mes": 4, "n_pessoas": 1, "dias": 2,
+                                          "inscricao": 500, "origem": t["origem"], "destino": t["destino"], "pessoas": ["Ana"],
+                                          "justificativa": "x", "edt": tf["edt"], "tarefa": tf["tarefa"]})
+    assert r.status_code == 201, r.text
+    ev = client.get("/api/eventos").json()
+    assert [i for i in ev["itens"] if i["id"] == r.json()["id"] and i["outro"]]
+    assert ev["totais"]["total"] == antes and orc not in {p["orcamento"] for p in ev["por_projeto"]}      # fora dos totais próprios
+    assert ev["outros"] and ev["outros"][0]["orcamento"] == orc
+    o = client.get("/api/outros-projetos").json()
+    x = next(p for p in o["projetos"] if p["orcamento"] == orc)
+    assert x["eventos"] > 0 and o["total"] >= x["total"] > 0
+    assert client.delete(f"/api/eventos/{r.json()['id']}").status_code == 200

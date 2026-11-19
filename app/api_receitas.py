@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import fontes, config
 from . import export_xlsx
-from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
+from .api import _arred, _conn, exige_acesso, permitidos, proprios, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
 
 router = APIRouter(prefix="/api/receitas")
@@ -100,7 +100,7 @@ def centros_opcoes(_: dict = Depends(usuario_liberado), c: sqlite3.Connection = 
 def centros(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     """Cada centro de receita com a receita de 2027 e os custos dos centros de custo que apontam para ele.
     O gestor vê os custos dos seus projetos; o que vem de outros projetos entra só como valor agregado."""
-    return quadro_centros(c, permitidos(c, u), u["perfil"] == "admin")
+    return quadro_centros(c, proprios(c, u), u["perfil"] == "admin")
 
 
 def quadro_centros(c: sqlite3.Connection, meus: set, admin: bool) -> dict:
@@ -134,7 +134,7 @@ def quadro_centros(c: sqlite3.Connection, meus: set, admin: bool) -> dict:
 
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = sorted(permitidos(c, u))
+    ids = sorted(proprios(c, u))
     marks = ",".join("?" for _ in ids) or "''"
     rows = c.execute(_SQL + f" AND r.orcamento IN ({marks}) ORDER BY origem, r.orcamento, r.fonte, r.id",
                      (config.CICLO_PLANO, *ids)).fetchall()

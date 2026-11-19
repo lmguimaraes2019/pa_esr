@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import config
-from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
+from .api import _arred, _conn, exige_acesso, permitidos, proprios, usuario_liberado
 from .db import audit, tx
 
 router = APIRouter(prefix="/api/exposicao")
@@ -56,7 +56,7 @@ def _item(r: sqlite3.Row, projetos: dict) -> dict:
 
 
 def _dados(c: sqlite3.Connection, u: dict) -> tuple[list[dict], dict]:
-    ids = sorted(permitidos(c, u))
+    ids = sorted(proprios(c, u))
     marks = ",".join("?" for _ in ids) or "''"
     projetos = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, finalidade FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
     itens = [_item(r, projetos) for r in c.execute(f"SELECT * FROM exposicao_cambial WHERE orcamento IN ({marks}) ORDER BY trimestre, id", ids)]

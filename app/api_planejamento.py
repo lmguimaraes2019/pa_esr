@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import config, viagens as vg
-from .api import _arred, _chave_nome, _conn, exige_acesso, exige_admin, permitidos, usuario_liberado
+from .api import _arred, _chave_nome, _conn, exige_acesso, exige_admin, permitidos, proprios, usuario_liberado
 from .api_eventos import _calc as _calc_evento, _dolar
 from .api_headcount import _calc as _calc_hc, _reajuste
 from . import fontes, pessoal
@@ -129,7 +129,7 @@ def _etapas(projetos: list[dict]) -> dict:
 
 
 def _situacao(c: sqlite3.Connection, u: dict) -> dict:
-    projetos = list(resumir(c, list(permitidos(c, u))).values())
+    projetos = list(resumir(c, list(proprios(c, u))).values())
     if u["perfil"] != "admin":
         # entregas são responsabilidade do gestor do projeto: quem só enxerga o projeto de outro gestor não recebe essa pendência
         eu = _chave_nome(u["nome"])
@@ -140,7 +140,7 @@ def _situacao(c: sqlite3.Connection, u: dict) -> dict:
                 p["pendencias"] = p["viagens"]["pendentes"] + p["eventos"]["pendentes"] + p["headcount"]["pendentes"]
     etapas = _etapas(projetos)
     # headcount que o usuário lançou em projeto de outro gestor também é pendência dele
-    ids = permitidos(c, u)
+    ids = proprios(c, u)
     par, reaj = pessoal.parametros(c), _reajuste(c)
     for r in c.execute("SELECT * FROM headcount WHERE criado_por=?", (u["login"],)).fetchall():
         if r["orcamento"] in ids:

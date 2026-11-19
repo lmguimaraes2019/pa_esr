@@ -17,7 +17,7 @@ def main(login: str) -> int:
         print(f"Usuário {login!r} não existe.")
         return 1
     u = dict(u)
-    ids = sorted(api.permitidos(c, u))
+    ids = sorted(api.proprios(c, u))
     via_gerente = [r[0] for r in c.execute("SELECT gerente FROM user_gerentes WHERE user_id=?", (u["id"],))]
     via_projeto = [r[0] for r in c.execute("SELECT orcamento FROM user_projetos WHERE user_id=?", (u["id"],))]
     print(f"{u['nome']} | cargo {u['cargo']} | enxerga {len(ids)} projeto(s)")

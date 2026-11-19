@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from . import equipamentos, pessoal, sync
 from .api_eventos import tarefas_dos_projetos
-from .api import _arred, _chave_nome, _conn, _gerencia_do, exige_acesso, exige_admin, permitidos, usuario_liberado
+from .api import _arred, _chave_nome, _conn, _gerencia_do, exige_acesso, exige_admin, permitidos, proprios, usuario_liberado
 from .db import audit, tx
 
 router = APIRouter(prefix="/api/headcount")
@@ -76,18 +76,27 @@ def _calc(r: sqlite3.Row, par: dict, reaj: float) -> dict:
 
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    meus = permitidos(c, u)
+    meus = proprios(c, u)      # os quadros mostram só os projetos do gestor; os da Diretoria ficam em "outros"
+    acesso = permitidos(c, u)
     par, reaj = pessoal.parametros(c), _reajuste(c)
     projetos = {r["orcamento"]: r for r in c.execute(
         "SELECT orcamento, descricao, origem, gerente, tipo, finalidade FROM projetos ORDER BY orcamento")}
     itens = []
     for r in c.execute("SELECT * FROM headcount ORDER BY orcamento, id"):
-        if not (u["perfil"] == "admin" or r["orcamento"] in meus or r["criado_por"] == u["login"]):
+        if not (u["perfil"] == "admin" or r["orcamento"] in acesso or r["criado_por"] == u["login"]):
             continue
         d = _calc(r, par, reaj)
+        d["outro"] = r["orcamento"] not in meus
         d["projeto"] = projetos[r["orcamento"]]["descricao"]
         d["fora_de_pessoal"] = projetos[r["orcamento"]]["finalidade"] != "headcount"
         itens.append(d)
+    todos = itens
+    outros: dict[str, dict] = {}
+    for d in todos:
+        if d["outro"]:
+            x = outros.setdefault(d["orcamento"], {"orcamento": d["orcamento"], "projeto": d["projeto"], "posicoes": 0, "custo_2027": 0.0})
+            x["posicoes"] += d["quantidade"]; x["custo_2027"] = _arred(x["custo_2027"] + d["custo_2027"])
+    itens = [d for d in todos if not d["outro"]]
     por_proj: dict[str, dict] = {}
     for d in itens:
         x = por_proj.setdefault(d["orcamento"], {"orcamento": d["orcamento"], "projeto": d["projeto"], "posicoes": 0,
@@ -101,7 +110,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         x["posicoes"] += d["quantidade"]; x["anualizado"] = _arred(x["anualizado"] + d["anualizado"]); x["custo_2027"] = _arred(x["custo_2027"] + d["custo_2027"])
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return {
-        "itens": itens, "por_projeto": list(por_proj.values()), "por_gerencia": sorted(por_ger.values(), key=lambda x: x["gerencia"].lower()),
+        "itens": todos, "outros": list(outros.values()), "por_projeto": list(por_proj.values()), "por_gerencia": sorted(por_ger.values(), key=lambda x: x["gerencia"].lower()),
         "gerencias": _gerencias(c), "gerencia_usuario": u.get("gerencia") or "",
         "totais": {"posicoes": sum(d["quantidade"] for d in itens), "anualizado": _arred(sum(d["anualizado"] for d in itens)),
                    "custo_2027": _arred(sum(d["custo_2027"] for d in itens)), "incompletos": sum(1 for d in itens if d["faltando"])},

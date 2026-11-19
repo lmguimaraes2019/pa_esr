@@ -51,7 +51,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
       </div>
       <div className="grade">
         <label>Objetivo da viagem<input value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} /></label>
-        <label>Projeto que paga<select value={f.orcamento || ""} onChange={(e) => trocarProjeto(e.target.value)}><option value="">Definir depois</option>{opts.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.nome}</option>)}</select></label>
+        <label>Projeto que paga<select value={f.orcamento || ""} onChange={(e) => trocarProjeto(e.target.value)}><option value="">Definir depois</option>{opts.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.nome}{p.outro ? " (Diretoria)" : ""}</option>)}</select></label>
         <label>Tarefa do orçamento<select disabled={!projeto} value={f.edt ? `${f.edt}||${f.tarefa}` : ""} onChange={(e) => { const [edt, tarefa] = e.target.value.split("||"); setF((x) => ({ ...x, edt, tarefa })); }}>
           <option value="">Selecione…</option>{projeto?.tarefas.map((t) => <option key={t.edt + t.tarefa} value={`${t.edt}||${t.tarefa}`}>{t.tarefa}</option>)}</select></label>
       </div>
@@ -107,7 +107,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
                 <td>{v.origem} <span className="mudo">para</span> {v.destino} {v.tipo === "int" && <span className="tag nova bloco">int.</span>}</td>
                 <td className="n">{v.n_viagens}</td><td className="n">{v.dias}</td>
                 <td className="obj">{v.evento_id && <span className="tag nova bloco">evento</span>}{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}</td>
-                <td>{v.orcamento ? <>{v.orcamento} | {v.projeto}<br /><span className="mudo">{v.tarefa || <span className="up">tarefa pendente</span>}</span></> : <span className="tag aviso">sem projeto</span>}</td>
+                <td>{v.orcamento ? <>{v.orcamento} | {v.projeto}{v.outro && <> <span className="tag aviso" title="Projeto da Diretoria: não entra nos totais dos seus projetos">Diretoria</span></>}<br /><span className="mudo">{v.tarefa || <span className="up">tarefa pendente</span>}</span></> : <span className="tag aviso">sem projeto</span>}</td>
                 <td><div className="custos">{COMP.filter(([k]) => v.custo[k] > 0).map(([k, n]) => <span key={k}>{n} {fmtN(v.custo[k])}</span>)}</div>{!v.tem_tarifa && <span className="erro">sem tarifa</span>}</td>
                 <td className="n"><strong>{fmtN(v.custo.total)}</strong></td>
                 <td className="n mudo">{v.ref_2026 == null ? "nova" : fmtN(v.ref_2026)}</td>

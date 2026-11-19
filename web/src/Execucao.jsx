@@ -1,3 +1,4 @@
+import OutrosProjetos from "./OutrosProjetos.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { api, fmtN } from "./api.js";
 import { Kpi } from "./ui.jsx";
@@ -136,6 +137,7 @@ export default function Execucao({ irProjeto }) {
           <tbody>{plana.slice(0, max).map((x) => <tr key={x.id}>{CAMPOS.map(([k, , f]) => <td key={k} className={k === "valor" ? "n" : ""}>{k === "valor" ? fmtN(x.valor) : k === "orcamento" ? <button className="link" onClick={() => irProjeto(x.orcamento)}>{x.orcamento}</button> : f(x)}</td>)}</tr>)}</tbody>
         </table>{plana.length > max && <button className="link" onClick={() => setMax(max + 500)}>mostrar mais ({plana.length - max} restantes)</button>}</div>
       )}
+      <OutrosProjetos />
     </>
   );
 }

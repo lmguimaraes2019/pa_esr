@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import config
-from .api import _arred, _conn, exige_admin, permitidos, usuario_liberado
+from .api import _arred, _conn, exige_admin, permitidos, proprios, usuario_liberado
 from .db import MESES, audit, tx
 from .fontes import efetivo, lista_fontes
 
@@ -57,7 +57,7 @@ def quadro(c: sqlite3.Connection, ids: list[str]) -> dict:
 
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    return quadro(c, list(permitidos(c, u)))
+    return quadro(c, list(proprios(c, u)))
 
 
 # ---------------------------------------------------------------- cadastro das fontes (Administração, Tabelas de referência)

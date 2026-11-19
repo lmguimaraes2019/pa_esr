@@ -41,7 +41,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
       <p className="mudo">Campos com <Obrig /> são necessários para o evento ser considerado completo. Você pode salvar agora e completar depois.</p>
       <div className="grade">
         <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
-          <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></label>
+          <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}{p.outro ? " (Diretoria)" : ""}</option>)}</select></label>
         <label><span>Nome do evento <Obrig /></span><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
         <label className="ent-check"><input type="checkbox" checked={!!f.rnp} onChange={(e) => set("rnp", e.target.checked)} /> Evento da RNP</label>
         <label>Site do evento<input inputMode="url" value={f.site || ""} onChange={(e) => set("site", e.target.value)} placeholder="https://www.evento.com.br" /></label>
@@ -133,7 +133,7 @@ export default function Eventos({ irProjeto }) {
                 <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span>{e.rnp && <span className="tag ok">RNP</span>}
                 {e.completo ? <span className="tag ok">completo</span> : <span className="tag aviso">pendente</span>}</h4>
               <p className="evt-sub">{e.local || "local não informado"}{e.site && <> · <a href={e.site} target="_blank" rel="noopener noreferrer">site do evento</a></>}</p>
-              <p className="evt-proj"><button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button> <span className="mudo">{e.projeto}</span></p>
+              <p className="evt-proj">{e.outro ? <span>{e.orcamento}</span> : <button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button>} <span className="mudo">{e.projeto}</span>{e.outro && <> <span className="tag aviso" title="Projeto da Diretoria: não entra nos totais dos seus projetos">Diretoria</span></>}</p>
               {e.justificativa && <p className="evt-just" title={e.justificativa}>{e.justificativa}</p>}
               {e.pessoas.length > 0 && <details className="evt-pessoas"><summary>{e.n_pessoas} participante(s)</summary><div>{e.pessoas.map((p) => <span key={p} className="chip">{p}</span>)}</div></details>}
               {!e.completo && <div className="pend-lista">{e.faltando.map((x) => <span key={x}>{x}</span>)}</div>}

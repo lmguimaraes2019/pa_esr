@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import config, estrategia
-from .api import _arred, _conn, exige_acesso, permitidos, usuario_liberado
+from .api import _arred, _conn, exige_acesso, permitidos, proprios, usuario_liberado
 from .db import MESES, audit, tx
 
 router = APIRouter(prefix="/api")
@@ -134,7 +134,7 @@ def cobertura(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depen
     """Para cada diretriz, RE, RO e indicador do CG: quantos projetos e entregas o atendem e quanto do plano 2027 está ligado a ele.
     Vincular um projeto a um RO cobre também o RE, a diretriz e o indicador do CG acima dele.
     O valor é o plano dos projetos vinculados (um projeto pode atender a mais de um item, por isso os valores não se somam)."""
-    ids = sorted(permitidos(c, u))
+    ids = sorted(proprios(c, u))
     marks = ",".join("?" for _ in ids) or "''"
     plano = {r["orcamento"]: _arred(r["t"]) for r in c.execute(
         f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='despesa') GROUP BY orcamento",

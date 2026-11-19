@@ -64,6 +64,37 @@ def permitidos(c: sqlite3.Connection, u: dict, extintos: bool = False) -> set[st
     return ids
 
 
+def compartilhados(c: sqlite3.Connection) -> set[str]:
+    """Projetos de despesa da Diretoria Adjunta ou da Diretoria Executiva: qualquer gestor pode lançar viagens, eventos e headcount neles."""
+    import unicodedata
+
+    def sem(t: str) -> str:
+        return "".join(ch for ch in unicodedata.normalize("NFD", t or "") if unicodedata.category(ch) != "Mn").lower().strip()
+    ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
+    out = set()
+    for r in c.execute("SELECT orcamento, gerente FROM projetos WHERE tipo='despesa' AND extinto=0"):
+        if sem(_gerencia_do(r["gerente"], ger_de)).startswith("diretoria"):
+            out.add(r["orcamento"])
+    return out
+
+
+def proprios(c: sqlite3.Connection, u: dict, extintos: bool = False) -> set[str]:
+    """Projetos do próprio gestor, que entram nos quadros de orçamento. Os da Diretoria que ele só enxerga por concessão ou
+    por ter lançado despesa ficam de fora e aparecem à parte (Outros projetos)."""
+    if u["perfil"] == "admin":
+        return permitidos(c, u, extintos)
+    ids = {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (u["id"],))}
+    ids |= {r[0] for r in c.execute("SELECT orcamento FROM user_projetos WHERE user_id=?", (u["id"],))} - compartilhados(c)
+    if not extintos and ids:
+        ids -= {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE extinto=1")}
+    return ids
+
+
+def lancaveis(c: sqlite3.Connection, u: dict) -> set[str]:
+    """Projetos onde o gestor pode lançar viagens, eventos e headcount: os dele e os da Diretoria."""
+    return permitidos(c, u) | compartilhados(c)
+
+
 def exige_acesso(c: sqlite3.Connection, u: dict, orcamento: str) -> sqlite3.Row:
     p = c.execute("SELECT * FROM projetos WHERE orcamento=?", (orcamento,)).fetchone()
     if not p or orcamento not in permitidos(c, u, extintos=True):
@@ -371,7 +402,7 @@ def _gerencia_do(gerente: str | None, ger_de: dict[str, str]) -> str:
 
 @router.get("/projetos")
 def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = sorted(permitidos(c, u, extintos=True))
+    ids = sorted(proprios(c, u, extintos=True))
     if not ids:
         return []
     marks = ",".join("?" for _ in ids)
@@ -804,7 +835,7 @@ async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...
 @router.get("/resumo")
 def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     # orçamentos de receita não entram na despesa: o valor deles aparece em Receitas, com sinal positivo
-    ids = sorted(o for o in permitidos(c, u, extintos=True) if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa")
+    ids = sorted(o for o in proprios(c, u, extintos=True) if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa")
     marks = ",".join("?" for _ in ids) or "''"
     # ações extintas mantêm o aprovado e o executado de 2026 (as entregas migram para outros projetos); só o plano 2027 delas é zerado
     EXC = f"NOT (l.ciclo={config.CICLO_PLANO} AND l.orcamento IN (SELECT orcamento FROM projetos WHERE extinto=1))"
