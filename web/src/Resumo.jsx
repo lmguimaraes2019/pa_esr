@@ -3,6 +3,7 @@ import { api, fmt, mi } from "./api.js";
 import { Kpi, Delta, pct, Selo } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 import OutrosProjetos from "./OutrosProjetos.jsx";
+import FluxoRecursos from "./FluxoRecursos.jsx";
 
 function Quadro({ itens, rotulo, aninhado }) {
   const [fechado, setFechado] = useState({});
@@ -102,6 +103,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
     <>
       <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
       <MeuPlanejamento plano={plano} recarregar={recarregarPlano} admin={admin} ir={ir} />
+      <FluxoRecursos />
       <h3 className="secao">Visão financeira</h3>
       <div className="duas">
         <section className="lado passado">

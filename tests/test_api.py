@@ -1266,3 +1266,14 @@ def test_receitas_informam_tipo_e_centro_do_projeto(client):
     entrar(client)
     d = client.get("/api/receitas").json()
     assert d["projetos"] and all({"tipo", "centro_receita", "centro_nome", "centro_acessivel"} <= set(p) for p in d["projetos"])
+
+
+def test_fluxo_de_recursos(client):
+    entrar(client)
+    d = client.get("/api/fluxo").json()
+    assert d["total_custo"] > 0 and d["entra"] and d["sai"]
+    assert round(sum(x["valor"] for x in d["sai"] if x["para"] != "Receita acima do custo"), 2) == d["total_custo"]
+    # tudo que sai de uma origem é igual ao que entra nela
+    for o in d["origens"]:
+        e = sum(x["valor"] for x in d["entra"] if x["para"] == o["origem"]); s = sum(x["valor"] for x in d["sai"] if x["de"] == o["origem"])
+        assert abs(e - s) < 0.05
