@@ -7,13 +7,17 @@ import re
 import sqlite3
 from datetime import datetime
 
+from pathlib import Path
+
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.worksheet.hyperlink import Hyperlink
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter as L
 from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.worksheet.worksheet import Worksheet
 
-from . import api, api_eventos, api_headcount, api_viagens, config, equipamentos
+from . import api, api_eventos, api_exposicao, api_headcount, api_viagens, config, equipamentos
 from .db import MESES, NOMES_MESES
 
 AZUL, LARANJA, CINZA = "0B2E59", "E87722", "5B6573"
@@ -92,6 +96,38 @@ def _nome_aba(base: str, usados: set[str]) -> str:
     return n
 
 
+LOGO = Path(__file__).parent / "assets" / "logo_esr.png"
+LINHAS_LOGO = 2
+
+
+def _logo(ws: Worksheet) -> None:
+    """Abre duas linhas no topo da aba, com o logo da ESR. O conteúdo desce junto: fórmulas, mesclagens, filtro, painel congelado e links."""
+    n = LINHAS_LOGO
+    maxr, maxc = ws.max_row, ws.max_column
+    mescladas = [(m.min_row, m.min_col, m.max_row, m.max_col) for m in list(ws.merged_cells.ranges)]
+    for m in list(ws.merged_cells.ranges):
+        ws.unmerge_cells(str(m))
+    alturas = {r: d.height for r, d in ws.row_dimensions.items() if d.height}
+    ws.move_range(f"A1:{L(maxc)}{maxr}", rows=n, translate=True)
+    for a, b, c2, d in mescladas:
+        ws.merge_cells(start_row=a + n, start_column=b, end_row=c2 + n, end_column=d)
+    for r in list(ws.row_dimensions.keys()):
+        ws.row_dimensions[r].height = None
+    for r, h in alturas.items():
+        ws.row_dimensions[r + n].height = h
+    if ws.freeze_panes:
+        col = re.match(r"[A-Z]+", ws.freeze_panes).group()
+        ws.freeze_panes = f"{col}{int(ws.freeze_panes[len(col):]) + n}"
+    if ws.auto_filter.ref:
+        ws.auto_filter.ref = re.sub(r"([A-Z]+)(\d+)", lambda m: f"{m.group(1)}{int(m.group(2)) + n}", ws.auto_filter.ref)
+    for r in range(1, n + 1):
+        ws.row_dimensions[r].height = 24
+    img = XLImage(str(LOGO))
+    img.height = 54
+    img.width = round(54 * 1414 / 570)
+    ws.add_image(img, "A1")
+
+
 def _admin_contexto(u: dict, c: sqlite3.Connection) -> tuple[list[dict], set[str]]:
     ps = api.projetos(u, c)
     return [p for p in ps if p["tipo"] != "receita"], api.proprios(c, u, extintos=True)
@@ -110,17 +146,26 @@ def gerar(u: dict, c: sqlite3.Connection) -> bytes:
     gerado = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     _sumario(ws, ps, abas, gerado)
-    for p in vivos:
-        _aba_projeto(wb.create_sheet(abas[p["orcamento"]]), p, c)
     _aba_viagens(wb.create_sheet("Viagens"), u, c)
     _aba_headcount(wb.create_sheet("Headcount"), u, c)
     _aba_eventos(wb.create_sheet("Eventos"), u, c)
     _aba_equipamentos(wb.create_sheet("Equipamentos TIC"), u, c)
     _aba_receitas(wb.create_sheet("Receitas"), ps, c)
+    _aba_exposicao(wb.create_sheet("Exposição cambial"), u, c)
+    for p in vivos:
+        _aba_projeto(wb.create_sheet(abas[p["orcamento"]]), p, c)
     ws.sheet_properties.tabColor = AZUL
-    for nome, cor in (("Viagens", LARANJA), ("Headcount", LARANJA), ("Eventos", LARANJA), ("Equipamentos TIC", LARANJA), ("Receitas", "2F9E6F")):
+    for nome, cor in (("Viagens", LARANJA), ("Headcount", LARANJA), ("Eventos", LARANJA), ("Equipamentos TIC", LARANJA), ("Receitas", "2F9E6F"),
+                      ("Exposição cambial", "2F9E6F")):
         wb[nome].sheet_properties.tabColor = cor
-    for w in wb.worksheets:      # impressão: paisagem, uma página de largura
+    for w in wb.worksheets:      # logo da ESR, impressão em paisagem e uma página de largura
+        _logo(w)
+        if w is ws:      # links do sumário para a aba de cada projeto, feitos depois que o conteúdo desceu
+            for linha in ws.iter_rows(min_row=1, max_col=1):
+                cel = linha[0]
+                if cel.value in abas:
+                    cel.hyperlink = Hyperlink(ref=cel.coordinate, location=f"'{abas[cel.value]}'!A1", display=str(cel.value))
+                    cel.font = Font(name="Calibri", color="0563C1", underline="single")
         w.page_setup.orientation = "landscape"
         w.page_setup.fitToWidth = 1
         w.page_setup.fitToHeight = 0
@@ -152,10 +197,6 @@ def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str) -
                        "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
                        p["total_2026"], p["empenhado_2026"], p["realizado_2026"], f"=J{r}-L{r}", prev27, f"=N{r}-J{r}", status],
                moeda=moeda, centro={1, 2, 6, 16}, quebra={3, 5}, fonte=F_EXT if ext else None, fill=P_EXT if ext else None)
-        if p["orcamento"] in abas:
-            c = ws.cell(row=r, column=1)
-            c.hyperlink = f"#'{abas[p['orcamento']]}'!A1"
-            c.font = Font(name="Calibri", color="0563C1", underline="single")
         r += 1
     fim = r - 1
     _total(ws, r, 3, [10, 11, 12, 13, 14, 15], ini, fim, "Total (conforme filtro)")
@@ -223,24 +264,23 @@ def _aba_projeto(ws: Worksheet, p: dict, c: sqlite3.Connection) -> None:
     ws.cell(row=7, column=9, value="=I4-G4").number_format = MOEDA
     ws.cell(row=7, column=8, value="Δ vs 2026").font = F_NOTA
     ini = 3 + max(len(info), 5) + 2
-    cols = ["EDT", "Tarefa", "Conta", "Descrição da conta", "Origem da linha"] + MES + ["Total 2027", "Previsto 2026", "Executado 2026", "Empenhado 2026"]
-    _cab(ws, ini, cols, {18: P_27, 19: P_26, 20: P_26, 21: P_26})
+    cols = ["EDT", "Tarefa", "Conta", "Descrição da conta"] + MES + ["Total 2027", "Previsto 2026", "Executado 2026", "Empenhado 2026"]
+    _cab(ws, ini, cols, {17: P_27, 18: P_26, 19: P_26, 20: P_26})
     cmes = ", ".join(f"l.{m}" for m in MESES)
     rows = c.execute(
-        f"SELECT l.edt, l.tarefa, l.conta_codigo, k.descricao AS conta, l.fonte, {cmes}, "
+        f"SELECT l.edt, l.tarefa, l.conta_codigo, k.descricao AS conta, {cmes}, "
         f"COALESCE((SELECT {'+'.join('b.' + m for m in MESES)} FROM linhas b WHERE b.id = l.base_id), 0) AS ref, "
         "COALESCE((SELECT SUM(e.realizado) FROM execucao e WHERE e.orcamento=l.orcamento AND e.edt=l.edt AND e.tarefa=l.tarefa AND e.conta_codigo=l.conta_codigo),0) AS real, "
         "COALESCE((SELECT SUM(e.empenhado) FROM execucao e WHERE e.orcamento=l.orcamento AND e.edt=l.edt AND e.tarefa=l.tarefa AND e.conta_codigo=l.conta_codigo),0) AS emp "
         "FROM linhas l JOIN contas k ON k.codigo=l.conta_codigo WHERE l.ciclo=? AND l.orcamento=? ORDER BY l.edt, l.tarefa, l.conta_codigo",
         (config.CICLO_PLANO, p["orcamento"])).fetchall()
-    origem_nome = {"manual": "Lançamento", "viagens": "Viagens", "eventos": "Eventos", "headcount": "Headcount"}
     r = ini
     for x in rows:
         r += 1
-        _linha(ws, r, [x["edt"], x["tarefa"], x["conta_codigo"], x["conta"], origem_nome.get(x["fonte"], x["fonte"]), *[x[m] for m in MESES],
-                       f"=SUM(F{r}:Q{r})", x["ref"], x["real"], x["emp"]], moeda=set(range(6, 22)), centro={3, 5}, quebra={2, 4})
+        _linha(ws, r, [x["edt"], x["tarefa"], x["conta_codigo"], x["conta"], *[x[m] for m in MESES],
+                       f"=SUM(E{r}:P{r})", x["ref"], x["real"], x["emp"]], moeda=set(range(5, 21)), centro={3}, quebra={2, 4})
     if rows:
-        _total(ws, r + 1, 4, list(range(6, 22)), ini + 1, r)
+        _total(ws, r + 1, 4, list(range(5, 21)), ini + 1, r)
     else:
         ws.cell(row=ini + 1, column=1, value="Sem linhas de orçamento lançadas para 2027.").font = F_NOTA
     # entregas e KPIs
@@ -253,8 +293,8 @@ def _aba_projeto(ws: Worksheet, p: dict, c: sqlite3.Connection) -> None:
             r += 1
             _linha(ws, r + 1, [MES[e["mes"] - 1] if 1 <= e["mes"] <= 12 else "", e["descricao"], "", e["kpi"], e["meta"]], quebra={2, 4, 5}, centro={1})
         r += 1
-    _larguras(ws, [26, 36, 11, 36, 14] + [12] * 12 + [15, 15, 15, 15])
-    ws.freeze_panes = ws.cell(row=ini + 1, column=6)
+    _larguras(ws, [26, 36, 11, 36] + [12] * 12 + [15, 15, 15, 15])
+    ws.freeze_panes = ws.cell(row=ini + 1, column=5)
     ws.sheet_properties.tabColor = "9AA5B4" if p["contingenciado"] else AZUL
 
 
@@ -373,4 +413,39 @@ def _aba_receitas(ws: Worksheet, ps: list[dict], c: sqlite3.Connection) -> None:
                moeda=set(range(6, 19)), centro={1}, quebra={2, 4, 5})
     _fecha(ws, r, list(range(6, 19)), 5, "Nenhuma receita lançada.")
     _larguras(ws, [12, 36, 16, 26, 34] + [12] * 12 + [15])
+    ws.freeze_panes = "C5"
+
+
+# ---------------------------------------------------------------- exposição cambial
+
+def _aba_exposicao(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
+    cam = api_exposicao._cambio(c)
+    _titulo(ws, "Exposição ao dólar (e outras moedas) em 2027",
+            f"Compras previstas em moeda estrangeira. Conversão em reais pelas premissas do plano: dólar R$ {cam['USD']:.4f}, euro R$ {cam['EUR']:.4f}, libra R$ {cam['GBP']:.4f}.")
+    cols = ["Orçamento", "Projeto", "SC em andamento?", "Diretoria", "Gerência", "Ponto focal", "Tipo", "Processo (ADC ou SC)", "Descrição do produto ou serviço",
+            "Fabricante / fornecedor", "Canal / distribuidor", "País de origem", "Trimestre", "Programa Conecta?", "Previsão de abertura de SC", "Moeda",
+            "Valor em USD", "Valor em EUR", "Valor em GBP", "Equivalente em R$"]
+    _cab(ws, 4, cols, {20: P_27})
+    ids = sorted(api.permitidos(c, u))
+    marks = ",".join("?" for _ in ids) or "''"
+    projetos = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, finalidade FROM projetos WHERE orcamento IN ({marks})", ids)}
+    r = 4
+    for x in c.execute(f"SELECT * FROM exposicao_cambial WHERE orcamento IN ({marks}) ORDER BY trimestre, orcamento, id", ids):
+        r += 1
+        m = x["moeda"]
+        k = 3 + LINHAS_LOGO      # referências absolutas: a aba desce LINHAS_LOGO linhas depois
+        eq_rs = f"=Q{r}*$B${k}+R{r}*$D${k}+S{r}*$F${k}"
+        _linha(ws, r, [x["orcamento"], projetos[x["orcamento"]]["descricao"], x["sc_andamento"], x["diretoria"], x["gerencia"], x["ponto_focal"], x["tipo"], x["processo"],
+                       x["descricao"], x["fabricante"], x["canal"], x["pais_origem"], api_exposicao.TRIMESTRES.get(x["trimestre"], ""), x["conecta"], x["previsao_sc"], m,
+                       x["valor"] if m == "USD" else None, x["valor"] if m == "EUR" else None, x["valor"] if m == "GBP" else None,
+                       eq_rs],
+               moeda={17, 18, 19, 20}, centro={1, 3, 4, 5, 13, 14, 15, 16}, quebra={2, 6, 8, 9, 10, 11})
+    ws["A3"], ws["B3"], ws["C3"], ws["D3"], ws["E3"], ws["F3"] = "Dólar (R$)", cam["USD"], "Euro (R$)", cam["EUR"], "Libra (R$)", cam["GBP"]
+    for a in ("A3", "C3", "E3"):
+        ws[a].font = F_NEG
+    for b in ("B3", "D3", "F3"):
+        ws[b].number_format = "0.0000"
+        ws[b].alignment = Alignment(horizontal="left")
+    _fecha(ws, r, [17, 18, 19, 20], 5, "Nenhuma compra em moeda estrangeira lançada.")
+    _larguras(ws, [12, 34, 11, 10, 11, 20, 10, 22, 40, 22, 22, 14, 20, 11, 14, 8, 15, 15, 15, 17])
     ws.freeze_panes = "C5"

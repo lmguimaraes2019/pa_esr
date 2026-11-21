@@ -1259,9 +1259,10 @@ def test_exporta_planilha_do_orcamento(client):
     r = client.get("/api/export/orcamento")
     assert r.status_code == 200 and "spreadsheetml" in r.headers["content-type"]
     wb = load_workbook(io.BytesIO(r.content))
-    assert wb.sheetnames[0] == "Sumário" and {"Viagens", "Headcount", "Eventos", "Equipamentos TIC"} <= set(wb.sheetnames)
+    assert wb.sheetnames[:7] == ["Sumário", "Viagens", "Headcount", "Eventos", "Equipamentos TIC", "Receitas", "Exposição cambial"]
+    assert all(len(w._images) == 1 for w in wb.worksheets)
     sumario = wb["Sumário"]
-    cab = [c.value for c in sumario[4]]
+    cab = [c.value for c in sumario[6]]
     assert cab[:3] == ["Orçamento", "Nº do projeto", "Projeto"] and "Previsto 2027" in cab and "Executado 2026" in cab
     projetos = client.get("/api/projetos").json()
     vivos = [p for p in projetos if p["tipo"] != "receita" and not p["extinto"]]
@@ -1270,4 +1271,35 @@ def test_exporta_planilha_do_orcamento(client):
         assert p["orcamento"] in wb.sheetnames
     for p in extintos:
         assert p["orcamento"] not in wb.sheetnames
-    assert sumario.max_row >= len(projetos) + 4
+    assert sumario.max_row >= len(projetos) + 6
+
+
+def test_planilha_do_orcamento_traz_os_lancamentos(client):
+    import io
+    from openpyxl import load_workbook
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    orc = h["projetos"][0]["orcamento"]
+    tf = h["tarefas"][orc]["lista"][0]
+    assert client.post("/api/headcount", json={"orcamento": orc, "funcao": "Analista", "cargo": "Analista Pleno", "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO",
+                                               "grupo": "GRUPO 01", "posicao": 0, "mes_inicio": 7, "quantidade": 2, "justificativa": "Demanda nova",
+                                               "gerencia": "Diretoria Adjunta", "edt": tf["edt"], "tarefa": tf["tarefa"],
+                                               "computador": "N2.B", "monitor": "M2", "periferico": "DS1"}).status_code == 201
+    e = client.get("/api/eventos").json()
+    t = next(x for x in e["tarifas"] if x["tipo"] == "nac")
+    tfe = e["tarefas"][orc]["lista"][0]
+    assert client.post("/api/eventos", json={"orcamento": orc, "nome": "Congresso X", "local": "Recife", "tipo": "nac", "mes": 5, "n_pessoas": 2, "dias": 3, "inscricao": 1000,
+                                             "origem": t["origem"], "destino": t["destino"], "pessoas": ["Ana"], "justificativa": "", "edt": tfe["edt"],
+                                             "tarefa": tfe["tarefa"]}).status_code == 201
+    assert client.post("/api/exposicao", json={"orcamento": orc, "sc_andamento": "Não", "ponto_focal": "Ana", "tipo": "HW", "descricao": "Servidores", "moeda": "USD",
+                                               "valor": 3000, "pais_origem": "EUA", "trimestre": 2}).status_code == 201
+    wb = load_workbook(io.BytesIO(client.get("/api/export/orcamento").content))
+    def dados(nome):
+        return [row for row in wb[nome].iter_rows(min_row=7, values_only=True) if row[0] == orc]
+    assert len(dados("Headcount")) == 1 and len(dados("Eventos")) == 1 and len(dados("Viagens")) == 1
+    assert len(dados("Equipamentos TIC")) == 1
+    x = dados("Exposição cambial")
+    assert len(x) == 1 and x[0][16] == 3000 and str(x[0][19]).startswith("=Q")
+    # aba do projeto sem a coluna "Origem da linha"
+    cab = next(r for r in wb[orc].iter_rows(values_only=True) if r[0] == "EDT")
+    assert cab[:5] == ("EDT", "Tarefa", "Conta", "Descrição da conta", "Jan") and "Origem da linha" not in cab
