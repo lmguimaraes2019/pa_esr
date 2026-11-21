@@ -127,6 +127,12 @@ export function Exportar({ irProjeto }) {
         <p className="mudo">O arquivo é o template oficial com a aba Calendarização preenchida. Ao abrir no Excel, as fórmulas de conta e total são recalculadas.</p>
       </section>
       <section className="cartao">
+        <h3>Planilha do orçamento completo (PMO e diretores)</h3>
+        <p>Pasta de trabalho do Excel com a visão holística do orçamento: aba Sumário com todas as ações (novo ou existente, tipo de projeto, origem de recursos, previsto 2026, empenhado, executado, saldo e previsto 2027, com resumos por origem e por gerência), uma aba para cada projeto lançado (os extintos aparecem só no Sumário), e abas de Viagens, Headcount, Eventos, Equipamentos de TIC e Receitas. Totais e saldos são fórmulas, e há filtros em todas as abas.</p>
+        <div className="acoes"><a className="botao primario" href="/api/export/orcamento">Exportar planilha do orçamento</a></div>
+        <p className="mudo">Mostra apenas o que o seu perfil de acesso permite ver. Cada geração fica registrada na auditoria.</p>
+      </section>
+      <section className="cartao">
         <h3>Relatório para o Diretor Executivo</h3>
         <p>Documento em Word, no modelo da RNP, que explica tudo o que foi gerado no planejamento. A primeira parte traz a visão geral: síntese, evolução de 2026 para 2027 por origem de recurso e grupo de despesa, receitas e resultado, headcount, viagens, eventos, conexão com o Plano Operacional e o Contrato de Gestão, acompanhamento por gerência e premissas. A segunda parte traz um capítulo por projeto, com números, relação estratégica, entregas e o detalhe de cada linha do orçamento.</p>
         <div className="acoes"><a className="botao primario" href="/api/export/relatorio">Gerar relatório (Word)</a></div>

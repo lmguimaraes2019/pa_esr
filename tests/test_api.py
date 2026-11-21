@@ -1250,3 +1250,24 @@ def test_fluxo_de_recursos(client):
     for o in d["origens"]:
         e = sum(x["valor"] for x in d["entra"] if x["para"] == o["origem"]); s = sum(x["valor"] for x in d["sai"] if x["de"] == o["origem"])
         assert abs(e - s) < 0.05
+
+
+def test_exporta_planilha_do_orcamento(client):
+    import io
+    from openpyxl import load_workbook
+    entrar(client)
+    r = client.get("/api/export/orcamento")
+    assert r.status_code == 200 and "spreadsheetml" in r.headers["content-type"]
+    wb = load_workbook(io.BytesIO(r.content))
+    assert wb.sheetnames[0] == "Sumário" and {"Viagens", "Headcount", "Eventos", "Equipamentos TIC"} <= set(wb.sheetnames)
+    sumario = wb["Sumário"]
+    cab = [c.value for c in sumario[4]]
+    assert cab[:3] == ["Orçamento", "Nº do projeto", "Projeto"] and "Previsto 2027" in cab and "Executado 2026" in cab
+    projetos = client.get("/api/projetos").json()
+    vivos = [p for p in projetos if p["tipo"] != "receita" and not p["extinto"]]
+    extintos = [p for p in projetos if p["extinto"]]
+    for p in vivos[:5]:
+        assert p["orcamento"] in wb.sheetnames
+    for p in extintos:
+        assert p["orcamento"] not in wb.sheetnames
+    assert sumario.max_row >= len(projetos) + 4

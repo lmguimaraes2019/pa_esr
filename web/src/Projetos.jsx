@@ -148,7 +148,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
     <>
       <div className="cab"><div><h2>PA 2027 por projeto</h2>
         <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027. Os projetos são centros de custo; as receitas ficam na página Receitas.</p></div>
-        <div className="acoes"><button type="button" onClick={() => setFechado({})}>Expandir tudo</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => !k.includes("|")).map((k) => [k, true])))}>Recolher gerências</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => k.includes("|")).map((k) => [k, true])))}>Recolher origens</button></div>
+        <div className="acoes"><a className="botao" href="/api/export/orcamento">Exportar planilha</a><button type="button" onClick={() => setFechado({})}>Expandir tudo</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => !k.includes("|")).map((k) => [k, true])))}>Recolher gerências</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => k.includes("|")).map((k) => [k, true])))}>Recolher origens</button></div>
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       <Passos ativo={aba} onMudar={setAba} itens={[["despesas", "Planejamento de despesas"], ["pco", "Para lançar no PCO"]]} />
       {aba === "pco" ? <LancamentoPCO ps={todos} abrir={abrir} /> : <>
