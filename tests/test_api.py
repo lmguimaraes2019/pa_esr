@@ -1303,3 +1303,36 @@ def test_planilha_do_orcamento_traz_os_lancamentos(client):
     # aba do projeto sem a coluna "Origem da linha"
     cab = next(r for r in wb[orc].iter_rows(values_only=True) if r[0] == "EDT")
     assert cab[:5] == ("EDT", "Tarefa", "Conta", "Descrição da conta", "Jan") and "Origem da linha" not in cab
+
+
+def test_transfere_linha_com_a_estrutura(client):
+    entrar(client)
+    ps = [p["orcamento"] for p in client.get("/api/projetos").json() if p["tipo"] == "despesa"]
+    a, b = ps[0], ps[1]
+    conta = client.get("/api/contas").json()[0]["codigo"] if client.get("/api/contas").status_code == 200 else None
+    assert conta
+    meses = [8167.0] * 12
+    nova = client.post(f"/api/projetos/{a}/linhas", json={"edt": "99-ESTRUTURA TESTE", "tarefa": "99.01-ACAO TESTE", "conta_codigo": conta, "meses": meses}).json()
+    antes_a = client.get(f"/api/projetos/{a}").json()["totais"]["plano"]
+    antes_b = client.get(f"/api/projetos/{b}").json()["totais"]["plano"]
+    sim = client.post("/api/linhas/transferir", json={"ids": [nova["id"]], "destino": b, "simular": True}).json()
+    assert sim["valor"] == 98004.0 and sim["destino"]["depois"] == round(antes_b + 98004, 2)
+    assert sim["criar_no_destino"]["metas"] == ["99-ESTRUTURA TESTE"] and sim["criar_no_destino"]["acoes"][0]["tarefa"] == "99.01-ACAO TESTE"
+    assert sim["sai_da_origem"]["metas"] == ["99-ESTRUTURA TESTE"] and len(sim["sai_da_origem"]["acoes"]) == 1
+    assert client.get(f"/api/projetos/{a}").json()["totais"]["plano"] == antes_a      # simular não grava
+    ok = client.post("/api/linhas/transferir", json={"ids": [nova["id"]], "destino": b, "simular": False})
+    assert ok.status_code == 200, ok.text
+    da, db = client.get(f"/api/projetos/{a}").json(), client.get(f"/api/projetos/{b}").json()
+    assert round(da["totais"]["plano"], 2) == round(antes_a - 98004, 2) and round(db["totais"]["plano"], 2) == round(antes_b + 98004, 2)
+    assert not any(x["edt"] == "99-ESTRUTURA TESTE" for x in da["linhas"])            # a estrutura some da origem
+    assert any(x["edt"] == "99-ESTRUTURA TESTE" and x["tarefa"] == "99.01-ACAO TESTE" for x in db["linhas"])
+    # parcial, renomeando a ação, e soma em linha igual
+    parc = client.post("/api/linhas/transferir", json={"ids": [x["id"] for x in db["linhas"] if x["edt"] == "99-ESTRUTURA TESTE"], "destino": a, "valor": 4000,
+                                                       "tarefa": "99.02-OUTRA", "simular": False})
+    assert parc.status_code == 200, parc.text
+    da, db = client.get(f"/api/projetos/{a}").json(), client.get(f"/api/projetos/{b}").json()
+    assert any(x["tarefa"] == "99.02-OUTRA" and round(x["total"], 2) == 4000 for x in da["linhas"])
+    assert any(x["tarefa"] == "99.01-ACAO TESTE" and round(x["total"], 2) == 94004 for x in db["linhas"])
+    # erros
+    assert client.post("/api/linhas/transferir", json={"ids": [nova["id"]], "destino": "NAO-EXISTE", "simular": True}).status_code == 404
+    assert client.post("/api/linhas/transferir", json={"ids": [x["id"] for x in db["linhas"] if x["tarefa"] == "99.01-ACAO TESTE"], "destino": b, "simular": True}).status_code == 422

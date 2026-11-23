@@ -56,6 +56,7 @@ const svg = (children) => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 export const Lapis = () => svg(<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>);
 export const Lixeira = () => svg(<><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>);
 export const Mais = () => svg(<><path d="M12 5v14M5 12h14" /></>);
+export const Transferir = () => svg(<><path d="M4 8h14" /><path d="M14 4l4 4-4 4" /><path d="M20 16H6" /><path d="M10 12l-4 4 4 4" /></>);
 export const Desfazer = () => svg(<><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15-6.7L3 13" /></>);
 
 /** Botão de ícone com dica (title) e rótulo acessível. tom: "perigo" deixa vermelho. */

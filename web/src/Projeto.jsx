@@ -3,7 +3,7 @@ import { ResumoProjeto } from "./Planejamento.jsx";
 import EntregasProjeto, { fecho, rotuloEst } from "./Entregas.jsx";
 import { ReplicarProjeto, FaixaMigracao } from "./Replicar.jsx";
 import { api, fmt, fmtN, fmtI, lerNumero, MESES } from "./api.js";
-import { FINALIDADES, nomeFinalidade, classeFinalidade, Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer, Mais } from "./ui.jsx";
+import { FINALIDADES, nomeFinalidade, classeFinalidade, Kpi, Delta, pct, Passos, Selo, Celula, BotaoIcone, Lapis, Lixeira, Desfazer, Mais, Transferir } from "./ui.jsx";
 
 function EditarLinha({ l, contas, onSalvar, onFechar }) {
   const trava = l.fonte !== "manual";
@@ -188,9 +188,68 @@ function DadosOrcamento({ d, admin, recarregar, setErro, voltar }) {
   );
 }
 
+/** Transfere linhas (a linha ou todas as de uma ação) para outro projeto, levando a Meta/EDT e a Ação/Tarefa. Mostra o impacto antes de gravar. */
+function TransferirLinhas({ ids, rotulo, origem, unica, onFechar, onFeito }) {
+  const [destinos, setDestinos] = useState([]);
+  const [f, setF] = useState({ destino: "", edt: "", tarefa: "", valor: "" });
+  const [plano, setPlano] = useState(null);
+  const [erro, setErro] = useState("");
+  const [gravando, setGravando] = useState(false);
+  useEffect(() => { api(`/linhas/destinos?origem=${encodeURIComponent(origem)}`).then(setDestinos).catch((e) => setErro(e.message)); }, [origem]);
+  const corpo = (simular) => ({ ids, destino: f.destino, simular, ...(f.edt.trim() ? { edt: f.edt.trim() } : {}), ...(f.tarefa.trim() ? { tarefa: f.tarefa.trim() } : {}),
+    ...(unica && f.valor.trim() ? { valor: lerNumero(f.valor) } : {}) });
+  useEffect(() => {
+    if (!f.destino) { setPlano(null); return; }
+    if (unica && f.valor.trim() && !(lerNumero(f.valor) > 0)) { setPlano(null); return; }
+    const t = setTimeout(() => { setErro(""); api("/linhas/transferir", { method: "POST", body: corpo(true) }).then(setPlano).catch((e) => { setPlano(null); setErro(e.message); }); }, 300);
+    return () => clearTimeout(t);
+  }, [f.destino, f.edt, f.tarefa, f.valor]); // eslint-disable-line
+  const confirmar = async () => {
+    setGravando(true);
+    try { await api("/linhas/transferir", { method: "POST", body: corpo(false) }); onFeito(); onFechar(); } catch (e) { setErro(e.message); setGravando(false); }
+  };
+  const delta = (a, b) => <span className={b < a ? "down" : "up"}>{b < a ? "" : "+"}{fmt(b - a)}</span>;
+  return (
+    <section className="cartao" id="form-transferir">
+      <h3>Transferir para outro projeto: {rotulo}</h3>
+      <p className="mudo">A Meta/EDT e a Ação/Tarefa vão junto: se o destino não tiver, são criadas. Na origem, a Ação/Tarefa e a Meta/EDT somem quando ficam sem nenhuma linha.</p>
+      <div className="grade">
+        <label>Projeto de destino<select value={f.destino} onChange={(e) => setF({ ...f, destino: e.target.value })}>
+          <option value="">Escolha o projeto</option>
+          {destinos.map((x) => <option key={x.orcamento} value={x.orcamento}>{x.orcamento} | {x.descricao} ({x.gerente})</option>)}</select></label>
+        <label>Novo nome da Meta/EDT (opcional)<input value={f.edt} placeholder="manter o atual" onChange={(e) => setF({ ...f, edt: e.target.value })} /></label>
+        <label>Novo nome da Ação/Tarefa (opcional)<input value={f.tarefa} placeholder="manter o atual" onChange={(e) => setF({ ...f, tarefa: e.target.value })} /></label>
+        {unica && <label>Valor a transferir (vazio = tudo)<input value={f.valor} inputMode="decimal" placeholder="ex.: 50000" onChange={(e) => setF({ ...f, valor: e.target.value })} /></label>}
+      </div>
+      {plano && (
+        <div className="nota">
+          <table className="tabela-mini">
+            <thead><tr><th>Projeto</th><th className="n">Plano 2027 antes</th><th className="n">Depois</th><th className="n">Variação</th></tr></thead>
+            <tbody>
+              {[plano.origem, plano.destino].map((x) => <tr key={x.orcamento}><td>{x.orcamento} | {x.descricao}</td><td className="n">{fmt(x.antes)}</td><td className="n">{fmt(x.depois)}</td><td className="n">{delta(x.antes, x.depois)}</td></tr>)}
+            </tbody>
+          </table>
+          <p><strong>{fmt(plano.valor)}</strong> em {plano.n_linhas} linha(s){plano.parcial ? " (transferência parcial: o restante fica na origem)" : ""}.</p>
+          <ul>
+            {plano.criar_no_destino.metas.map((m) => <li key={"m" + m}>Cria no destino a Meta/EDT <strong>{m}</strong></li>)}
+            {plano.criar_no_destino.acoes.map((a) => <li key={a.edt + a.tarefa}>Cria no destino a Ação/Tarefa <strong>{a.tarefa}</strong> (em {a.edt})</li>)}
+            {plano.criar_no_destino.metas.length + plano.criar_no_destino.acoes.length === 0 && <li>O destino já tem essa Meta/EDT e essa Ação/Tarefa: a linha entra nelas.</li>}
+            {plano.sai_da_origem.acoes.map((a) => <li key={"s" + a.edt + a.tarefa}>Remove da origem a Ação/Tarefa <strong>{a.tarefa}</strong> (fica sem linhas)</li>)}
+            {plano.sai_da_origem.metas.map((m) => <li key={"sm" + m}>Remove da origem a Meta/EDT <strong>{m}</strong> (fica sem ações)</li>)}
+          </ul>
+          {plano.avisos.map((a) => <p key={a} className="alerta">⚠ {a}</p>)}
+        </div>
+      )}
+      {erro && <p className="erro" role="alert">{erro}</p>}
+      <div className="acoes"><button className="primario" disabled={!plano || gravando} onClick={confirmar}>Confirmar transferência</button><button type="button" onClick={onFechar}>Cancelar</button></div>
+    </section>
+  );
+}
+
 function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   const [nova, setNova] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [transferindo, setTransferindo] = useState(null);      // { ids, rotulo, unica }
   const [renomeando, setRenomeando] = useState(null);      // { edt, tarefa?, nome }
   const [filtro, setFiltro] = useState("todas");
   const t = d.totais;
@@ -275,6 +334,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
                   <td className="col-conta" colSpan={14}><span className="rotulo-nivel">Ação/Tarefa</span> {nomeGrupo(ls[0].edt, ls[0].tarefa, ls[0].tarefa)}
                     {!(renomeando && renomeando.edt === ls[0].edt && renomeando.tarefa === ls[0].tarefa) && <span className="grupo-acoes">
                       <BotaoIcone icone={<Lapis />} dica="Renomear a Ação/Tarefa" onClick={() => setRenomeando({ edt: ls[0].edt, tarefa: ls[0].tarefa, nome: ls[0].tarefa })} />
+                      <BotaoIcone icone={<Transferir />} dica="Transferir as linhas lançadas à mão desta Ação/Tarefa para outro projeto" desligado={!ls.some((x) => x.fonte === "manual")} onClick={() => { setNova(false); setEditando(null); setTransferindo({ ids: ls.filter((x) => x.fonte === "manual").map((x) => x.id), rotulo: `${ls[0].tarefa} (${ls.filter((x) => x.fonte === "manual").length} linha(s))`, unica: ls.filter((x) => x.fonte === "manual").length === 1 }); setTimeout(() => document.getElementById("form-transferir")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
                       <button type="button" className="link" onClick={() => abrirNova({ edt: ls[0].edt, tarefa: ls[0].tarefa })}>+ Conta nesta ação</button></span>}</td></tr>
                 {ls.map((l) => (
                   <React.Fragment key={l.id}>
@@ -283,6 +343,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
                         <div className="barra-icones">
                           <BotaoIcone icone={<Lapis />} dica="Editar a linha inteira" onClick={() => { setNova(false); setEditando(l); setTimeout(() => document.getElementById("form-linha")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
                           <BotaoIcone icone={<Lixeira />} tom="perigo" desligado={l.fonte !== "manual"} dica={l.fonte !== "manual" ? "Linha bloqueada: vem de outra página (Viagens, Eventos ou Headcount)" : "Excluir esta linha de 2027"} onClick={() => excluir(l)} />
+                          <BotaoIcone icone={<Transferir />} desligado={l.fonte !== "manual"} dica={l.fonte !== "manual" ? "Linha bloqueada: vem de outra página (Viagens, Eventos ou Headcount)" : "Transferir esta linha para outro projeto"} onClick={() => { setNova(false); setEditando(null); setTransferindo({ ids: [l.id], rotulo: `${l.tarefa} | ${l.conta_desc}`, unica: true }); setTimeout(() => document.getElementById("form-transferir")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
                           <BotaoIcone icone={<Desfazer />} desligado={l.status !== "ajustada"} dica={l.status === "ajustada" ? "Voltar aos valores aprovados em 2026" : "Sem alterações para desfazer"} onClick={() => trocar(l, { meses: l.ref.meses })} />
                         </div>
                       </td>
@@ -306,6 +367,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
           <tfoot><tr><td className="col-acoes" /><td className="col-conta">Total do plano 2027</td>{MESES.map((_, i) => { const v = d.linhas.reduce((a, l) => a + l.meses[i], 0); return <td key={i} className="n" title={fmtN(v)}>{fmtI(v)}</td>; })}<td className="n total-cel"><strong>{fmtN(t.plano)}</strong><small><Delta de={t.base} para={t.plano} /></small></td></tr></tfoot>
         </table>
       </div>
+      {transferindo && <TransferirLinhas key={transferindo.ids.join()} {...transferindo} origem={d.projeto.orcamento} onFechar={() => setTransferindo(null)} onFeito={recarregar} />}
       {editando && <EditarLinha key={editando.id} l={editando} contas={contas} onFechar={() => setEditando(null)} onSalvar={async (b) => { await api(`/linhas/${editando.id}`, { method: "PUT", body: b }); recarregar(); }} />}
       {nova ? <NovaLinha key={JSON.stringify(nova)} inicial={nova === true ? undefined : nova} edts={edtsLista} tarefas={tarefasLista} contas={contas} onFechar={() => setNova(false)} onCriar={async (b) => { await api(`/projetos/${d.projeto.orcamento}/linhas`, { method: "POST", body: b }); recarregar(); }} />
             : null}

@@ -495,3 +495,7 @@ label.est-gtit input{width:auto;flex:none}
 
 .sub-proj{margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px}
 .sub-proj .tag{font-size:11px}
+
+.tabela-mini { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.tabela-mini th, .tabela-mini td { padding: 4px 8px; border-bottom: 1px solid var(--borda, #dde3ee); text-align: left; }
+.tabela-mini th.n, .tabela-mini td.n { text-align: right; }

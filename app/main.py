@@ -22,6 +22,7 @@ from .api_entregas import router as entregas_router
 from .api_replicar import router as replicar_router
 from .api_execucao import router as execucao_router
 from .api_outros import router as outros_router
+from .api_transferir import router as transferir_router
 from .api_exportar import router as exportar_router
 from .api_fluxo import router as fluxo_router
 from .financiamento import router as financiamento_router
@@ -79,6 +80,7 @@ app.include_router(financiamento_router)
 app.include_router(execucao_router)
 app.include_router(outros_router)
 app.include_router(exportar_router)
+app.include_router(transferir_router)
 app.include_router(fluxo_router)
 
 if config.WEB_DIST.exists():
