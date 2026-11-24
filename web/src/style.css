@@ -499,3 +499,8 @@ label.est-gtit input{width:auto;flex:none}
 .tabela-mini { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
 .tabela-mini th, .tabela-mini td { padding: 4px 8px; border-bottom: 1px solid var(--borda, #dde3ee); text-align: left; }
 .tabela-mini th.n, .tabela-mini td.n { text-align: right; }
+
+.filtro-ativo { border-color: #E87722; box-shadow: 0 0 0 2px rgba(232,119,34,.18); }
+.gerencias-check { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 6px 0; }
+.campo-largo { grid-column: 1 / -1; }
+.evt-ger { margin: 2px 0 6px; display: flex; flex-wrap: wrap; gap: 4px; }

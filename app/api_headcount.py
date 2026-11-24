@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from . import equipamentos, pessoal, sync
 from .api_eventos import tarefas_dos_projetos
-from .api import _arred, _chave_nome, _conn, _gerencia_do, exige_acesso, exige_admin, permitidos, proprios, usuario_liberado
+from .api import _arred, _chave_nome, _conn, _gerencia_do, exige_acesso, exige_admin, gerencia_dos_projetos, gerencias_da_casa, permitidos, proprios, usuario_liberado
 from .db import audit, tx
 
 router = APIRouter(prefix="/api/headcount")
@@ -87,6 +87,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     par, reaj = pessoal.parametros(c), _reajuste(c)
     projetos = {r["orcamento"]: r for r in c.execute(
         "SELECT orcamento, descricao, origem, gerente, tipo, finalidade FROM projetos ORDER BY orcamento")}
+    ger_proj = gerencia_dos_projetos(c)
     itens = []
     for r in c.execute("SELECT * FROM headcount ORDER BY orcamento, id"):
         if not (u["perfil"] == "admin" or r["orcamento"] in acesso or r["criado_por"] == u["login"] or (r["orcamento_equip"] and r["orcamento_equip"] in acesso)):
@@ -94,6 +95,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
         d = _calc(r, par, reaj)
         d["outro"] = r["orcamento"] not in meus
         d["projeto"] = projetos[r["orcamento"]]["descricao"]
+        d["ger_filtro"] = [r["gerencia"]] if r["gerencia"] else [ger_proj.get(r["orcamento"], "Sem gerência definida")]
         d["fora_de_pessoal"] = projetos[r["orcamento"]]["finalidade"] != "headcount"
         d["projeto_equip"] = projetos[d["equip_orcamento"]]["descricao"] if d["equip_orcamento"] in projetos else ""
         d["equip_outro"] = d["equip_orcamento"] not in meus
@@ -138,11 +140,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     }
 
 
-def _gerencias(c: sqlite3.Connection) -> list[str]:
-    """Gerências a que um headcount pode ficar vinculado: as dos usuários ativos, mais a Diretoria Adjunta."""
-    nomes = {r[0].strip() for r in c.execute("SELECT gerencia FROM users WHERE ativo=1 AND COALESCE(gerencia,'')<>''")}
-    nomes.add("Diretoria Adjunta")
-    return sorted(nomes, key=str.lower)
+_gerencias = gerencias_da_casa
 
 
 def _normaliza_equip(c: sqlite3.Connection, d: HcIn) -> HcIn:

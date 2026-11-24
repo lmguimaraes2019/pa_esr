@@ -110,15 +110,15 @@ def vincular_viagens_de_eventos(c: sqlite3.Connection, orcamento: str) -> bool:
             continue      # sem trecho com tarifa não há viagem a calcular
         edt, tarefa = (e["edt"], e["tarefa"]) if (e["edt"] and e["tarefa"]) else padrao
         dados = (e["tipo"], e["mes"], e["origem"], e["destino"], e["n_pessoas"], e["dias"], e["pernoites"],
-                 f"Evento: {e['nome']}"[:300], "", orcamento, edt, tarefa)
+                 f"Evento: {e['nome']}"[:300], "", e["gerencias"] or "[]", orcamento, edt, tarefa)
         atual = c.execute("SELECT id FROM viagens WHERE ciclo=? AND evento_id=?", (config.CICLO_PLANO, e["id"])).fetchone()
         if atual:
-            c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?,"
+            c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?, gerencias=?,"
                       " orcamento=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?", (*dados, e["atualizado_por"], atual["id"]))
             ativos.append(atual["id"])
         else:
-            cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area,"
-                            " orcamento, edt, tarefa, evento_id, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area, gerencias,"
+                            " orcamento, edt, tarefa, evento_id, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (config.CICLO_PLANO, *dados, e["id"], e["atualizado_por"], e["criado_por"]))
             ativos.append(cur.lastrowid)
     marks = ",".join("?" for _ in ativos) or "-1"

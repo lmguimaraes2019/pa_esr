@@ -1,13 +1,14 @@
 """Rotas do planejamento de viagens e da ligação do plano com o orçamento 2027."""
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import config, sync, viagens as vg
-from .api import _arred, _conn, compartilhados, exige_admin, lancaveis, permitidos, proprios, usuario_liberado
+from .api import _arred, _conn, compartilhados, exige_admin, gerencia_dos_projetos, gerencias_da_casa, lancaveis, permitidos, proprios, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
 
 router = APIRouter(prefix="/api/viagens")
@@ -24,6 +25,7 @@ class ViagemIn(BaseModel):
     pernoites: int | None = Field(default=None, ge=0, le=60)
     objetivo: str = Field(default="", max_length=300)
     area: str = Field(default="", max_length=40)
+    gerencia: str = Field(default="", max_length=120)      # gerência da ESR que faz a viagem
     orcamento: str | None = None
     edt: str | None = None
     tarefa: str | None = None
@@ -65,7 +67,7 @@ def _json(v: sqlite3.Row, tar, bvezes: float, base: sqlite3.Row | None, nomes: d
         ref = vg.calcular(base["tipo"], bt, base["n_viagens"], base["dias"], base["pernoites"], bvezes)["total"]
     return {"id": v["id"], "tipo": v["tipo"], "mes": v["mes"], "origem": v["origem"], "destino": v["destino"],
             "n_viagens": v["n_viagens"], "dias": v["dias"], "pernoites": v["pernoites"], "objetivo": v["objetivo"],
-            "area": v["area"], "orcamento": v["orcamento"], "projeto": nomes.get(v["orcamento"] or "", ""),
+            "area": v["area"], "gerencias": json.loads(v["gerencias"] or "[]"), "orcamento": v["orcamento"], "projeto": nomes.get(v["orcamento"] or "", ""),
             "edt": v["edt"], "tarefa": v["tarefa"], "tem_tarifa": t is not None, "custo": custo,
             "ref_2026": ref, "evento_id": v["evento_id"], "atualizado_por": v["atualizado_por"]}
 
@@ -92,8 +94,10 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     ids = proprios(c, u)      # os quadros de orçamento mostram só os projetos do gestor; os da Diretoria ficam em "outros"
     bases = {r["id"]: r for r in c.execute("SELECT * FROM viagens WHERE ciclo=?", (config.CICLO_BASE,))}
     todos = [_json(v, tar, bv, bases.get(v["base_id"]), nomes) for v in rows]
+    ger_proj = gerencia_dos_projetos(c)
     for i in todos:
         i["outro"] = bool(i["orcamento"]) and i["orcamento"] not in ids
+        i["ger_filtro"] = i["gerencias"] or ([ger_proj[i["orcamento"]]] if i["orcamento"] in ger_proj else ["Sem gerência definida"])
     itens = [i for i in todos if not i["outro"]]
     outros: dict[str, dict] = {}
     for i in todos:
@@ -143,7 +147,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
                    "executado": _arred(sum(exec_.get(o, 0) for o in ids)),
                    "orcamento": _arred(sum(atual.get(o, 0) for o in ids)),
                    "viagens": sum(i["n_viagens"] for i in itens), "pendentes": pend},
-        "bagagem_vezes": bv,
+        "bagagem_vezes": bv, "gerencias": gerencias_da_casa(c),
         "opcoes": {
             "tarifas": [{"tipo": k[0], "origem": k[1], "destino": k[2]} for k in sorted(tar)],
             "projetos": [{"orcamento": o, "nome": nomes.get(o, o), "tarefas": ids_tarefas[o], "outro": o not in ids} for o in sorted(lanc)],
@@ -167,7 +171,10 @@ def _validar(c: sqlite3.Connection, u: dict, d: ViagemIn) -> None:
 
 
 def _grava(c: sqlite3.Connection, d: ViagemIn) -> tuple:
-    return (d.tipo, d.mes, d.origem, d.destino, d.n_viagens, d.dias, d.pernoites, d.objetivo.strip(), d.area.strip(),
+    g = d.gerencia.strip()
+    if g and g not in gerencias_da_casa(c):
+        raise HTTPException(422, "Gerência não encontrada.")
+    return (d.tipo, d.mes, d.origem, d.destino, d.n_viagens, d.dias, d.pernoites, d.objetivo.strip(), d.area.strip(), json.dumps([g] if g else []),
             d.orcamento or None, (d.edt or None) if d.orcamento else None, (d.tarefa or None) if d.orcamento else None)
 
 
@@ -187,8 +194,8 @@ def _so_pelo_evento(v: sqlite3.Row) -> None:
 def criar(d: ViagemIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         _validar(c, u, d)
-        cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area,"
-                        " orcamento, edt, tarefa, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area, gerencias,"
+                        " orcamento, edt, tarefa, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (config.CICLO_PLANO, *_grava(c, d), u["login"], u["login"]))
         audit(c, u["login"], "incluiu viagem", d.orcamento, detalhe=f"{d.origem} para {d.destino}, mês {d.mes}")
         sync.sincronizar_viagens(c, d.orcamento or "", u["login"], True)
@@ -201,7 +208,7 @@ def editar(vid: int, d: ViagemIn, u: dict = Depends(usuario_liberado)):
         v = _viagem_do_usuario(c, u, vid)
         _so_pelo_evento(v)
         _validar(c, u, d)
-        c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?,"
+        c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?, gerencias=?,"
                   " orcamento=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
                   (*_grava(c, d), u["login"], vid))
         audit(c, u["login"], "editou viagem", d.orcamento or v["orcamento"], detalhe=f"id {vid}: {d.origem} para {d.destino}")

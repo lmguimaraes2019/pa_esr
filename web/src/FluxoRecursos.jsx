@@ -50,8 +50,8 @@ export function CustoPorGerencia({ d }) {
     </section>);
 }
 
-export default function useFluxo() {
+export default function useFluxo(gerencia = "") {
   const [d, setD] = useState(null);
-  useEffect(() => { api("/fluxo").then(setD).catch(() => setD(false)); }, []);
+  useEffect(() => { api("/fluxo" + (gerencia ? `?gerencia=${encodeURIComponent(gerencia)}` : "")).then(setD).catch(() => setD(false)); }, [gerencia]);
   return d;
 }

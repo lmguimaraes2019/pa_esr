@@ -304,7 +304,7 @@ def _aba_viagens(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
     d = api_viagens.listar(u, c)
     _titulo(ws, "Viagens previstas em 2027", "Uma linha por conjunto de viagens. Custo calculado pela tabela de tarifas vigente. Inclui as viagens vindas de eventos.")
     cols = ["Orçamento", "Projeto", "Tipo", "Mês", "Origem", "Destino", "Nº de viagens", "Dias", "Pernoites", "Objetivo", "Área", "Passagem (c/ bagagem)",
-            "Hospedagem", "Ajuda de custo", "Aux. transporte", "Seguro", "Total 2027", "Referência 2026", "Evento", "Lançado por"]
+            "Hospedagem", "Ajuda de custo", "Aux. transporte", "Seguro", "Total 2027", "Referência 2026", "Evento", "Lançado por", "Gerências"]
     _cab(ws, 4, cols, {17: P_27, 18: P_26})
     r = 4
     for v in sorted(d["viagens"], key=lambda x: (x["orcamento"] or "", x["mes"], x["id"])):
@@ -313,9 +313,9 @@ def _aba_viagens(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
         _linha(ws, r, [v["orcamento"] or "sem projeto", v["projeto"], TIPOS_VIAGEM.get(v["tipo"], v["tipo"]), MES[v["mes"] - 1] if 1 <= v["mes"] <= 12 else "", v["origem"], v["destino"],
                        v["n_viagens"], v["dias"], v["pernoites"] if v["pernoites"] is not None else k["pernoites"], v["objetivo"], v["area"],
                        k["passagem"], k["hospedagem"], k["ajuda_custo"], k["aux_transporte"], k["seguro"], f"=SUM(L{r}:P{r})", v["ref_2026"] or 0,
-                       "Sim" if v["evento_id"] else "", v["atualizado_por"]], moeda={12, 13, 14, 15, 16, 17, 18}, centro={1, 3, 4, 7, 8, 9, 19}, quebra={2, 10})
+                       "Sim" if v["evento_id"] else "", v["atualizado_por"], ", ".join(v["ger_filtro"])], moeda={12, 13, 14, 15, 16, 17, 18}, centro={1, 3, 4, 7, 8, 9, 19}, quebra={2, 10, 21})
     _fecha(ws, r, [7, 12, 13, 14, 15, 16, 17, 18], 5, "Nenhuma viagem lançada.")
-    _larguras(ws, [12, 36, 13, 7, 22, 22, 9, 7, 10, 34, 16, 15, 14, 14, 14, 12, 15, 15, 8, 16])
+    _larguras(ws, [12, 36, 13, 7, 22, 22, 9, 7, 10, 34, 16, 15, 14, 14, 14, 12, 15, 15, 8, 16, 26])
     ws.freeze_panes = "C5"
 
 
@@ -354,7 +354,7 @@ def _aba_eventos(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
     d = api_eventos.listar(u, c)
     _titulo(ws, "Eventos previstos em 2027", "Total = inscrição + viagem das pessoas (passagem, hospedagem, ajuda de custo, auxílio e seguro). Evento RNP é organizado pela RNP.")
     cols = ["Orçamento", "Projeto", "Evento", "Local", "Âmbito", "Evento RNP", "Mês", "Nº de pessoas", "Dias", "Participantes", "Inscrição (R$)", "Passagem",
-            "Hospedagem", "Ajuda de custo", "Aux. transporte", "Seguro", "Total 2027", "Situação", "Justificativa", "Site", "Lançado por"]
+            "Hospedagem", "Ajuda de custo", "Aux. transporte", "Seguro", "Total 2027", "Situação", "Justificativa", "Site", "Lançado por", "Gerências que participam"]
     _cab(ws, 4, cols, {17: P_27})
     r = 4
     for e in sorted(d["itens"], key=lambda x: (x["orcamento"] or "", x["mes"], x["id"])):
@@ -363,10 +363,10 @@ def _aba_eventos(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
         _linha(ws, r, [e["orcamento"], e["projeto"], e["nome"], e["local"], TIPOS_VIAGEM.get(e["tipo"], e["tipo"]), "Sim" if e["rnp"] else "Não",
                        MES[e["mes"] - 1] if 1 <= e["mes"] <= 12 else "", e["n_pessoas"], e["dias"], ", ".join(e["pessoas"]), e["inscricao_total"],
                        v["passagem"], v["hospedagem"], v["ajuda_custo"], v["aux_transporte"], v["seguro"], f"=SUM(K{r}:P{r})",
-                       "Completo" if e["completo"] else "Falta: " + ", ".join(e["faltando"]), e["justificativa"], e["site"], e["atualizado_por"]],
-               moeda={11, 12, 13, 14, 15, 16, 17}, centro={1, 5, 6, 7, 8, 9}, quebra={2, 3, 4, 10, 18, 19})
+                       "Completo" if e["completo"] else "Falta: " + ", ".join(e["faltando"]), e["justificativa"], e["site"], e["atualizado_por"], ", ".join(e["ger_filtro"])],
+               moeda={11, 12, 13, 14, 15, 16, 17}, centro={1, 5, 6, 7, 8, 9}, quebra={2, 3, 4, 10, 18, 19, 22})
     _fecha(ws, r, [8, 11, 12, 13, 14, 15, 16, 17], 5, "Nenhum evento lançado.")
-    _larguras(ws, [12, 32, 32, 18, 13, 10, 7, 9, 7, 30, 14, 14, 14, 14, 14, 12, 15, 30, 40, 24, 16])
+    _larguras(ws, [12, 32, 32, 18, 13, 10, 7, 9, 7, 30, 14, 14, 14, 14, 14, 12, 15, 30, 40, 24, 16, 28])
     ws.freeze_panes = "D5"
 
 

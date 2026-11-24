@@ -466,6 +466,9 @@ def init_db() -> None:
         for col in ("computador", "monitor", "periferico"):
             if col not in hc:
                 c.execute(f"ALTER TABLE headcount ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        for tabela in ("eventos", "viagens"):      # migração: gerências que participam do evento / fazem a viagem (lista em JSON)
+            if "gerencias" not in {r[1] for r in c.execute(f"PRAGMA table_info({tabela})")}:
+                c.execute(f"ALTER TABLE {tabela} ADD COLUMN gerencias TEXT NOT NULL DEFAULT '[]'")
         for col in ("orcamento_equip", "edt_equip", "tarefa_equip"):      # migração: projeto (e tarefa) que custeia os equipamentos, se for outro que o da posição
             if col not in hc:
                 c.execute(f"ALTER TABLE headcount ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")

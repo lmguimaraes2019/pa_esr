@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
-import { Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { Kpi, BotaoIcone, Lapis, Lixeira, FiltroGerencia, GerenciasCheck, nasGer } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
@@ -31,7 +31,7 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
     try {
       await onSalvar({ orcamento: f.orcamento, nome: f.nome, local: f.local, tipo: f.tipo, mes: Number(f.mes), n_pessoas: n, dias: Number(f.dias),
         pernoites: f.pernoites === "" ? null : Number(f.pernoites), inscricao: f.inscricao === "" ? null : insc, moeda: f.moeda,
-        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "", site: f.site || "", rnp: !!f.rnp });
+        origem: f.origem, destino: f.destino, pessoas: pessoas.filter((x) => x.trim()), justificativa: f.justificativa, edt: f.edt || "", tarefa: f.tarefa || "", site: f.site || "", rnp: !!f.rnp, gerencias: f.gerencias || [] });
       onFechar();
     } catch (x) { setErro(x.message); }
   };
@@ -43,6 +43,9 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label><span>Projeto que custeia <Obrig /></span><select value={f.orcamento} onChange={(e) => set("orcamento", e.target.value)} required>
           <option value="">Selecione…</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}{p.outro ? " (Diretoria)" : ""}</option>)}</select></label>
         <label><span>Nome do evento <Obrig /></span><input value={f.nome} onChange={(e) => set("nome", e.target.value)} /></label>
+        <div className="campo-largo"><span>Gerências que participam do evento</span>
+          <GerenciasCheck valor={f.gerencias || []} onChange={(g) => set("gerencias", g)} opcoes={dados.gerencias} />
+          <small className="mudo">Marque todas as gerências com participantes. Sem marcação, vale a gerência do projeto que custeia.</small></div>
         <label className="ent-check"><input type="checkbox" checked={!!f.rnp} onChange={(e) => set("rnp", e.target.checked)} /> Evento da RNP</label>
         <label>Site do evento<input inputMode="url" value={f.site || ""} onChange={(e) => set("site", e.target.value)} placeholder="https://www.evento.com.br" /></label>
         <label><span>Local (cidade e país) <Obrig /></span><input value={f.local} onChange={(e) => set("local", e.target.value)} placeholder="ex.: Recife, Brasil" /></label>
@@ -83,13 +86,14 @@ export default function Eventos({ irProjeto }) {
   const [proj, setProj] = useState("todos");
   const [soPend, setSoPend] = useState(false);
   const [tipoF, setTipoF] = useState("todos");
+  const [ger, setGer] = useState("");
   const [erro, setErro] = useState("");
   const carregar = useCallback(() => api("/eventos").then(setDados).catch((e) => setErro(e.message)), []);
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "", site: "", rnp: false };
-  const lista = dados.itens.filter((e) => (proj === "todos" || e.orcamento === proj) && (!soPend || !e.completo)
+  const novo = { id: null, orcamento: proj !== "todos" ? proj : "", nome: "", local: "", tipo: "nac", mes: 1, n_pessoas: 1, dias: 1, pernoites: null, inscricao: null, moeda: "BRL", origem: "", destino: "", pessoas: [], justificativa: "", edt: "", tarefa: "", gerencias: dados.gerencia_usuario ? [dados.gerencia_usuario] : [], site: "", rnp: false };
+  const lista = dados.itens.filter((e) => nasGer(e, ger) && (proj === "todos" || e.orcamento === proj) && (!soPend || !e.completo)
     && (tipoF === "todos" || (tipoF === "rnp" ? e.rnp : e.tipo === tipoF)));
   const abrir = (e) => { setForm(e); setTimeout(() => document.getElementById("form-evento")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/eventos/${form.id}`, { method: "PUT", body: b }); else await api("/eventos", { method: "POST", body: b }); carregar(); };
@@ -114,7 +118,7 @@ export default function Eventos({ irProjeto }) {
       {t.incompletos > 0 && <div className="nota aviso"><strong>{t.incompletos} evento(s) com informações pendentes.</strong> <button className="link" onClick={() => setSoPend(!soPend)}>{soPend ? "Mostrar todos" : "Mostrar só os pendentes"}</button></div>}
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="barra-ferramentas">
-        <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
+        <div className="filtros"><FiltroGerencia valor={ger} onChange={setGer} opcoes={dados.gerencias} /><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
           <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select>
           <select style={{ width: 260 }} value={tipoF} onChange={(e) => setTipoF(e.target.value)} aria-label="Tipo de evento">
             <option value="todos">Todos os eventos ({dados.itens.length})</option>
@@ -132,6 +136,7 @@ export default function Eventos({ irProjeto }) {
               <h4>{e.nome || <span className="up">sem nome</span>}
                 <span className="tag">{e.tipo === "int" ? "internacional" : "nacional"}</span>{e.rnp && <span className="tag ok">RNP</span>}
                 {e.completo ? <span className="tag ok">completo</span> : <span className="tag aviso">pendente</span>}</h4>
+              {e.gerencias.length > 0 && <p className="evt-ger">{e.gerencias.map((g) => <span key={g} className="chip">{g}</span>)}</p>}
               <p className="evt-sub">{e.local || "local não informado"}{e.site && <> · <a href={e.site} target="_blank" rel="noopener noreferrer">site do evento</a></>}</p>
               <p className="evt-proj">{e.outro ? <span>{e.orcamento}</span> : <button className="link" onClick={() => irProjeto(e.orcamento)}>{e.orcamento}</button>} <span className="mudo">{e.projeto}</span>{e.outro && <> <span className="tag aviso" title="Projeto da Diretoria: não entra nos totais dos seus projetos">Diretoria</span></>}</p>
               {e.justificativa && <p className="evt-just" title={e.justificativa}>{e.justificativa}</p>}

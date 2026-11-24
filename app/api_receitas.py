@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import fontes, config
 from . import export_xlsx
-from .api import _arred, _conn, exige_acesso, permitidos, proprios, usuario_liberado
+from .api import _arred, _conn, exige_acesso, gerencia_dos_projetos, permitidos, proprios, usuario_liberado
 from .db import MESES, NOMES_MESES, audit, tx
 
 router = APIRouter(prefix="/api/receitas")
@@ -140,6 +140,9 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
                      (config.CICLO_PLANO, *ids)).fetchall()
     refs = {r["id"]: r for r in c.execute("SELECT * FROM receitas WHERE ciclo=?", (config.CICLO_BASE,))}
     linhas = [_linha(r, refs.get(r["base_id"])) for r in rows]
+    ger_proj = gerencia_dos_projetos(c)
+    for l in linhas:
+        l["gerencia"] = ger_proj.get(l["orcamento"], "Sem gerência definida")
 
     # receita de 2026 que não tem mais linha em 2027 (para a comparação ficar completa)
     usadas = {r["base_id"] for r in rows if r["base_id"]}

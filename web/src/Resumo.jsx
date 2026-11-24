@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt, mi } from "./api.js";
-import { Kpi, Delta, pct, Selo } from "./ui.jsx";
+import { Kpi, Delta, pct, Selo, FiltroGerencia } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 import OutrosProjetos from "./OutrosProjetos.jsx";
 import useFluxo, { OrigemDosRecursos, CustoPorGerencia } from "./FluxoRecursos.jsx";
@@ -91,20 +91,23 @@ function EstrategiaFinanciamento() {
 export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   const [r, setR] = useState(null);
   const [erro, setErro] = useState("");
-  const fluxo = useFluxo();
-  useEffect(() => { api("/resumo").then(setR).catch((e) => setErro(e.message)); }, []);
+  const [ger, setGer] = useState("");
+  const [gerencias, setGerencias] = useState([]);
+  const fluxo = useFluxo(ger);
+  useEffect(() => { api("/resumo" + (ger ? `?gerencia=${encodeURIComponent(ger)}` : "")).then((x) => { setR(x); if (!ger) setGerencias(x.gerencias || []); }).catch((e) => setErro(e.message)); }, [ger]);
   if (erro) return <p className="erro">{erro}</p>;
   if (!r) return <p>Carregando…</p>;
   const max = Math.max(1, ...r.mensal_plano.map((m) => m.valor));
   const s = r.linhas_status;
   const delta = r.total_plano - r.total_base;
-  const receitas = plano ? plano.etapas.receitas.total : 0;
+  const receitas = ger ? (fluxo ? fluxo.total_receita : 0) : (plano ? plano.etapas.receitas.total : 0);
   const resultado = receitas - r.total_plano;
   return (
     <>
       <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
       <MeuPlanejamento plano={plano} recarregar={recarregarPlano} admin={admin} ir={ir} />
-      <h3 className="secao">Visão executiva do orçamento</h3>
+      <h3 className="secao">Visão executiva do orçamento{ger ? `: ${ger}` : ""}</h3>
+      {gerencias.length > 1 && <div className="filtros" style={{ margin: "0 0 10px" }}><FiltroGerencia valor={ger} onChange={setGer} opcoes={gerencias} largura={300} />{ger && <span className="mudo">Os números abaixo são só dos projetos desta gerência.</span>}</div>}
       <div className="kpis">
         <Kpi rotulo="Despesa planejada 2027" valor={mi(r.total_plano)} tom="f27" sub={<>{r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado de 2026" : ""}</>} />
         <Kpi rotulo="Receita prevista 2027" valor={mi(receitas)} tom="f27" sub={plano ? `${plano.etapas.receitas.n} lançamento(s)` : ""} />

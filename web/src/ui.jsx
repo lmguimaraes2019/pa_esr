@@ -84,3 +84,26 @@ export function TarefaOrc({ dados, orcamento, edt, tarefa, onChange, rotulo, aju
 export const FINALIDADES = [["caixa", "Fluxo de caixa"], ["headcount", "Headcount"], ["sustentacao", "Sustentação"], ["investimento", "Investimento"], ["crescimento", "Crescimento ou projeto"], ["capacitacao", "Capacitação e eventos"], ["gestao", "Gestão da área"]];
 export const nomeFinalidade = (k) => (FINALIDADES.find(([v]) => v === k) || FINALIDADES[0])[1];
 export const classeFinalidade = (k) => (k === "headcount" ? "hc" : k === "caixa" || !k ? "cx" : "nat");
+
+
+/** Filtro por gerência, igual em todas as páginas. `opcoes`: nomes das gerências. */
+export function FiltroGerencia({ valor, onChange, opcoes, largura = 250 }) {
+  const lista = [...new Set(opcoes.filter(Boolean))].sort((a, b) => (a === "Diretoria Adjunta" ? -1 : b === "Diretoria Adjunta" ? 1 : a.localeCompare(b, "pt-BR")));
+  return (
+    <select style={{ width: largura }} value={valor} onChange={(e) => onChange(e.target.value)} aria-label="Filtrar por gerência" className={valor ? "filtro-ativo" : ""}>
+      <option value="">Todas as gerências</option>{lista.map((g) => <option key={g} value={g}>{g}</option>)}
+    </select>
+  );
+}
+
+/** O item entra no filtro? `ger_filtro` é a lista de gerências do item (a do projeto, quando o item não informa). */
+export const nasGer = (item, g) => !g || (item.ger_filtro || (item.gerencia ? [item.gerencia] : [])).includes(g);
+
+/** Escolha de uma ou mais gerências (caixas de marcação). */
+export function GerenciasCheck({ valor, onChange, opcoes }) {
+  const marca = (g) => onChange(valor.includes(g) ? valor.filter((x) => x !== g) : [...valor, g]);
+  return (
+    <div className="gerencias-check">{opcoes.map((g) => (
+      <label key={g} className="ent-check"><input type="checkbox" checked={valor.includes(g)} onChange={() => marca(g)} /> {g}</label>))}</div>
+  );
+}

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
-import { Kpi, Delta, Passos, Selo } from "./ui.jsx";
+import { Kpi, Delta, Passos, Selo, FiltroGerencia, nasGer } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const COMP = [["passagem", "passagens"], ["hospedagem", "hospedagem"], ["ajuda_custo", "diárias"], ["aux_transporte", "transporte"], ["seguro", "seguro"]];
@@ -32,7 +32,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
     e.preventDefault(); setErro("");
     try {
       await onSalvar({ tipo: f.tipo, mes: Number(f.mes), origem: f.origem, destino: f.destino, n_viagens: Number(f.n_viagens), dias: Number(f.dias),
-        pernoites: f.pernoites === "" || f.pernoites == null ? null : Number(f.pernoites), objetivo: f.objetivo, area: f.area,
+        pernoites: f.pernoites === "" || f.pernoites == null ? null : Number(f.pernoites), objetivo: f.objetivo, area: f.area, gerencia: f.gerencia ?? f.gerencias?.[0] ?? "",
         orcamento: f.orcamento || null, edt: f.edt || null, tarefa: f.tarefa || null });
     } catch (x) { setErro(x.message); }
   };
@@ -47,6 +47,8 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
         <label>Nº de viagens (pessoas)<input type="number" min="1" value={f.n_viagens} onChange={(e) => set("n_viagens", e.target.value)} required /></label>
         <label>Dias<input type="number" min="1" value={f.dias} onChange={(e) => set("dias", e.target.value)} required /></label>
         <label>Pernoites<input type="number" min="0" value={f.pernoites ?? ""} placeholder={`padrão ${Math.max(Number(f.dias) - 1, 0)}`} onChange={(e) => set("pernoites", e.target.value)} /></label>
+        <label>Gerência<select value={f.gerencia ?? f.gerencias?.[0] ?? ""} onChange={(e) => set("gerencia", e.target.value)}>
+          <option value="">Gerência do projeto</option>{dados.gerencias.map((g) => <option key={g} value={g}>{g}</option>)}</select></label>
         <label>Área<input value={f.area} onChange={(e) => set("area", e.target.value)} placeholder="ex.: GADM" /></label>
       </div>
       <div className="grade">
@@ -67,9 +69,10 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
   const abrir = (v) => { setEdit(v); setTimeout(() => document.getElementById("form-viagem")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const [tipo, setTipo] = useState("todas");
   const [proj, setProj] = useState("todos");
+  const [ger, setGer] = useState("");
   const [soPend, setSoPend] = useState(false);
   const [erro, setErro] = useState("");
-  const lista = dados.viagens.filter((v) => (tipo === "todas" || v.tipo === tipo) && (proj === "todos" || (v.orcamento || "") === proj)
+  const lista = dados.viagens.filter((v) => nasGer(v, ger) && (tipo === "todas" || v.tipo === tipo) && (proj === "todos" || (v.orcamento || "") === proj)
     && (!soPend || !v.orcamento || !v.edt || !v.tem_tarifa));
   const novo = { tipo: "nac", mes: 1, origem: "", destino: "", n_viagens: 1, dias: 3, pernoites: null, objetivo: "", area: "", orcamento: "", edt: "", tarefa: "" };
   const salvar = async (corpo) => {
@@ -89,6 +92,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
       <div className="acoes" style={{ justifyContent: "space-between" }}>
         <div className="filtros" style={{ margin: 0 }}>
           {[["todas", "Todas"], ["nac", "Nacionais"], ["int", "Internacionais"]].map(([k, n]) => <button key={k} className={tipo === k ? "on" : ""} onClick={() => setTipo(k)}>{n}</button>)}
+          <FiltroGerencia valor={ger} onChange={setGer} opcoes={dados.gerencias} />
           <select style={{ width: 260 }} value={proj} onChange={(e) => setProj(e.target.value)}>
             <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento ? `${p.orcamento} | ${p.projeto}` : "Sem projeto definido"}</option>)}</select>
           {soPend && <button className="on" onClick={() => setSoPend(false)}>Só pendentes ✕</button>}
@@ -106,7 +110,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
                 <td>{MESES_N[v.mes - 1].slice(0, 3)}</td>
                 <td>{v.origem} <span className="mudo">para</span> {v.destino} {v.tipo === "int" && <span className="tag nova bloco">int.</span>}</td>
                 <td className="n">{v.n_viagens}</td><td className="n">{v.dias}</td>
-                <td className="obj">{v.evento_id && <span className="tag nova bloco">evento</span>}{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}</td>
+                <td className="obj">{v.evento_id && <span className="tag nova bloco">evento</span>}{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}{v.gerencias.map((g) => <span key={g} className="tag bloco">{g}</span>)}</td>
                 <td>{v.orcamento ? <>{v.orcamento} | {v.projeto}{v.outro && <> <span className="tag aviso" title="Projeto da Diretoria: não entra nos totais dos seus projetos">Diretoria</span></>}<br /><span className="mudo">{v.tarefa || <span className="up">tarefa pendente</span>}</span></> : <span className="tag aviso">sem projeto</span>}</td>
                 <td><div className="custos">{COMP.filter(([k]) => v.custo[k] > 0).map(([k, n]) => <span key={k}>{n} {fmtN(v.custo[k])}</span>)}</div>{!v.tem_tarifa && <span className="erro">sem tarifa</span>}</td>
                 <td className="n"><strong>{fmtN(v.custo.total)}</strong></td>

@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import config
-from .api import _arred, _conn, exige_acesso, permitidos, proprios, usuario_liberado
+from .api import _arred, _conn, exige_acesso, gerencia_dos_projetos, permitidos, proprios, usuario_liberado
 from .db import audit, tx
 
 router = APIRouter(prefix="/api/exposicao")
@@ -66,6 +66,9 @@ def _dados(c: sqlite3.Connection, u: dict) -> tuple[list[dict], dict]:
 @router.get("")
 def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     itens, projetos = _dados(c, u)
+    ger_proj = gerencia_dos_projetos(c)
+    for i in itens:
+        i["ger_filtro"] = [ger_proj.get(i["orcamento"], "Sem gerência definida")]      # gerência do projeto que paga (o campo "gerência" do item é do formulário do ERP)
     cam = _cambio(c)
     usd = sum(i["valor"] for i in itens if i["moeda"] == "USD")
     eur = sum(i["valor"] for i in itens if i["moeda"] == "EUR")

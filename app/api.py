@@ -390,6 +390,19 @@ def _linha(r: sqlite3.Row) -> dict:
             "atualizado_por": r["atualizado_por"], "atualizado_em": r["atualizado_em"]}
 
 
+def gerencias_da_casa(c: sqlite3.Connection) -> list[str]:
+    """Gerências da ESR: as dos usuários ativos, mais a Diretoria Adjunta."""
+    nomes = {r[0].strip() for r in c.execute("SELECT gerencia FROM users WHERE ativo=1 AND COALESCE(gerencia,'')<>''")}
+    nomes.add("Diretoria Adjunta")
+    return sorted(nomes, key=str.lower)
+
+
+def gerencia_dos_projetos(c: sqlite3.Connection) -> dict[str, str]:
+    """Gerência de cada orçamento (a do usuário que é o gerente dele)."""
+    ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
+    return {r["orcamento"]: _gerencia_do(r["gerente"], ger_de) for r in c.execute("SELECT orcamento, gerente FROM projetos")}
+
+
 def _gerencia_do(gerente: str | None, ger_de: dict[str, str]) -> str:
     """Gerência do projeto: a do usuário que é o gerente dele; Leandro e Célia são da Diretoria Adjunta."""
     k = _chave_nome(gerente)
@@ -831,9 +844,13 @@ async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...
 # ---------------------------------------------------------------- resumo
 
 @router.get("/resumo")
-def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
+def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn), gerencia: str | None = None):
     # orçamentos de receita não entram na despesa: o valor deles aparece em Receitas, com sinal positivo
     ids = sorted(o for o in proprios(c, u, extintos=True) if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa")
+    por_ger = gerencia_dos_projetos(c)
+    gerencias_ids = sorted({por_ger.get(o, "Sem gerência definida") for o in ids}, key=str.lower)
+    if gerencia:      # filtro por gerência: só os projetos cuja gerência é a escolhida
+        ids = [o for o in ids if por_ger.get(o, "Sem gerência definida") == gerencia]
     marks = ",".join("?" for _ in ids) or "''"
     # ações extintas mantêm o aprovado e o executado de 2026 (as entregas migram para outros projetos); só o plano 2027 delas é zerado
     EXC = f"NOT (l.ciclo={config.CICLO_PLANO} AND l.orcamento IN (SELECT orcamento FROM projetos WHERE extinto=1))"
@@ -930,7 +947,7 @@ def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     lista.sort(key=lambda x: -x["aprovado_2026"])
     extintos = {"n": len(lista), "aprovado_2026": _arred(sum(x["aprovado_2026"] for x in lista)),
                 "executado_2026": _arred(sum(x["executado_2026"] for x in lista)), "lista": lista}
-    return {"ciclo_base": config.CICLO_BASE, "ciclo_plano": config.CICLO_PLANO,
+    return {"ciclo_base": config.CICLO_BASE, "ciclo_plano": config.CICLO_PLANO, "gerencias": gerencias_ids, "gerencia": gerencia or "",
             "total_base": tot(origens, "base"), "total_plano": tot(origens, "plano"),
             "total_realizado": tot(origens, "realizado"), "total_empenhado": tot(origens, "empenhado"),
             "total_executado": tot(origens, "executado") if origens else 0.0,

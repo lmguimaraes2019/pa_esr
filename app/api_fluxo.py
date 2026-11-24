@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends
 
 from . import config, fontes
-from .api import _arred, _chave_nome, _conn, _gerencia_do, proprios, usuario_liberado
+from .api import _arred, _chave_nome, _conn, _gerencia_do, gerencia_dos_projetos, proprios, usuario_liberado
 from .db import MESES
 
 router = APIRouter(prefix="/api/fluxo", tags=["fluxo"])
@@ -64,5 +64,9 @@ def fluxo(c: sqlite3.Connection, ids: list[str]) -> dict:
 
 
 @router.get("")
-def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    return fluxo(c, sorted(proprios(c, u)))
+def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn), gerencia: str | None = None):
+    ids = sorted(proprios(c, u))
+    if gerencia:
+        por_ger = gerencia_dos_projetos(c)
+        ids = [o for o in ids if por_ger.get(o, "Sem gerência definida") == gerencia]
+    return fluxo(c, ids)

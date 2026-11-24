@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero } from "./api.js";
 import { custoMensal } from "./pessoal.js";
-import { TarefaOrc, Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { TarefaOrc, Kpi, BotaoIcone, Lapis, Lixeira, FiltroGerencia, nasGer } from "./ui.jsx";
 
 const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const Obrig = () => <span className="obrig" title="Informação obrigatória">*</span>;
@@ -104,13 +104,14 @@ export default function Headcount({ admin, irProjeto }) {
   const [dados, setDados] = useState(null);
   const [form, setForm] = useState(null);
   const [proj, setProj] = useState("todos");
+  const [ger, setGer] = useState("");
   const [erro, setErro] = useState("");
   const carregar = useCallback(() => api("/headcount").then(setDados).catch((e) => setErro(e.message)), []);
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
   const novo = { id: null, orcamento: proj !== "todos" ? proj : "", funcao: "", cargo: "", trajetoria: "", nivel: "", grupo: "", posicao: 50, mes_inicio: 1, quantidade: 1, justificativa: "", gerencia: dados.gerencia_usuario || "", edt: "", tarefa: "" };
-  const lista = dados.itens.filter((d) => proj === "todos" || d.orcamento === proj);
+  const lista = dados.itens.filter((d) => nasGer(d, ger) && (proj === "todos" || d.orcamento === proj));
   const abrir = (d) => { setForm(d); setTimeout(() => document.getElementById("form-hc")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/headcount/${form.id}`, { method: "PUT", body: b }); else await api("/headcount", { method: "POST", body: b }); carregar(); };
   const excluir = async (d) => {
@@ -129,7 +130,7 @@ export default function Headcount({ admin, irProjeto }) {
       <p className="mudo">O custo usa as fórmulas da planilha de custo de pessoal e as faixas da Tabela Salarial 2025{dados.reajuste ? `, com reajuste de ${fmtN(dados.reajuste)}%` : ""}. {admin ? "Os parâmetros ficam em Administração, Premissas." : "Os parâmetros são mantidos pelo administrador."}</p>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="barra-ferramentas">
-        <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
+        <div className="filtros"><FiltroGerencia valor={ger} onChange={setGer} opcoes={dados.gerencias} /><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
           <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></div>
         <button className="destaque" onClick={() => abrir(novo)}>+ Nova posição</button>
       </div>

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, fmtN, lerNumero } from "./api.js";
-import { Kpi, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { Kpi, BotaoIcone, Lapis, Lixeira, FiltroGerencia, nasGer } from "./ui.jsx";
 
 const SIMNAO = ["", "Sim", "Não"];
 const vazio = (orc) => ({ id: null, orcamento: orc || "", sc_andamento: "", diretoria: "DSS", gerencia: "ESR", ponto_focal: "", tipo: "", processo: "", descricao: "", fabricante: "", canal: "", moeda: "USD", valor: "", pais_origem: "", trimestre: 1, conecta: "", previsao_sc: "" });
@@ -53,12 +53,13 @@ export default function Exposicao({ irProjeto }) {
   const [dados, setDados] = useState(null);
   const [form, setForm] = useState(null);
   const [proj, setProj] = useState("todos");
+  const [ger, setGer] = useState("");
   const [erro, setErro] = useState("");
   const carregar = useCallback(() => api("/exposicao").then(setDados).catch((e) => setErro(e.message)), []);
   useEffect(() => { carregar(); }, [carregar]);
   if (!dados) return erro ? <p className="erro">{erro}</p> : <p>Carregando…</p>;
   const t = dados.totais;
-  const lista = dados.itens.filter((i) => proj === "todos" || i.orcamento === proj);
+  const lista = dados.itens.filter((i) => nasGer(i, ger) && (proj === "todos" || i.orcamento === proj));
   const abrir = (i) => { setForm(i); setTimeout(() => document.getElementById("form-exposicao")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); };
   const salvar = async (b) => { if (form.id) await api(`/exposicao/${form.id}`, { method: "PUT", body: b }); else await api("/exposicao", { method: "POST", body: b }); carregar(); };
   const excluir = async (i) => {
@@ -80,7 +81,7 @@ export default function Exposicao({ irProjeto }) {
         <tbody>{dados.por_trimestre.map((q) => <tr key={q.trimestre}><td>{q.nome}</td><td className="n">{q.itens}</td><td className="n">{q.usd ? fmtN(q.usd) : "-"}</td><td className="n">{q.eur ? fmtN(q.eur) : "-"}</td><td className="n">{q.gbp ? fmtN(q.gbp) : "-"}</td></tr>)}</tbody></table></div></section>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <div className="barra-ferramentas">
-        <div className="filtros"><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
+        <div className="filtros"><FiltroGerencia valor={ger} onChange={setGer} opcoes={dados.itens.flatMap((i) => i.ger_filtro)} /><select style={{ width: 320 }} value={proj} onChange={(e) => setProj(e.target.value)}>
           <option value="todos">Todos os projetos</option>{dados.projetos.map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</select></div>
         <a className="botao" href="/api/exposicao/xlsx" download>Baixar planilha (.xlsx)</a>
         <button className="destaque" onClick={() => abrir(vazio(proj !== "todos" ? proj : ""))}>+ Nova exposição</button>

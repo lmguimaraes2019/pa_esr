@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from . import sync, viagens as vg
-from .api import _arred, _conn, compartilhados, exige_acesso, lancaveis, permitidos, proprios, usuario_liberado
+from .api import _arred, _conn, compartilhados, exige_acesso, gerencia_dos_projetos, gerencias_da_casa, lancaveis, permitidos, proprios, usuario_liberado
 from .db import NOMES_MESES, audit, tx
 
 router = APIRouter(prefix="/api/eventos")
@@ -34,6 +34,7 @@ class EventoIn(BaseModel):
     tarefa: str = Field(default="", max_length=200)
     site: str = Field(default="", max_length=300)
     rnp: bool = False
+    gerencias: list[str] = Field(default_factory=list, max_length=30)      # gerências da ESR que participam do evento
 
     @field_validator("site")
     @classmethod
@@ -44,6 +45,11 @@ class EventoIn(BaseModel):
         if v and (" " in v or "." not in v):
             raise ValueError("Informe o endereço do site do evento, por exemplo https://www.evento.com.br.")
         return v
+
+    @field_validator("gerencias")
+    @classmethod
+    def _g(cls, v):
+        return sorted({x.strip()[:120] for x in v if x and x.strip()})
 
     @field_validator("pessoas")
     @classmethod
@@ -72,7 +78,7 @@ def _calc(r: sqlite3.Row, tarifas: dict, bv: float, dolar: float) -> dict:
     return {"id": r["id"], "orcamento": r["orcamento"], "nome": r["nome"], "local": r["local"], "tipo": r["tipo"], "mes": r["mes"],
             "n_pessoas": r["n_pessoas"], "dias": r["dias"], "pernoites": r["pernoites"], "inscricao": r["inscricao"], "moeda": r["moeda"],
             "origem": r["origem"], "destino": r["destino"], "pessoas": pessoas, "justificativa": r["justificativa"],
-            "edt": r["edt"], "tarefa": r["tarefa"], "site": r["site"], "rnp": bool(r["rnp"]),
+            "edt": r["edt"], "tarefa": r["tarefa"], "site": r["site"], "rnp": bool(r["rnp"]), "gerencias": json.loads(r["gerencias"] or "[]"),
             "atualizado_por": r["atualizado_por"], "viagem": viagem, "inscricao_unitaria_brl": round(insc_un, 2),
             "inscricao_total": insc, "total": _arred(insc + viagem["total"]), "faltando": falta, "completo": not falta}
 
@@ -86,12 +92,14 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
     comp = compartilhados(c)
     projetos = {r["orcamento"]: r for r in c.execute(
         f"SELECT orcamento, descricao, origem, gerente FROM projetos WHERE orcamento IN ({marks}) ORDER BY orcamento", ids)}
+    ger_proj = gerencia_dos_projetos(c)
     itens = []
     todos = []
     for r in c.execute(f"SELECT * FROM eventos WHERE orcamento IN ({marks}) ORDER BY mes, id", ids):
         if r["orcamento"] not in permitidos(c, u) and r["criado_por"] != u["login"]:
             continue      # em projeto da Diretoria, cada gestor vê só o que lançou
         d = _calc(r, tarifas, bv, dolar); d["projeto"] = projetos[r["orcamento"]]["descricao"]
+        d["ger_filtro"] = d["gerencias"] or [ger_proj.get(r["orcamento"], "Sem gerência definida")]      # sem gerência informada, vale a do projeto
         d["outro"] = r["orcamento"] not in meus
         todos.append(d)
     itens = [d for d in todos if not d["outro"]]
@@ -119,6 +127,7 @@ def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(
                    for k in sorted(tarifas)],
         "projetos": [{"orcamento": o, "descricao": p["descricao"], "origem": p["origem"], "gerente": p["gerente"], "outro": o not in meus} for o, p in projetos.items()],
         "tarefas": tarefas_dos_projetos(c, "eventos", list(projetos)),
+        "gerencias": gerencias_da_casa(c), "gerencia_usuario": u.get("gerencia") or "",
     }
 
 
@@ -139,7 +148,7 @@ def _uma(c: sqlite3.Connection, eid: int) -> dict:
 
 def _valores(d: EventoIn, u: dict):
     return (d.orcamento, d.nome.strip(), d.local.strip(), d.tipo, d.mes, d.n_pessoas, d.dias, d.pernoites, d.inscricao, d.moeda,
-            d.origem, d.destino, json.dumps(d.pessoas, ensure_ascii=False), d.justificativa.strip(), d.edt, d.tarefa, d.site, int(d.rnp), u["login"])
+            d.origem, d.destino, json.dumps(d.pessoas, ensure_ascii=False), d.justificativa.strip(), d.edt, d.tarefa, d.site, int(d.rnp), json.dumps(d.gerencias, ensure_ascii=False), u["login"])
 
 
 def exige_lancamento(c: sqlite3.Connection, u: dict, orcamento: str, criado_por: str | None = None) -> None:
@@ -151,7 +160,14 @@ def exige_lancamento(c: sqlite3.Connection, u: dict, orcamento: str, criado_por:
     raise HTTPException(404, "Projeto não encontrado.")
 
 
+def _confere_gerencias(c: sqlite3.Connection, d: EventoIn) -> None:
+    fora = [g for g in d.gerencias if g not in gerencias_da_casa(c)]
+    if fora:
+        raise HTTPException(422, "Gerência não encontrada: " + ", ".join(fora) + ".")
+
+
 def _confere_tarefa(c: sqlite3.Connection, d: EventoIn) -> None:
+    _confere_gerencias(c, d)
     if (d.edt or d.tarefa) and not c.execute("SELECT 1 FROM linhas WHERE ciclo=2027 AND orcamento=? AND edt=? AND tarefa=? LIMIT 1",
                                              (d.orcamento, d.edt, d.tarefa)).fetchone():
         raise HTTPException(422, "A tarefa escolhida não existe nesse projeto.")
@@ -163,7 +179,7 @@ def criar(d: EventoIn, u: dict = Depends(usuario_liberado)):
         exige_lancamento(c, u, d.orcamento)
         _confere_tarefa(c, d)
         cur = c.execute("INSERT INTO eventos (orcamento, nome, local, tipo, mes, n_pessoas, dias, pernoites, inscricao, moeda, origem, destino, "
-                        "pessoas, justificativa, edt, tarefa, site, rnp, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (*_valores(d, u), u["login"]))
+                        "pessoas, justificativa, edt, tarefa, site, rnp, gerencias, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (*_valores(d, u), u["login"]))
         audit(c, u["login"], "incluiu evento", d.orcamento, detalhe=d.nome)
         sync.sincronizar(c, d.orcamento, u["login"])
         return _uma(c, cur.lastrowid)
@@ -178,7 +194,7 @@ def editar(eid: int, d: EventoIn, u: dict = Depends(usuario_liberado)):
         exige_lancamento(c, u, atual["orcamento"], atual["criado_por"]); exige_lancamento(c, u, d.orcamento)
         _confere_tarefa(c, d)
         c.execute("UPDATE eventos SET orcamento=?, nome=?, local=?, tipo=?, mes=?, n_pessoas=?, dias=?, pernoites=?, inscricao=?, moeda=?, "
-                  "origem=?, destino=?, pessoas=?, justificativa=?, edt=?, tarefa=?, site=?, rnp=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
+                  "origem=?, destino=?, pessoas=?, justificativa=?, edt=?, tarefa=?, site=?, rnp=?, gerencias=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
                   (*_valores(d, u), eid))
         audit(c, u["login"], "editou evento", d.orcamento, detalhe=f"id {eid}: {d.nome}")
         for o in {atual["orcamento"], d.orcamento}:

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt } from "./api.js";
 import OutrosProjetos from "./OutrosProjetos.jsx";
-import { Delta, pct, Selo, Passos, FINALIDADES, nomeFinalidade, classeFinalidade } from "./ui.jsx";
+import { Delta, pct, Selo, Passos, FINALIDADES, nomeFinalidade, classeFinalidade, FiltroGerencia } from "./ui.jsx";
 
 export function NovoOrcamento({ listas, onCriar, onFechar, tipoFixo }) {
   const [f, setF] = useState({ tipo: tipoFixo || "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
@@ -77,6 +77,7 @@ function LancamentoPCO({ ps, abrir }) {
 export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro }) {
   const [todos, setPs] = useState(null);
   const [fFin, setFFin] = useState("");
+  const [fGer, setFGer] = useState("");
   const [erro, setErro] = useState("");
   const [novo, setNovo] = useState(false);
   const [listas, setListas] = useState(null);
@@ -86,7 +87,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
-  const ps = todos.filter((p) => p.tipo !== "receita" && (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
+  const ps = todos.filter((p) => p.tipo !== "receita" && (!fGer || (p.gerencia || "Sem gerência definida") === fGer) && (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
   const inativo = (p) => p.extinto || p.contingenciado;      // sem previsão de execução em 2027
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
   const ordem = (a, b) => a.localeCompare(b, "pt-BR");
@@ -161,6 +162,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
         <button type="button" onClick={limparFiltro}>Ver todos os projetos</button></div>}
       <div className="filtros" style={{ margin: "8px 0" }}>
         <label className="ent-check" style={{ margin: "0 12px 0 0" }}><input type="checkbox" checked={mais} onChange={(e) => setMais(e.target.checked)} /> Mais colunas (empenhado e % realizado)</label>
+        <FiltroGerencia valor={fGer} onChange={setFGer} opcoes={todos.filter((p) => p.tipo !== "receita").map((p) => p.gerencia || "Sem gerência definida")} />
         <select value={fFin} onChange={(e) => setFFin(e.target.value)} aria-label="Filtrar por finalidade"><option value="">Todas as finalidades</option>{FINALIDADES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
       </div>
       {!ps.length && <p className="mudo">{todos.length ? "Nenhum projeto neste filtro." : "Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima."}</p>}

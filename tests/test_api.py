@@ -1364,3 +1364,33 @@ def test_headcount_com_equipamentos_custeados_por_outro_projeto(client):
     assert client.put(f"/api/headcount/{hid}", json={**base, "orcamento_equip": b}).status_code == 200
     assert linhas(b, eq.CONTA_HARDWARE)[0]["tarefa"] == "Computação pessoal"
     assert client.delete(f"/api/headcount/{hid}").status_code == 200 and linhas(b, eq.CONTA_HARDWARE) == []
+
+
+def test_gerencias_em_eventos_viagens_e_resumo(client):
+    entrar(client)
+    e = client.get("/api/eventos").json()
+    assert "Diretoria Adjunta" in e["gerencias"]
+    orc = e["projetos"][0]["orcamento"]; t = next(x for x in e["tarifas"] if x["tipo"] == "nac"); tf = e["tarefas"][orc]["lista"][0]
+    base = {"orcamento": orc, "nome": "Evento G", "local": "Recife", "tipo": "nac", "mes": 5, "n_pessoas": 2, "dias": 2, "inscricao": 100, "origem": t["origem"],
+            "destino": t["destino"], "pessoas": ["A", "B"], "justificativa": "x", "edt": tf["edt"], "tarefa": tf["tarefa"]}
+    assert client.post("/api/eventos", json={**base, "gerencias": ["Gerência Inexistente"]}).status_code == 422
+    r = client.post("/api/eventos", json={**base, "gerencias": ["Diretoria Adjunta"]})
+    assert r.status_code == 201 and r.json()["gerencias"] == ["Diretoria Adjunta"]
+    ev = next(x for x in client.get("/api/eventos").json()["itens"] if x["nome"] == "Evento G")
+    assert ev["ger_filtro"] == ["Diretoria Adjunta"]
+    vs = client.get("/api/viagens").json()
+    assert "Diretoria Adjunta" in vs["gerencias"]
+    assert any(v["evento_id"] == ev["id"] and v["ger_filtro"] == ["Diretoria Adjunta"] for v in vs["viagens"])      # a viagem do evento herda a gerência
+    vm = client.post("/api/viagens", json={"tipo": "nac", "mes": 3, "origem": t["origem"], "destino": t["destino"], "n_viagens": 1, "dias": 2, "gerencia": "Diretoria Adjunta", "orcamento": orc, "edt": tf["edt"], "tarefa": tf["tarefa"]})
+    assert vm.status_code == 201
+    # sem gerência informada, vale a do projeto
+    sem = client.post("/api/eventos", json={**base, "nome": "Evento sem gerência"}).json()
+    assert next(x for x in client.get("/api/eventos").json()["itens"] if x["id"] == sem["id"])["ger_filtro"]
+    # resumo e fluxo filtrados por gerência
+    total = client.get("/api/resumo").json()
+    ger = total["gerencias"][0]
+    filtrado = client.get("/api/resumo", params={"gerencia": ger}).json()
+    assert filtrado["total_plano"] <= total["total_plano"] and filtrado["gerencia"] == ger
+    assert client.get("/api/fluxo", params={"gerencia": ger}).status_code == 200
+    # as listas de receitas e exposição trazem a gerência
+    assert all("gerencia" in l for l in client.get("/api/receitas").json()["linhas"])

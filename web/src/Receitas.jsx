@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmt, fmtN, lerNumero, MESES } from "./api.js";
-import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira } from "./ui.jsx";
+import { Kpi, Delta, Passos, Celula, BotaoIcone, Lapis, Lixeira, FiltroGerencia, nasGer } from "./ui.jsx";
 
 const FONTES_SUGERIDAS = ["Contrato de gestão", "Parcerias", "Growth", "Fomento", "Turmas abertas", "Projetos especiais", "Outras receitas"];
 const vazio = { id: null, tipo: "receita", orcamento: "", fonte: "", descricao: "", obs: "", meses: Array(12).fill(""), ano: 2027, cliente: "", origem_cliente: "", gestor_cliente: "" };
@@ -106,8 +106,9 @@ function Lancamentos({ dados, recarregar, setErro }) {
   const [form, setForm] = useState(null);
   const [origem, setOrigem] = useState("todas");
   const [proj, setProj] = useState("todos");
+  const [ger, setGer] = useState("");
   const origens = [...new Set(dados.projetos.map((p) => p.origem))];
-  const filtrada = dados.linhas.filter((l) => (origem === "todas" || l.origem === origem) && (proj === "todos" || l.orcamento === proj));
+  const filtrada = dados.linhas.filter((l) => nasGer(l, ger) && (origem === "todas" || l.origem === origem) && (proj === "todos" || l.orcamento === proj));
   const lista = filtrada.filter((l) => l.tipo !== "intercompany");
   const listaIc = filtrada.filter((l) => l.tipo === "intercompany");
   const trocar = async (l, corpo) => { try { setErro(""); await api(`/receitas/${l.id}`, { method: "PUT", body: corpo }); recarregar(); } catch (e) { setErro(e.message); } };
@@ -126,6 +127,7 @@ function Lancamentos({ dados, recarregar, setErro }) {
       <div className="nota">Lance aqui a receita prevista de cada projeto, mês a mês, por fonte. O resultado de cada projeto e de cada origem de recurso é a receita menos a despesa planejada em "Despesas". A linha cinza mostra a previsão de 2026, quando existe.</div>
       <div className="barra-ferramentas">
         <div className="filtros">
+          <FiltroGerencia valor={ger} onChange={setGer} opcoes={dados.linhas.map((l) => l.gerencia)} />
           <select style={{ width: 200 }} value={origem} onChange={(e) => { setOrigem(e.target.value); setProj("todos"); }}>
             <option value="todas">Todas as origens</option>{origens.map((o) => <option key={o}>{o}</option>)}</select>
           <select style={{ width: 300 }} value={proj} onChange={(e) => setProj(e.target.value)}>
