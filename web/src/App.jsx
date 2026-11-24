@@ -17,11 +17,12 @@ export default function App() {
   const [aba, setAba] = useState("resumo");
   const [proj, setProj] = useState(null);
   const [plano, setPlano] = useState(null);
+  const [planoErro, setPlanoErro] = useState("");
   const [soEntregas, setSoEntregas] = useState(false);      // lista de projetos filtrada pelas pendências: 'entregas' ou 'financiamento'
 
   const carregar = useCallback(() => api("/me").then(setUser).catch(() => setUser(null)), []);
   useEffect(() => { carregar(); }, [carregar]);
-  const carregarPlano = useCallback(() => api("/planejamento").then(setPlano).catch(() => {}), []);
+  const carregarPlano = useCallback(() => api("/planejamento").then((d) => { setPlanoErro(""); setPlano(d); }).catch((e) => setPlanoErro((e && e.message) || "erro desconhecido")), []);
   useEffect(() => { if (user && !user.trocar_senha) carregarPlano(); }, [user, aba, proj, carregarPlano]);
 
   if (user === undefined) return <div className="centro" style={{ color: "#fff" }}>Carregando…</div>;
@@ -51,7 +52,7 @@ export default function App() {
         <button key={k} className={aba === k ? "on" : ""} onClick={() => ir(k)}><span className="n">{i + 1}</span>{t}{pend(k) > 0 && <span className="pend-badge" title={`${pend(k)} pendência(s)`}>{pend(k)}</span>}</button>))}</nav>}
       {admin && emAdmin && <nav className="subnav" aria-label="Administração">{ADMIN.map(([k, t]) => <button key={k} className={aba === k ? "on" : ""} onClick={() => ir(k)}>{t}</button>)}</nav>}
       <main>
-        {aba === "resumo" && <Resumo plano={plano} recarregarPlano={carregarPlano} admin={admin} ir={ir} />}
+        {aba === "resumo" && <Resumo plano={plano} planoErro={planoErro} recarregarPlano={carregarPlano} admin={admin} ir={ir} />}
         {aba === "projetos" && (proj
           ? <Projeto orcamento={proj} admin={admin} voltar={() => setProj(null)} irViagens={() => ir("viagens")} irEtapa={(k) => ir(k)} irProjeto={(o) => ir("projetos", o)} />
           : <Projetos abrir={setProj} semEntregas={soEntregas === "entregas" && plano ? plano.projetos.filter((p) => p.entregas.pendentes > 0).map((p) => p.orcamento) : null} semFonte={soEntregas === "financiamento" && plano ? plano.projetos.filter((p) => p.financiamento.pendentes > 0).map((p) => p.orcamento) : null} limparFiltro={() => setSoEntregas(false)} />)}

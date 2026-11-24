@@ -22,10 +22,10 @@ function Etapa({ n, titulo, tom, estado, texto, valor, acao, onAcao }) {
   );
 }
 
-export function MeuPlanejamento({ plano, recarregar, admin, ir }) {
+export function MeuPlanejamento({ plano, recarregar, admin, ir, erro: erroCarga }) {
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState("");
-  if (!plano) return <p>Carregando…</p>;
+  if (!plano) return erroCarga ? <p className="erro">Não foi possível carregar o acompanhamento do planejamento ({erroCarga}). <button type="button" className="link" onClick={recarregar}>Tentar de novo</button></p> : <p>Carregando…</p>;
   const e = plano.etapas;
   const pend = plano.pendencias;
   const concluir = async (concluido) => {

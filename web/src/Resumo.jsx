@@ -94,7 +94,7 @@ function EstrategiaFinanciamento() {
     </section>);
 }
 
-export default function Resumo({ plano, recarregarPlano, admin, ir }) {
+export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir }) {
   const [r, setR] = useState(null);
   const [erro, setErro] = useState("");
   const [ger, setGer] = useState("");
@@ -111,7 +111,7 @@ export default function Resumo({ plano, recarregarPlano, admin, ir }) {
   return (
     <>
       <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
-      <MeuPlanejamento plano={plano} recarregar={recarregarPlano} admin={admin} ir={ir} />
+      <MeuPlanejamento plano={plano} erro={planoErro} recarregar={recarregarPlano} admin={admin} ir={ir} />
       <h3 className="secao">Visão executiva do orçamento{ger ? `: ${ger}` : ""}</h3>
       {gerencias.length > 1 && <div className="filtros" style={{ margin: "0 0 10px" }}><FiltroGerencia valor={ger} onChange={setGer} opcoes={gerencias} largura={300} />{ger && <span className="mudo">Os números abaixo são só dos projetos desta gerência.</span>}</div>}
       <div className="kpis">
