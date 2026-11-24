@@ -1411,3 +1411,11 @@ def test_desassociar_projeto_de_item_da_estrategia(client):
     assert cob[po["id"]]["projetos"] == 0
     assert client.delete(f"/api/estrategia/cobertura/{orc}/999999").status_code == 404
     assert client.delete(f"/api/estrategia/cobertura/NAO-EXISTE/{po['id']}").status_code == 404
+
+
+def test_planejamento_com_gerencia_sem_projetos_e_headcount_existente(client):
+    entrar(client)
+    from app.api_planejamento import resumir
+    from app.db import tx
+    with tx() as c:
+        assert resumir(c, []) == {}
