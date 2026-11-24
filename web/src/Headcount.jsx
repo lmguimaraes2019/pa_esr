@@ -29,14 +29,15 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
     e.preventDefault(); setErro("");
     try { await onSalvar({ orcamento: f.orcamento, funcao: f.funcao, cargo: f.cargo, trajetoria: f.trajetoria, nivel: f.nivel, grupo: f.grupo,
       posicao: Number(f.posicao), mes_inicio: Number(f.mes_inicio), quantidade: q, justificativa: f.justificativa, gerencia: f.gerencia || "", edt: f.edt || "", tarefa: f.tarefa || "",
-      computador: f.computador || "", monitor: f.monitor || "", periferico: f.periferico || "" }); onFechar(); } catch (x) { setErro(x.message); }
+      computador: f.computador || "", monitor: f.monitor || "", periferico: f.periferico || "",
+      orcamento_equip: f.orcamento_equip && f.orcamento_equip !== f.orcamento ? f.orcamento_equip : "", edt_equip: f.edt_equip || "", tarefa_equip: f.tarefa_equip || "" }); onFechar(); } catch (x) { setErro(x.message); }
   };
   return (
     <form className="cartao" id="form-hc" onSubmit={salvar}>
       <h3>{f.id ? "Editar posição" : "Nova posição de headcount 2027"}</h3>
       <p className="mudo">Campos com <Obrig /> são necessários para a posição ser considerada completa.</p>
       <div className="grade grade-alinhada">
-        <label><span>Projeto que vai custear <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "", computador: "", monitor: "", periferico: "" }))} required>
+        <label><span>Projeto que vai custear <Obrig /></span><select value={f.orcamento} onChange={(e) => setF((x) => ({ ...x, orcamento: e.target.value, edt: "", tarefa: "", computador: "", monitor: "", periferico: "", orcamento_equip: "", edt_equip: "", tarefa_equip: "" }))} required>
           <option value="">Selecione…</option><optgroup label="Meus projetos">{dados.projetos.filter((p) => p.meu).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</optgroup>
           <optgroup label="Projetos de outros gestores">{dados.projetos.filter((p) => !p.meu).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao} ({p.gerente})</option>)}</optgroup></select>
           <small className="mudo">Pode ser qualquer projeto da casa, inclusive de outro gestor.</small></label>
@@ -76,7 +77,18 @@ function Formulario({ inicial, dados, onSalvar, onFechar }) {
         <label><span>Periférico</span><select value={f.periferico || ""} onChange={(e) => set("periferico", e.target.value)}>
           <option value="">Sem periférico</option>{opcoes("periferico")}</select></label>
       </div>
-      {eqUnit > 0 && <p className="mudo">Custo pontual dos equipamentos: <strong>{fmt(eqUnit)}</strong> por posição, <strong>{fmt(eqUnit * q)}</strong> para {q} posição(ões), lançado em {MESES_N[Number(f.mes_inicio) - 1]} na conta Hardware. A aquisição é solicitada à GTI, Gestão de Ativos.</p>}
+      {eqUnit > 0 && (
+        <div className="grade grade-alinhada">
+          <label><span>Projeto que custeia os equipamentos</span><select value={f.orcamento_equip || ""} onChange={(e) => setF((x) => ({ ...x, orcamento_equip: e.target.value, edt_equip: "", tarefa_equip: "" }))}>
+            <option value="">O mesmo da posição{f.orcamento ? ` (${f.orcamento})` : ""}</option>
+            <optgroup label="Meus projetos">{dados.projetos.filter((p) => p.meu && p.orcamento !== f.orcamento).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao}</option>)}</optgroup>
+            <optgroup label="Projetos de outros gestores">{dados.projetos.filter((p) => !p.meu && p.orcamento !== f.orcamento).map((p) => <option key={p.orcamento} value={p.orcamento}>{p.orcamento} | {p.descricao} ({p.gerente})</option>)}</optgroup></select>
+            <small className="mudo">A posição (salário e encargos) fica no projeto acima. Os equipamentos podem ser pagos por outro projeto.</small></label>
+          {f.orcamento_equip && f.orcamento_equip !== f.orcamento && (
+            <TarefaOrc dados={dados} orcamento={f.orcamento_equip} edt={f.edt_equip} tarefa={f.tarefa_equip} semSugestao opcional rotulo="Tarefa do projeto que recebe os equipamentos"
+              ajuda="Se não escolher, entra em Equipamentos de TIC | Computação pessoal, criada no projeto." onChange={(a, b) => setF((x) => ({ ...x, edt_equip: a, tarefa_equip: b }))} />)}
+        </div>)}
+      {eqUnit > 0 && <p className="mudo">Custo pontual dos equipamentos: <strong>{fmt(eqUnit)}</strong> por posição, <strong>{fmt(eqUnit * q)}</strong> para {q} posição(ões), lançado em {MESES_N[Number(f.mes_inicio) - 1]} na conta Hardware{f.orcamento_equip && f.orcamento_equip !== f.orcamento ? ` do projeto ${f.orcamento_equip}` : ""}. A aquisição é solicitada à GTI, Gestão de Ativos.</p>}
       {c && (
         <div className="resumo-custo">
           <span>Salário e encargos <strong>{fmt(c.encargos)}</strong></span><span>Benefícios <strong>{fmt(c.beneficios)}</strong></span><span>Provisões (férias e 13º) <strong>{fmt(c.provisoes)}</strong></span>
@@ -136,7 +148,7 @@ export default function Headcount({ admin, irProjeto }) {
               <td>{d.outro ? <>{d.orcamento} <span className="tag aviso" title="Projeto da Diretoria: não entra nos totais dos seus projetos">Diretoria</span></> : <button className="link" onClick={() => irProjeto(d.orcamento)}>{d.orcamento}</button>}<br /><span className="mudo">{d.projeto}</span>{!(dados.projetos.find((p) => p.orcamento === d.orcamento)?.meu) && <><br /><span className="tag aviso">projeto de {dados.projetos.find((p) => p.orcamento === d.orcamento)?.gerente}</span></>}{d.fora_de_pessoal && <><br /><span className="tag aviso" title="Diretrizes 2027: headcount deve ficar em projeto dedicado de pessoal">fora de projeto de pessoal</span></>}{d.tarefa && <><br /><span className="mudo" style={{ fontSize: ".76rem" }}>entra em: {d.tarefa}</span></>}</td>
               <td className="n">{d.quantidade}</td><td>{MESES_N[d.mes_inicio - 1].slice(0, 3)}</td>
               <td className="n">{fmtN(d.custo.salario)}</td>
-              <td style={{ fontSize: ".8rem" }}>{d.computador || d.monitor || d.periferico ? <>{[d.computador, d.monitor, d.periferico].filter(Boolean).join(" + ")}<br /><span className="mudo">{fmtN(d.equipamentos.total)}</span></> : <span className="mudo">-</span>}</td><td className="n">{fmtN(d.custo.mensal)}</td>
+              <td style={{ fontSize: ".8rem" }}>{d.computador || d.monitor || d.periferico ? <>{[d.computador, d.monitor, d.periferico].filter(Boolean).join(" + ")}<br /><span className="mudo">{fmtN(d.equipamentos.total)}</span>{d.equip_orcamento !== d.orcamento && <><br /><span className="tag aviso" title={d.projeto_equip}>pago pelo {d.equip_orcamento}</span></>}</> : <span className="mudo">-</span>}</td><td className="n">{fmtN(d.custo.mensal)}</td>
               <td className="n"><strong>{fmtN(d.anualizado)}</strong></td><td className="n"><strong>{fmtN(d.custo_2027)}</strong></td>
               <td>{d.faltando.length === 0 ? <span className="tag ok">completo</span> : <><span className="tag aviso">pendente</span><div className="pend-lista">{d.faltando.map((x) => <span key={x}>{x}</span>)}</div></>}</td>
             </tr>))}
@@ -150,8 +162,8 @@ export default function Headcount({ admin, irProjeto }) {
           <tbody>{dados.por_gerencia.map((g) => <tr key={g.gerencia}><td>{g.gerencia}</td><td className="n">{g.posicoes}</td><td className="n">{fmtN(g.anualizado)}</td><td className="n"><strong>{fmtN(g.custo_2027)}</strong></td></tr>)}</tbody></table></div></section>)}
       {dados.por_projeto.length > 0 && (
         <section className="cartao"><h3>Por projeto</h3><div className="rolagem"><table className="tab">
-          <thead><tr><th>Projeto</th><th className="n">Posições</th><th className="n">Anualizado</th><th className="n">Em 2027</th></tr></thead>
-          <tbody>{dados.por_projeto.map((p) => <tr key={p.orcamento}><td><button className="link" onClick={() => irProjeto(p.orcamento)}>{p.orcamento}</button> {p.projeto}</td><td className="n">{p.posicoes}</td><td className="n">{fmtN(p.anualizado)}</td><td className="n"><strong>{fmtN(p.custo_2027)}</strong></td></tr>)}</tbody></table></div></section>)}
+          <thead><tr><th>Projeto</th><th className="n">Posições</th><th className="n">Anualizado</th><th className="n">Pessoal em 2027</th><th className="n">Equipamentos</th><th className="n">Em 2027</th></tr></thead>
+          <tbody>{dados.por_projeto.map((p) => <tr key={p.orcamento}><td><button className="link" onClick={() => irProjeto(p.orcamento)}>{p.orcamento}</button> {p.projeto}</td><td className="n">{p.posicoes}</td><td className="n">{fmtN(p.anualizado)}</td><td className="n">{fmtN(p.custo_pessoal)}</td><td className="n">{fmtN(p.equipamentos)}</td><td className="n"><strong>{fmtN(p.custo_2027)}</strong></td></tr>)}</tbody></table></div></section>)}
     </>
   );
 }

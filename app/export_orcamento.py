@@ -333,7 +333,7 @@ def _aba_headcount(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
     d = api_headcount.listar(u, c)
     _titulo(ws, "Headcount previsto em 2027", "Custo = (salário da tabela + encargos, benefícios e provisões) x meses de 2027 x quantidade, mais equipamentos (pontual, no mês de início).")
     cols = ["Orçamento", "Projeto", "Gerência", "Função", "Cargo", "Trajetória", "Nível", "Posição", "Quantidade", "Mês de início", "Meses em 2027", "Salário (tabela)",
-            "Custo mensal por posição", "Custo de pessoal 2027", "Equipamentos 2027", "Total 2027", "Justificativa", "Lançado por"]
+            "Custo mensal por posição", "Custo de pessoal 2027", "Equipamentos 2027", "Total 2027", "Projeto que custeia os equipamentos", "Justificativa", "Lançado por"]
     _cab(ws, 4, cols, {16: P_27})
     r = 4
     for h in sorted(d["itens"], key=lambda x: (x["gerencia"], x["orcamento"], x["id"])):
@@ -341,9 +341,10 @@ def _aba_headcount(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
         pessoal_27 = round(h["custo"]["mensal"] * h["meses_2027"] * h["quantidade"], 2)
         _linha(ws, r, [h["orcamento"], h["projeto"], h["gerencia"], h["funcao"], h["cargo"], h["trajetoria"], h["nivel"], h["posicao"], h["quantidade"],
                        MES[h["mes_inicio"] - 1], h["meses_2027"], h["salario_tabela"], h["custo"]["mensal"], pessoal_27, h["equipamentos"]["total"], f"=N{r}+O{r}",
-                       h["justificativa"], h["atualizado_por"]], moeda={12, 13, 14, 15, 16}, centro={1, 9, 10, 11}, quebra={2, 4, 5, 17})
+                       (f"{h['equip_orcamento']} | {h['projeto_equip']}" if h["equip_orcamento"] != h["orcamento"] and h["equipamentos"]["total"] else ""),
+                       h["justificativa"], h["atualizado_por"]], moeda={12, 13, 14, 15, 16}, centro={1, 9, 10, 11}, quebra={2, 4, 5, 17, 18})
     _fecha(ws, r, [9, 14, 15, 16], 5, "Nenhuma posição lançada.")
-    _larguras(ws, [12, 34, 18, 26, 22, 14, 10, 9, 11, 10, 10, 14, 14, 16, 15, 15, 40, 16])
+    _larguras(ws, [12, 34, 18, 26, 22, 14, 10, 9, 11, 10, 10, 14, 14, 16, 15, 15, 32, 40, 16])
     ws.freeze_panes = "C5"
 
 
@@ -376,7 +377,7 @@ def _aba_equipamentos(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
     _titulo(ws, "Equipamentos de TIC previstos em 2027",
             f"Equipamentos das novas posições de headcount, pelo catálogo de hardware homologado ({equipamentos.carregar()['atualizado_em']}). Custo pontual no mês de início da posição.")
     cols = ["Orçamento", "Projeto", "Gerência", "Função", "Mês de início", "Quantidade de posições", "Computador", "Valor unitário", "Monitor", "Valor unitário",
-            "Periférico", "Valor unitário", "Custo por posição", "Total 2027", "Lançado por"]
+            "Periférico", "Valor unitário", "Custo por posição", "Total 2027", "Posição lançada em", "Lançado por"]
     _cab(ws, 4, cols, {14: P_27})
     r = 4
     for h in sorted(d["itens"], key=lambda x: (x["gerencia"], x["orcamento"], x["id"])):
@@ -386,12 +387,13 @@ def _aba_equipamentos(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
         r += 1
         nomes = eq["nomes"]
         cod = lambda t, n: f"{n} ({h[t]})" if h[t] else ""      # noqa: E731
-        _linha(ws, r, [h["orcamento"], h["projeto"], h["gerencia"], h["funcao"], MES[h["mes_inicio"] - 1], h["quantidade"],
+        _linha(ws, r, [h["equip_orcamento"], h["projeto_equip"], h["gerencia"], h["funcao"], MES[h["mes_inicio"] - 1], h["quantidade"],
                        cod("computador", nomes.get("computador", "")), eq.get("computador", 0), cod("monitor", nomes.get("monitor", "")), eq.get("monitor", 0),
-                       cod("periferico", nomes.get("periferico", "")), eq.get("periferico", 0), f"=H{r}+J{r}+L{r}", f"=M{r}*F{r}", h["atualizado_por"]],
-               moeda={8, 10, 12, 13, 14}, centro={1, 5, 6}, quebra={2, 4, 7, 9, 11})
+                       cod("periferico", nomes.get("periferico", "")), eq.get("periferico", 0), f"=H{r}+J{r}+L{r}", f"=M{r}*F{r}",
+                       f"{h['orcamento']} | {h['projeto']}" if h["orcamento"] != h["equip_orcamento"] else "", h["atualizado_por"]],
+               moeda={8, 10, 12, 13, 14}, centro={1, 5, 6}, quebra={2, 4, 7, 9, 11, 15})
     _fecha(ws, r, [6, 14], 5, "Nenhum equipamento previsto.")
-    _larguras(ws, [12, 34, 18, 26, 10, 12, 42, 13, 28, 13, 24, 13, 14, 15, 16])
+    _larguras(ws, [12, 34, 18, 26, 10, 12, 42, 13, 28, 13, 24, 13, 14, 15, 30, 16])
     ws.freeze_panes = "C5"
 
 

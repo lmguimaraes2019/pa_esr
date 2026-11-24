@@ -1336,3 +1336,31 @@ def test_transfere_linha_com_a_estrutura(client):
     # erros
     assert client.post("/api/linhas/transferir", json={"ids": [nova["id"]], "destino": "NAO-EXISTE", "simular": True}).status_code == 404
     assert client.post("/api/linhas/transferir", json={"ids": [x["id"] for x in db["linhas"] if x["tarefa"] == "99.01-ACAO TESTE"], "destino": b, "simular": True}).status_code == 422
+
+
+def test_headcount_com_equipamentos_custeados_por_outro_projeto(client):
+    entrar(client)
+    h = client.get("/api/headcount").json()
+    a, b = [p["orcamento"] for p in h["projetos"]][:2]
+    ta, tb = h["tarefas"][a]["lista"][0], h["tarefas"][b]["lista"][0]
+    base = {"orcamento": a, "funcao": "Analista", "cargo": "Analista Pleno", "trajetoria": "GESTAO DO NEGOCIO", "nivel": "PLENO", "grupo": "GRUPO 01", "posicao": 0,
+            "mes_inicio": 3, "quantidade": 2, "justificativa": "x", "gerencia": "Diretoria Adjunta", "edt": ta["edt"], "tarefa": ta["tarefa"], "computador": "N2.B", "monitor": "M2"}
+    r = client.post("/api/headcount", json={**base, "orcamento_equip": b, "edt_equip": tb["edt"], "tarefa_equip": tb["tarefa"]})
+    assert r.status_code == 201, r.text
+    hid = r.json()["id"]
+    def linhas(o, conta):
+        return [x for x in client.get(f"/api/projetos/{o}").json()["linhas"] if x["fonte"] == "headcount" and x["conta_codigo"] == conta]
+    import app.equipamentos as eq
+    hw = linhas(b, eq.CONTA_HARDWARE)
+    assert len(hw) == 1 and hw[0]["edt"] == tb["edt"] and hw[0]["tarefa"] == tb["tarefa"] and hw[0]["total"] > 0     # equipamentos no projeto B
+    assert linhas(a, eq.CONTA_HARDWARE) == []                                                                         # e não no A
+    assert any(x["fonte"] == "headcount" and x["conta_codigo"] != eq.CONTA_HARDWARE for x in client.get(f"/api/projetos/{a}").json()["linhas"])   # salário no A
+    pp = {x["orcamento"]: x for x in client.get("/api/headcount").json()["por_projeto"]}
+    assert pp[b]["equipamentos"] == hw[0]["total"] and pp[b]["posicoes"] == 0 and pp[a]["equipamentos"] == 0
+    # volta para o mesmo projeto: o equipamento retorna ao A
+    assert client.put(f"/api/headcount/{hid}", json={**base, "orcamento_equip": a}).status_code == 200
+    assert linhas(b, eq.CONTA_HARDWARE) == [] and len(linhas(a, eq.CONTA_HARDWARE)) == 1
+    # sem tarefa escolhida: cai na tarefa padrão, criada no projeto
+    assert client.put(f"/api/headcount/{hid}", json={**base, "orcamento_equip": b}).status_code == 200
+    assert linhas(b, eq.CONTA_HARDWARE)[0]["tarefa"] == "Computação pessoal"
+    assert client.delete(f"/api/headcount/{hid}").status_code == 200 and linhas(b, eq.CONTA_HARDWARE) == []

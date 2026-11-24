@@ -66,21 +66,35 @@ def linhas_de_eventos(c: sqlite3.Connection, orcamento: str) -> dict:
     return out
 
 
+# destino dos equipamentos quando o projeto que os custeia é outro e a tarefa não foi escolhida
+EDT_EQUIP, TAREFA_EQUIP = "Equipamentos de TIC", "Computação pessoal"
+
+
 def linhas_de_headcount(c: sqlite3.Connection, orcamento: str) -> dict:
+    """Linhas do projeto: salário e encargos das posições dele, e os equipamentos que ele custeia (da posição dele ou de outro projeto)."""
     from .api_headcount import _reajuste
     par, reaj = pessoal.parametros(c), _reajuste(c)
     out: dict[tuple, list[float]] = {}
-    for r in c.execute("SELECT * FROM headcount WHERE orcamento=?", (orcamento,)):
-        f = pessoal.faixa(r["trajetoria"], r["nivel"], r["grupo"])
-        if not (f and r["edt"] and r["tarefa"]):
+    for r in c.execute("SELECT * FROM headcount WHERE orcamento=? OR orcamento_equip=?", (orcamento, orcamento)):
+        if r["orcamento"] == orcamento:
+            f = pessoal.faixa(r["trajetoria"], r["nivel"], r["grupo"])
+            if f and r["edt"] and r["tarefa"]:
+                sal = round(pessoal.salario_na_faixa(f, r["posicao"]) * (1 + reaj / 100), 2)
+                cm = pessoal.custo_mensal(sal, par)
+                for comp, conta in CONTAS_PESSOAL.items():
+                    for mes in range(r["mes_inicio"], 13):
+                        _soma(out, (r["edt"], r["tarefa"], conta, "headcount"), mes, round(cm[comp] * r["quantidade"], 2))
+        dono = r["orcamento_equip"] or r["orcamento"]
+        if dono != orcamento:
             continue
-        sal = round(pessoal.salario_na_faixa(f, r["posicao"]) * (1 + reaj / 100), 2)
-        cm = pessoal.custo_mensal(sal, par)
-        for comp, conta in CONTAS_PESSOAL.items():
-            for mes in range(r["mes_inicio"], 13):
-                _soma(out, (r["edt"], r["tarefa"], conta, "headcount"), mes, round(cm[comp] * r["quantidade"], 2))
+        if r["orcamento_equip"] and r["orcamento_equip"] != r["orcamento"]:
+            edt, tarefa = (r["edt_equip"], r["tarefa_equip"]) if (r["edt_equip"] and r["tarefa_equip"]) else (EDT_EQUIP, TAREFA_EQUIP)
+        else:
+            edt, tarefa = r["edt"], r["tarefa"]
+        if not (edt and tarefa):
+            continue
         hw = equipamentos.custo(r["computador"], r["monitor"], r["periferico"])["total"]      # custo pontual, no mês de início
-        _soma(out, (r["edt"], r["tarefa"], equipamentos.CONTA_HARDWARE, "headcount"), r["mes_inicio"], round(hw * r["quantidade"], 2))
+        _soma(out, (edt, tarefa, equipamentos.CONTA_HARDWARE, "headcount"), r["mes_inicio"], round(hw * r["quantidade"], 2))
     return out
 
 
@@ -146,7 +160,7 @@ def sincronizar_viagens(c: sqlite3.Connection, orcamento: str, usuario: str, for
 
 
 def sincronizar_todos(c: sqlite3.Connection, usuario: str = "sistema") -> int:
-    ids = {r[0] for r in c.execute("SELECT orcamento FROM eventos UNION SELECT orcamento FROM headcount")}
+    ids = {r[0] for r in c.execute("SELECT orcamento FROM eventos UNION SELECT orcamento FROM headcount UNION SELECT orcamento_equip FROM headcount WHERE orcamento_equip<>''")}
     ids |= {r[0] for r in c.execute("SELECT DISTINCT orcamento FROM linhas WHERE fonte IN ('eventos','headcount','viagens')")}
     for o in sorted(ids):
         sincronizar(c, o, usuario)

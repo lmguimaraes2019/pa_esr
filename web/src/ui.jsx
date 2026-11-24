@@ -65,18 +65,18 @@ export function BotaoIcone({ icone, dica, tom, onClick, desligado }) {
 }
 
 /** Escolha da tarefa do orçamento que recebe o valor (Eventos e Headcount). Sugere sozinha quando só uma combina. */
-export function TarefaOrc({ dados, orcamento, edt, tarefa, onChange }) {
+export function TarefaOrc({ dados, orcamento, edt, tarefa, onChange, rotulo, ajuda, opcional, semSugestao }) {
   const info = dados.tarefas?.[orcamento];
   const lista = info?.lista || [];
-  useEffect(() => { if (orcamento && !edt && !tarefa && info?.sugestao) onChange(info.sugestao.edt, info.sugestao.tarefa); }, [orcamento]); // eslint-disable-line
+  useEffect(() => { if (!semSugestao && orcamento && !edt && !tarefa && info?.sugestao) onChange(info.sugestao.edt, info.sugestao.tarefa); }, [orcamento]); // eslint-disable-line
   const valor = edt || tarefa ? JSON.stringify([edt, tarefa]) : "";
   return (
-    <label><span>Tarefa do orçamento que recebe o valor <span className="obrig" title="Informação obrigatória">*</span></span>
+    <label><span>{rotulo || "Tarefa do orçamento que recebe o valor"} {!opcional && <span className="obrig" title="Informação obrigatória">*</span>}</span>
       <select value={valor} disabled={!orcamento} onChange={(e) => { const [a, b] = e.target.value ? JSON.parse(e.target.value) : ["", ""]; onChange(a, b); }}>
-        <option value="">{orcamento ? "Selecione…" : "Escolha o projeto primeiro"}</option>
+        <option value="">{orcamento ? (opcional ? "Tarefa padrão (criada no projeto)" : "Selecione…") : "Escolha o projeto primeiro"}</option>
         {lista.map((t) => <option key={t.edt + t.tarefa} value={JSON.stringify([t.edt, t.tarefa])}>{t.edt} | {t.tarefa}</option>)}
       </select>
-      <small className="mudo">O valor entra no orçamento 2027 do projeto, nesta tarefa, como linha bloqueada.</small>
+      <small className="mudo">{ajuda || "O valor entra no orçamento 2027 do projeto, nesta tarefa, como linha bloqueada."}</small>
     </label>
   );
 }

@@ -79,7 +79,11 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
     for r in c.execute(f"SELECT * FROM headcount WHERE orcamento IN ({marks})", ids):
         d = _calc_hc(r, par, reaj)
         x = out[r["orcamento"]]["headcount"]
-        x["n"] += r["quantidade"]; x["total"] += d["custo_2027"]; x["pendentes"] += 1 if d["faltando"] else 0
+        x["n"] += r["quantidade"]; x["total"] += d["custo_pessoal_2027"]; x["pendentes"] += 1 if d["faltando"] else 0
+        if d["custo_equip_2027"] and d["equip_orcamento"] == r["orcamento"]:
+            x["total"] += d["custo_equip_2027"]
+    for r in c.execute(f"SELECT * FROM headcount WHERE orcamento_equip IN ({marks}) AND orcamento_equip<>orcamento", ids):      # equipamentos custeados por este projeto
+        out[r["orcamento_equip"]]["headcount"]["total"] += _calc_hc(r, par, reaj)["custo_equip_2027"]
 
     for r in c.execute(f"""SELECT e.orcamento, COUNT(*) n,
                            SUM(CASE WHEN e.kpi='' AND NOT EXISTS (SELECT 1 FROM entrega_estrategia x WHERE x.entrega_id=e.id) THEN 1 ELSE 0 END) sem
