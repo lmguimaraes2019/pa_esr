@@ -1394,3 +1394,20 @@ def test_gerencias_em_eventos_viagens_e_resumo(client):
     assert client.get("/api/fluxo", params={"gerencia": ger}).status_code == 200
     # as listas de receitas e exposição trazem a gerência
     assert all("gerencia" in l for l in client.get("/api/receitas").json()["linhas"])
+
+
+def test_desassociar_projeto_de_item_da_estrategia(client):
+    entrar(client)
+    arq = _xlsx([["Tipo", "Código", "Descrição", "Meta ou critério"], ["PO", "RC 6.1.2", "900 alunos capacitados via parcerias", "Q3"]])
+    assert _envia(client, "estrategia", arq, False).status_code == 200
+    orc = next(p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0)["orcamento"]
+    po = next(e for e in client.get(f"/api/projetos/{orc}/entregas").json()["catalogo"] if e["tipo"] == "po")
+    assert client.put(f"/api/projetos/{orc}/estrategia", json={"ids": [po["id"]]}).status_code == 200
+    cob = {i["id"]: i for i in client.get("/api/estrategia/cobertura").json()["itens"]}
+    assert cob[po["id"]]["projetos"] == 1
+    r = client.delete(f"/api/estrategia/cobertura/{orc}/{po['id']}")
+    assert r.status_code == 200 and r.json()["removidos"] == 1
+    cob = {i["id"]: i for i in client.get("/api/estrategia/cobertura").json()["itens"]}
+    assert cob[po["id"]]["projetos"] == 0
+    assert client.delete(f"/api/estrategia/cobertura/{orc}/999999").status_code == 404
+    assert client.delete(f"/api/estrategia/cobertura/NAO-EXISTE/{po['id']}").status_code == 404

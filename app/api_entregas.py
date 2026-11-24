@@ -73,6 +73,25 @@ def vincular(orcamento: str, d: VinculoIn, u: dict = Depends(usuario_liberado)):
     return {"ok": True, "vinculos": ids}
 
 
+@router.delete("/estrategia/cobertura/{orcamento}/{item_id}")
+def desassociar(orcamento: str, item_id: int, u: dict = Depends(usuario_liberado)):
+    """Tira o projeto de uma diretriz, RE, RO ou indicador. Como o vínculo com um item cobre os de cima, também saem os vínculos
+    do projeto (e de suas entregas) com os itens abaixo dele, senão ele continuaria aparecendo ali."""
+    with tx() as c:
+        exige_acesso(c, u, orcamento)
+        cat = _catalogo(c)
+        alvo = next((e for e in cat if e["id"] == item_id), None)
+        if not alvo:
+            raise HTTPException(404, "Item não encontrado.")
+        ids = [e["id"] for e in cat if item_id in estrategia.fecho(cat, {e["id"]})]
+        marks = ",".join("?" for _ in ids)
+        n = c.execute(f"DELETE FROM projeto_estrategia WHERE orcamento=? AND estrategia_id IN ({marks})", (orcamento, *ids)).rowcount
+        n += c.execute(f"""DELETE FROM entrega_estrategia WHERE estrategia_id IN ({marks})
+                           AND entrega_id IN (SELECT id FROM entregas WHERE orcamento=?)""", (*ids, orcamento)).rowcount
+        audit(c, u["login"], "desassociou projeto da estratégia", orcamento, detalhe=f"{alvo['tipo']} {alvo['codigo']} ({n} vínculo(s))")
+    return {"ok": True, "removidos": n}
+
+
 @router.post("/projetos/{orcamento}/entregas", status_code=201)
 def criar(orcamento: str, d: EntregaIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:

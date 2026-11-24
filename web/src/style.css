@@ -504,3 +504,4 @@ label.est-gtit input{width:auto;flex:none}
 .gerencias-check { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 6px 0; }
 .campo-largo { grid-column: 1 / -1; }
 .evt-ger { margin: 2px 0 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.chip-x{border:0;background:none;color:#8a2b2b;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px}.chip-x:hover{color:#c00;font-weight:700}

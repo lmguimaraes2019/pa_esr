@@ -40,6 +40,12 @@ function Cobertura({ admin }) {
   const alterna = (id) => setExp((x) => { const n = new Set(x); n.has(id) ? n.delete(id) : n.add(id); return n; });
   useEffect(() => { api("/estrategia/cobertura").then(setC).catch(() => setC(false)); }, []);
   if (!c) return null;
+  const desassocia = async (i, p) => {
+    const abaixo = i.tipo === "po" ? "" : " (e dos itens abaixo dele)";
+    if (!window.confirm(`Desassociar o projeto "${p.projeto || p.orcamento}" de ${rot(i)}${abaixo}?`)) return;
+    try { await api(`/estrategia/cobertura/${encodeURIComponent(p.orcamento)}/${i.id}`, { method: "DELETE" }); setC(await api("/estrategia/cobertura")); }
+    catch (e) { window.alert(e.message || "Não foi possível desassociar."); }
+  };
   const rot = (i) => (/^\d/.test(i.codigo) ? ({ diretriz: "Diretriz", re: "RE", po: "RO", cg: "CG" }[i.tipo] + " " + i.codigo) : i.codigo);
   const nivel = { diretriz: 0, re: 1, po: 2, cg: 0 };
   const filhos = {};      // itens da hierarquia vêm em ordem: diretriz, seus REs, os ROs de cada RE
@@ -54,7 +60,7 @@ function Cobertura({ admin }) {
         <td>{tem(i) && <span className="mudo" style={{ marginRight: 6 }}>{exp.has(i.id) ? "▾" : "▸"}</span>}<b>{rot(i)}</b> {i.descricao}{tem(i) && <span className="mudo"> ({filhos[i.id].length} {i.tipo === "diretriz" ? "itens" : "ROs"})</span>}{tem(i) && i.projetos > 0 && <button type="button" className="link" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); setAberto(aberto === i.id ? null : i.id); }}>{aberto === i.id ? "ocultar projetos" : "ver projetos"}</button>}{i.tipo === "po" && i.responsavel && <span className="chip">{i.responsavel}</span>}{i.tipo === "po" && i.conclusao && <span className="chip mes">{i.conclusao}</span>}</td>
         <td className="n">{i.entregas || <span className="mudo">0</span>}</td><td className="n">{i.projetos || <strong className="aviso-txt">nenhum</strong>}</td><td className="n">{i.projetos ? fmt(i.plano_projetos) : <span className="mudo">-</span>}</td>
       </tr>
-      {aberto === i.id && <tr className="cob-det"><td colSpan={4}>{i.lista_projetos.map((p) => <span key={p.orcamento} className="chip">{p.projeto} <span className="mudo">{fmt(p.plano)}</span></span>)}</td></tr>}
+      {aberto === i.id && <tr className="cob-det"><td colSpan={4}>{i.lista_projetos.map((p) => <span key={p.orcamento} className="chip">{p.projeto} <span className="mudo">{fmt(p.plano)}</span> <button type="button" className="chip-x" title="Desassociar este projeto" aria-label="Desassociar" onClick={() => desassocia(i, p)}>×</button></span>)}</td></tr>}
     </React.Fragment>);
   const hier = c.itens.filter((i) => i.tipo !== "cg"), cg = c.itens.filter((i) => i.tipo === "cg");
   return (
