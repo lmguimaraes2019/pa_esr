@@ -53,11 +53,10 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         f"SELECT l.id, l.orcamento, l.edt, l.tarefa, l.conta_codigo, {cols}, "
         "p.n_projeto, p.novo, p.contingenciado, p.descricao, COALESCE(NULLIF(p.origem_2027, ''), p.origem) AS origem, p.gerente, p.diretoria, k.descricao AS conta_desc, k.grupo "
         "FROM linhas l JOIN projetos p USING (orcamento) JOIN contas k ON k.codigo = l.conta_codigo "
-        "WHERE l.ciclo = ? AND p.tipo = 'despesa' AND p.extinto = 0 ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
+        "WHERE l.ciclo = ? AND p.tipo = 'despesa' AND p.extinto = 0 AND p.contingenciado = 0 AND p.fora_contabilidade = 0 ORDER BY l.orcamento, l.edt, l.tarefa, l.conta_codigo", (ciclo,)).fetchall()
 
     zeradas = 0
     pend_num: set[str] = set()
-    cont_num: set[str] = set()
     com_linha: set[str] = set()
     for r in rows:
         meses = [float(r[m]) for m in MESES]
@@ -69,15 +68,15 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
             res.avisos.append(Aviso("aviso", f"Linha {r['tarefa']} / {r['conta_desc']} tem valor negativo.", r["orcamento"]))
         n_proj = r["n_projeto"] or ("NOVO" if r["novo"] else "")      # orçamento novo ou replicado ainda não está no PCO: segue como NOVO
         if not n_proj:
-            (cont_num if r["contingenciado"] else pend_num).add(r["orcamento"])
+            pend_num.add(r["orcamento"])
         res.linhas.append({
             "diretoria": r["diretoria"], "n_projeto": n_proj, "descricao": r["descricao"],
             "origem": r["origem"], "gerente": r["gerente"], "edt": r["edt"], "tarefa": r["tarefa"],
             "grupo": r["grupo"], "conta_desc": r["conta_desc"], "conta_cod": r["conta_codigo"], "meses": meses,
         })
 
-    for o in sorted(cont_num):
-        res.avisos.append(Aviso("aviso", "Orçamento contingenciado, sem Nº do Projeto: as linhas seguem na exportação com o número em branco.", o))
+    for r in conn.execute("SELECT orcamento, contingenciado FROM projetos WHERE tipo='despesa' AND extinto=0 AND (contingenciado=1 OR fora_contabilidade=1) ORDER BY orcamento"):
+        res.avisos.append(Aviso("aviso", "Contingenciado: não vai na exportação para o PCO." if r["contingenciado"] else "Projeto lançado pela DSS: não vai na exportação para o PCO.", r["orcamento"]))
     for o in sorted(pend_num):
         res.avisos.append(Aviso("erro", "Projeto com orçamento lançado e sem Nº do Projeto. Preencha antes de exportar.", o))
     for lin in res.linhas:
@@ -97,7 +96,7 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         res.avisos.append(Aviso("aviso", f"{r['nome']} ainda não marcou o planejamento como concluído."))
     if zeradas:
         res.avisos.append(Aviso("aviso", f"{zeradas} linha(s) com total zero não serão exportadas."))
-    todos = {r["orcamento"] for r in conn.execute("SELECT orcamento FROM projetos WHERE tipo='despesa'")}
+    todos = {r["orcamento"] for r in conn.execute("SELECT orcamento FROM projetos WHERE tipo='despesa' AND extinto=0 AND contingenciado=0 AND fora_contabilidade=0")}
     for r in conn.execute("SELECT orcamento, descricao FROM projetos WHERE tipo='receita'"):
         res.avisos.append(Aviso("aviso", "Orçamento de receita não vai no Template de despesas do PMO.", r["orcamento"]))
     for o in sorted(todos - com_linha):

@@ -424,7 +424,14 @@ def _gerencia_do(gerente: str | None, ger_de: dict[str, str]) -> str:
 
 @router.get("/projetos")
 def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
-    ids = sorted(proprios(c, u, extintos=True))
+    return listar_projetos(u, c)
+
+
+def listar_projetos(u: dict, c: sqlite3.Connection, incluir_fora: bool = False) -> list[dict]:
+    ids = proprios(c, u, extintos=True)
+    if incluir_fora:      # projetos fora da contabilidade (ex.: lançado pela DSS), só para informação
+        ids |= permitidos(c, u, extintos=True) & {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE fora_contabilidade=1")}
+    ids = sorted(ids)
     if not ids:
         return []
     marks = ",".join("?" for _ in ids)
@@ -443,7 +450,7 @@ def projetos(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depend
         "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
     return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
-             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]), "extinto": bool(r["extinto"]),
+             "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]), "fora_contabilidade": bool(r["fora_contabilidade"]), "extinto": bool(r["extinto"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "financiamento": financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]), "financiamento_informado": r["financiamento"], "financiamento_obs": r["financiamento_obs"],
              "gerente_2026": (r["gerente_2026"] or r["gerente"]) if not r["novo"] else "",

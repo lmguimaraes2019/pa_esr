@@ -29,6 +29,8 @@ F_EXT = Font(name="Calibri", color=CINZA)
 P_CAB = PatternFill("solid", fgColor=AZUL)
 P_SUB = PatternFill("solid", fgColor="DCE6F2")
 P_EXT = PatternFill("solid", fgColor="ECEFF2")
+P_CONT = PatternFill("solid", fgColor="FFE9C7")
+P_INFO = PatternFill("solid", fgColor="FFF8DC")
 P_TOT = PatternFill("solid", fgColor="F2F2F2")
 P_26 = PatternFill("solid", fgColor="6B7280")
 P_27 = PatternFill("solid", fgColor=LARANJA)
@@ -133,6 +135,11 @@ def _admin_contexto(u: dict, c: sqlite3.Connection) -> tuple[list[dict], set[str
     return [p for p in ps if p["tipo"] != "receita"], api.proprios(c, u, extintos=True)
 
 
+def _informativos(u: dict, c: sqlite3.Connection) -> list[dict]:
+    """Projetos fora da contabilidade (lançados pela DSS): aparecem só como informação, sem somar nos totais."""
+    return [p for p in api.listar_projetos(u, c, incluir_fora=True) if p["fora_contabilidade"] and p["tipo"] != "receita"]
+
+
 def gerar(u: dict, c: sqlite3.Connection) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -141,11 +148,12 @@ def gerar(u: dict, c: sqlite3.Connection) -> bytes:
     ps, _ = _admin_contexto(u, c)
     ordem_ger = lambda g: (0 if g == "Diretoria Adjunta" else 2 if g.startswith("Sem") else 1, g)      # noqa: E731
     ps.sort(key=lambda p: (ordem_ger(p["gerencia"]), p["origem"], p["extinto"], p["descricao"]))
-    vivos = [p for p in ps if not p["extinto"]]
+    info = _informativos(u, c)
+    vivos = [p for p in ps if not p["extinto"]] + [p for p in info if not p["extinto"]]
     abas = {p["orcamento"]: _nome_aba(p["orcamento"], usados) for p in vivos}
     gerado = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    _sumario(ws, ps, abas, gerado)
+    _sumario(ws, ps, abas, gerado, info)
     _aba_viagens(wb.create_sheet("Viagens"), u, c)
     _aba_headcount(wb.create_sheet("Headcount"), u, c)
     _aba_eventos(wb.create_sheet("Eventos"), u, c)
@@ -181,7 +189,7 @@ SUM_COLS = ["Orçamento", "Nº do projeto", "Projeto", "Gerência", "Gerente", "
             "Previsto 2026", "Empenhado 2026", "Executado 2026", "Saldo 2026", "Previsto 2027", "Δ 2027 vs 2026", "Status"]
 
 
-def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str) -> None:
+def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str, info: list[dict] = ()) -> None:
     _titulo(ws, "Orçamento ESR 2027: sumário das ações", f"Gerado em {gerado}. Executado = realizado de 2026 (o empenhado é informativo e não entra no saldo). "
             "Saldo 2026 = previsto menos executado. Valores em R$. Use os filtros para fatiar por gerência, origem ou tipo.")
     ini = 5
@@ -196,11 +204,26 @@ def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str) -
         _linha(ws, r, [p["orcamento"] if not p["novo"] else p["orcamento"], p["n_projeto"], p["descricao"], p["gerencia"], p["gerente"],
                        "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
                        p["total_2026"], p["empenhado_2026"], p["realizado_2026"], f"=J{r}-L{r}", prev27, f"=N{r}-J{r}", status],
-               moeda=moeda, centro={1, 2, 6, 16}, quebra={3, 5}, fonte=F_EXT if ext else None, fill=P_EXT if ext else None)
+               moeda=moeda, centro={1, 2, 6, 16}, quebra={3, 5}, fonte=F_EXT if ext else None,
+               fill=P_EXT if ext else P_CONT if p["contingenciado"] else None)
         r += 1
     fim = r - 1
     _total(ws, r, 3, [10, 11, 12, 13, 14, 15], ini, fim, "Total (conforme filtro)")
     ws.auto_filter.ref = f"A{ini - 1}:{L(len(SUM_COLS))}{fim}"
+    if info:      # projeto lançado pela DSS: só informação, fora dos totais, dos filtros e dos resumos
+        r += 2
+        ws.cell(row=r, column=3, value="Informativo: projeto lançado pela DSS (não soma nos totais nem nos resumos)").font = Font(name="Calibri", size=12, bold=True, color="7A4A00")
+        for p in info:
+            r += 1
+            _linha(ws, r, [p["orcamento"], p["n_projeto"], p["descricao"], p["gerencia"], p["gerente"],
+                           "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
+                           p["total_2026"], p["empenhado_2026"], p["realizado_2026"], p["total_2026"] - p["realizado_2026"],
+                           0 if p["extinto"] else p["total_2027"], (0 if p["extinto"] else p["total_2027"]) - p["total_2026"], "Informativo (DSS)"],
+                   moeda=moeda, centro={1, 2, 6, 16}, quebra={3, 5}, fonte=Font(name="Calibri", italic=True, color="7A4A00"), fill=P_INFO)
+        fim_info = r
+        r += 1
+    else:
+        fim_info = fim
     _larguras(ws, [12, 12, 48, 20, 22, 11, 22, 16, 22, 15, 15, 15, 15, 15, 15, 14])
     # resumos por origem e por gerência (fórmulas sobre a tabela acima, sem contar extintos no 2027)
     r += 3

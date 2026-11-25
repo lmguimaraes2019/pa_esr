@@ -1479,3 +1479,21 @@ def test_template_do_pco_liberado_para_o_pmo(client):
     gestor_liberado(client)       # luciana não é do PMO
     assert client.get("/api/export/preflight").status_code == 403
     assert client.get("/api/export/xlsx").status_code == 403
+
+
+def test_template_do_pco_sem_contingenciados_nem_projeto_da_dss_e_planilha_completa_com_marcas(client):
+    import io
+    from openpyxl import load_workbook
+    entrar(client)
+    ps = [p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0]
+    cont, dss = ps[0], ps[1]
+    base = client.get("/api/export/preflight").json()["total"]
+    client.patch(f"/api/projetos/{cont['orcamento']}", json={"contingenciado": True})
+    client.patch(f"/api/projetos/{dss['orcamento']}", json={"fora_contabilidade": True})
+    pre = client.get("/api/export/preflight").json()
+    assert round(base - pre["total"], 2) == round(cont["total_2027"] + dss["total_2027"], 2)
+    assert any("não vai na exportação" in a["mensagem"] for a in pre["avisos"])
+    wb = load_workbook(io.BytesIO(client.get("/api/export/orcamento").content))
+    textos = [str(c.value) for row in wb["Sumário"].iter_rows() for c in row if c.value is not None]
+    assert cont["orcamento"] in textos and "Contingenciado" in textos
+    assert dss["orcamento"] in textos and "Informativo (DSS)" in textos
