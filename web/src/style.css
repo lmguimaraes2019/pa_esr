@@ -505,3 +505,10 @@ label.est-gtit input{width:auto;flex:none}
 .campo-largo { grid-column: 1 / -1; }
 .evt-ger { margin: 2px 0 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 .chip-x{border:0;background:none;color:#8a2b2b;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 2px}.chip-x:hover{color:#c00;font-weight:700}
+.duas-colunas{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:14px;align-items:start}
+.duas-colunas .cartao{margin:0}
+.tab-grande th{font-size:.75rem;padding:10px 12px}.tab-grande td{font-size:1rem;padding:10px 12px;vertical-align:middle}
+.tab-grande .n{text-align:right;white-space:nowrap}
+.tab-grande tfoot td{font-weight:800;background:#eef1f7;border-top:2px solid var(--azul)}
+.peso{display:flex;align-items:center;gap:8px;font-size:.85rem}.peso-barra{flex:1;height:8px;background:#e4e8ef;border-radius:4px;overflow:hidden}.peso-barra i{display:block;height:100%;background:var(--azul)}
+.meses.compacto .col{height:44px}.meses.compacto{gap:6px}.meses.compacto small.val{font-size:.8rem;color:var(--texto,#222);font-weight:600;min-height:0;margin-bottom:3px}

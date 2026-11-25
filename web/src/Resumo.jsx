@@ -121,10 +121,10 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
         {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} tom={r.total_plano <= r.teto ? "rpos" : "rneg"} />}
         <Kpi rotulo="Aprovado 2026" valor={mi(r.total_base)} tom="f26" sub={`${mi(r.total_realizado)} realizados (${pct(r.total_realizado, r.total_base)})`} />
       </div>
-      {fluxo && fluxo.origens.length > 0 && <><OrigemDosRecursos d={fluxo} /><CustoPorGerencia d={fluxo} /></>}
-      <section className="cartao"><h3>Calendarização mensal do plano 2027</h3>
-        <div className="meses">{r.mensal_plano.map((m) => (
-          <div key={m.mes} title={fmt(m.valor)}><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
+      {fluxo && fluxo.origens.length > 0 && <div className="duas-colunas"><OrigemDosRecursos d={fluxo} /><CustoPorGerencia d={fluxo} /></div>}
+      <section className="cartao"><h3>Calendarização mensal do plano 2027 <span className="mudo" style={{ fontSize: ".8rem", fontWeight: 400 }}>(R$ mi)</span></h3>
+        <div className="meses compacto">{r.mensal_plano.map((m) => (
+          <div key={m.mes} title={fmt(m.valor)}><small className="val">{(m.valor / 1e6).toFixed(2).replace(".", ",")}</small><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
       </section>
       <Cobertura admin={admin} />
       <EstrategiaFinanciamento />
