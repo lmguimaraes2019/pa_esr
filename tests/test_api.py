@@ -757,10 +757,13 @@ def test_relatorio_do_diretor_executivo(client):
     assert "PLANEJAMENTO ANUAL 2027" in z.read("word/header2.xml").decode()
 
 
-def test_relatorio_so_para_admin(client):
+def test_relatorios_abertos_a_todos_os_usuarios(client):
     entrar(client)
     gestor_liberado(client)
-    assert client.get("/api/export/relatorio").status_code == 403
+    assert client.get("/api/export/relatorio").status_code == 200
+    assert client.get("/api/export/apresentacao").status_code == 200
+    assert client.get("/api/export/orcamento").status_code == 200
+    assert client.get("/api/export/xlsx").status_code == 403      # a planilha do PMO continua só para o administrador
 
 
 def test_reparo_de_referencias_para_estrategia_v1(tmp_path, monkeypatch):
@@ -1430,3 +1433,17 @@ def test_resumo_e_fluxo_sem_contingenciados(client):
     sem = client.get("/api/resumo?contingenciados=false").json()["total_plano"]
     assert round(com - sem, 2) == round(orc["total_2027"], 2)
     assert client.get("/api/fluxo?contingenciados=false").status_code == 200
+
+
+def test_projeto_fora_da_contabilidade(client):
+    entrar(client)
+    ps = [p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0]
+    alvo = ps[0]
+    antes = client.get("/api/resumo").json()["total_plano"]
+    assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"fora_contabilidade": True}).status_code == 200
+    assert alvo["orcamento"] not in [p["orcamento"] for p in client.get("/api/projetos").json()]
+    assert round(antes - client.get("/api/resumo").json()["total_plano"], 2) == round(alvo["total_2027"], 2)
+    assert client.get(f"/api/projetos/{alvo['orcamento']}").status_code == 200      # a página do projeto continua abrindo (vem dos eventos e viagens)
+    assert client.get("/api/export/relatorio").status_code == 200
+    assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"fora_contabilidade": False}).status_code == 200
+    assert round(client.get("/api/resumo").json()["total_plano"], 2) == round(antes, 2)

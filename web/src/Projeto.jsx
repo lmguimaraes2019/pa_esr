@@ -392,7 +392,7 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
         <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>}{p.extinto && <> · <span className="tag aviso">extinta no PA 2027</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
-        {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} novo={p.novo} onSalvo={carregar} />}
+        {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} foraContabilidade={p.fora_contabilidade} novo={p.novo} onSalvo={carregar} />}
       </div>
       <ExtincaoProjeto p={p} onSalvo={carregar} />
       <FaixaMigracao p={p} irProjeto={irProjeto} />
@@ -493,7 +493,7 @@ function ExtincaoProjeto({ p, onSalvo }) {
       <span className="mudo" style={{ fontSize: ".85rem" }}>Use quando a ação acabou e suas entregas migram para outros projetos em 2027.</span>{erro && <span className="erro">{erro}</span>}</div>);
 }
 
-function NumeroProjeto({ orcamento, atual, contingenciado, novo, onSalvo }) {
+function NumeroProjeto({ orcamento, atual, contingenciado, foraContabilidade, novo, onSalvo }) {
   const [v, setV] = useState(atual || "");
   const [erro, setErro] = useState("");
   useEffect(() => { setV(atual || ""); }, [atual]);
@@ -509,6 +509,9 @@ function NumeroProjeto({ orcamento, atual, contingenciado, novo, onSalvo }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
         <input id="cont-chk" type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!contingenciado} onChange={(e) => enviar({ contingenciado: e.target.checked })} />
         <label htmlFor="cont-chk" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, margin: 0 }}>Orçamento contingenciado (não liberado para execução)</label></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+        <input id="fora-chk" type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!foraContabilidade} onChange={(e) => enviar({ fora_contabilidade: e.target.checked })} />
+        <label htmlFor="fora-chk" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, margin: 0 }}>Fora da contabilidade e dos relatórios (aparece só nos eventos e nas viagens)</label></div>
       {erro && <p className="erro">{erro}</p>}
     </div>
   );

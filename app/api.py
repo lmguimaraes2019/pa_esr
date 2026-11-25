@@ -81,13 +81,14 @@ def compartilhados(c: sqlite3.Connection) -> set[str]:
 def proprios(c: sqlite3.Connection, u: dict, extintos: bool = False) -> set[str]:
     """Projetos do próprio gestor, que entram nos quadros de orçamento. Os da Diretoria que ele só enxerga por concessão ou
     por ter lançado despesa ficam de fora e aparecem à parte (Outros projetos)."""
+    fora = {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE fora_contabilidade=1")}      # fora da contabilidade e dos relatórios
     if u["perfil"] == "admin":
-        return permitidos(c, u, extintos)
+        return permitidos(c, u, extintos) - fora
     ids = {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE gerente IN (SELECT gerente FROM user_gerentes WHERE user_id=?)", (u["id"],))}
     ids |= {r[0] for r in c.execute("SELECT orcamento FROM user_projetos WHERE user_id=?", (u["id"],))} - compartilhados(c)
     if not extintos and ids:
         ids -= {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE extinto=1")}
-    return ids
+    return ids - fora
 
 
 def lancaveis(c: sqlite3.Connection, u: dict) -> set[str]:
@@ -171,6 +172,7 @@ class ProjetoPatch(BaseModel):
     tipo: str | None = Field(default=None, pattern="^(despesa|receita)$")
     finalidade: str | None = Field(default=None, pattern=_FIN)
     contingenciado: bool | None = None
+    fora_contabilidade: bool | None = None
     extinto: bool | None = None
     financiamento: str | None = Field(default=None, max_length=40)      # vazio = ainda não informado
     financiamento_obs: str | None = Field(default=None, max_length=300)
@@ -508,6 +510,10 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
     with tx() as c:
         p = exige_acesso(c, u, orcamento)
         campos = dados.model_dump(exclude_none=True)
+        if "fora_contabilidade" in campos:
+            if u["perfil"] != "admin":
+                raise HTTPException(403, "Apenas o administrador tira um projeto da contabilidade.")
+            campos["fora_contabilidade"] = int(campos["fora_contabilidade"])
         if "contingenciado" in campos:
             if u["perfil"] != "admin":
                 raise HTTPException(403, "Apenas o administrador contingencia ou libera um orçamento.")
@@ -610,7 +616,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "fora_contabilidade": bool(p["fora_contabilidade"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
                       "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "recurso_situacao": p["recurso_situacao"], "recurso_1q": bool(p["recurso_1q"]), "alertas": _alertas(c, p), "grupo_diretriz": GRUPO_DIRETRIZ.get(p["finalidade"], ""), "asrnp_conv": bool(p["asrnp_conv"]), "centro_receita": p["centro_receita"], "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}
@@ -1121,7 +1127,7 @@ def exportar(u: dict = Depends(exige_admin)):
 
 
 @router.get("/export/relatorio")
-def relatorio_diretor(u: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+def relatorio_diretor(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     """Relatório do planejamento para o Diretor Executivo, em Word, no modelo da RNP."""
     from . import relatorio
     conteudo = relatorio.gerar(c, u)
@@ -1134,7 +1140,7 @@ def relatorio_diretor(u: dict = Depends(exige_admin), c: sqlite3.Connection = De
 
 
 @router.get("/export/apresentacao")
-def apresentacao_executiva(u: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+def apresentacao_executiva(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     """Apresentação executiva do orçamento (PowerPoint), no padrão visual do template ESR 20 Anos."""
     from . import apresentacao
     conteudo = apresentacao.gerar(c, u)

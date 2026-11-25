@@ -10,6 +10,7 @@ import Eventos from "./Eventos.jsx";
 import Headcount from "./Headcount.jsx";
 import Execucao from "./Execucao.jsx";
 import Exposicao from "./Exposicao.jsx";
+import Relatorios from "./Relatorios.jsx";
 import { Premissas, Usuarios, Exportar, Auditoria, Realizado, Referencias } from "./Admin.jsx";
 
 export default function App() {
@@ -34,7 +35,7 @@ export default function App() {
   const ETAPAS = [["projetos", "Despesas"], ["receitas", "Receitas"], ["viagens", "Viagens"], ["eventos", "Eventos"], ["headcount", "Headcount"], ["exposicao", "Exposição ao dólar"], ["execucao", "Execução 2026"]];
   const emPlano = ETAPAS.some(([k]) => k === aba);
   const emAdmin = ADMIN.some(([k]) => k === aba);
-  const abas = [["resumo", "Meu planejamento", aba === "resumo"], ["projetos", "Plano 2027", emPlano], ...(admin ? [["admin", "Administração", emAdmin]] : [])];
+  const abas = [["resumo", "Meu planejamento", aba === "resumo"], ["projetos", "Plano 2027", emPlano], ["relatorios", "Relatórios", aba === "relatorios"], ...(admin ? [["admin", "Administração", emAdmin]] : [])];
   const pend = (k) => (plano ? ({ viagens: plano.etapas.viagens.pendentes, eventos: plano.etapas.eventos.pendentes, headcount: plano.etapas.headcount.pendentes }[k] || 0) : 0);
   const ir = (a, p = null, filtro = false) => { setAba(a); setProj(p); setSoEntregas(filtro); window.scrollTo(0, 0); };
 
@@ -56,6 +57,7 @@ export default function App() {
         {aba === "projetos" && (proj
           ? <Projeto orcamento={proj} admin={admin} voltar={() => setProj(null)} irViagens={() => ir("viagens")} irEtapa={(k) => ir(k)} irProjeto={(o) => ir("projetos", o)} />
           : <Projetos abrir={setProj} semEntregas={soEntregas === "entregas" && plano ? plano.projetos.filter((p) => p.entregas.pendentes > 0).map((p) => p.orcamento) : null} semFonte={soEntregas === "financiamento" && plano ? plano.projetos.filter((p) => p.financiamento.pendentes > 0).map((p) => p.orcamento) : null} limparFiltro={() => setSoEntregas(false)} />)}
+        {aba === "relatorios" && <Relatorios />}
         {aba === "receitas" && <Receitas admin={admin} irProjeto={(o) => ir("projetos", o)} />}
         {aba === "eventos" && <Eventos irProjeto={(o) => ir("projetos", o)} />}
         {aba === "exposicao" && <Exposicao irProjeto={(o) => ir("projetos", o)} />}

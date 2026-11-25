@@ -428,7 +428,7 @@ def _aba_exposicao(ws: Worksheet, u: dict, c: sqlite3.Connection) -> None:
             "Fabricante / fornecedor", "Canal / distribuidor", "País de origem", "Trimestre", "Programa Conecta?", "Previsão de abertura de SC", "Moeda",
             "Valor em USD", "Valor em EUR", "Valor em GBP", "Equivalente em R$"]
     _cab(ws, 4, cols, {20: P_27})
-    ids = sorted(api.permitidos(c, u))
+    ids = sorted(api.proprios(c, u))
     marks = ",".join("?" for _ in ids) or "''"
     projetos = {r["orcamento"]: r for r in c.execute(f"SELECT orcamento, descricao, gerente, finalidade FROM projetos WHERE orcamento IN ({marks})", ids)}
     r = 4
