@@ -27,6 +27,7 @@ class Aviso:
     nivel: str            # "erro" bloqueia a exportação, "aviso" apenas informa
     mensagem: str
     orcamento: str | None = None
+    motivo: str = ""      # preenchido nos projetos que ficam fora da exportação
 
 
 @dataclass
@@ -76,7 +77,8 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         })
 
     for r in conn.execute("SELECT orcamento, contingenciado FROM projetos WHERE tipo='despesa' AND extinto=0 AND (contingenciado=1 OR fora_contabilidade=1) ORDER BY orcamento"):
-        res.avisos.append(Aviso("aviso", "Contingenciado: não vai na exportação para o PCO." if r["contingenciado"] else "Projeto lançado pela DSS: não vai na exportação para o PCO.", r["orcamento"]))
+        res.avisos.append(Aviso("aviso", "Contingenciado: não vai na exportação para o PCO." if r["contingenciado"] else "Projeto lançado pela DSS: não vai na exportação para o PCO.", r["orcamento"],
+                                motivo="Contingenciado" if r["contingenciado"] else "Lançado pela DSS"))
     for o in sorted(pend_num):
         res.avisos.append(Aviso("erro", "Projeto com orçamento lançado e sem Nº do Projeto. Preencha antes de exportar.", o))
     for lin in res.linhas:
@@ -91,16 +93,13 @@ def preparar(conn: sqlite3.Connection, ciclo: int = config.CICLO_PLANO) -> Resul
         if lin["diretoria"] not in listas["diretorias"]:
             res.avisos.append(Aviso("erro", f"Diretoria '{lin['diretoria']}' não está na lista do template."))
             break
-    for r in conn.execute("SELECT u.login, u.nome FROM users u WHERE u.ativo=1 AND u.perfil<>'admin' AND u.login NOT IN (SELECT login FROM conclusoes) "
-                          "AND (EXISTS (SELECT 1 FROM user_projetos p WHERE p.user_id=u.id) OR EXISTS (SELECT 1 FROM user_gerentes g WHERE g.user_id=u.id))"):
-        res.avisos.append(Aviso("aviso", f"{r['nome']} ainda não marcou o planejamento como concluído."))
     if zeradas:
         res.avisos.append(Aviso("aviso", f"{zeradas} linha(s) com total zero não serão exportadas."))
     todos = {r["orcamento"] for r in conn.execute("SELECT orcamento FROM projetos WHERE tipo='despesa' AND extinto=0 AND contingenciado=0 AND fora_contabilidade=0")}
     for r in conn.execute("SELECT orcamento, descricao FROM projetos WHERE tipo='receita'"):
-        res.avisos.append(Aviso("aviso", "Orçamento de receita não vai no Template de despesas do PMO.", r["orcamento"]))
+        res.avisos.append(Aviso("aviso", "Orçamento de receita não vai no Template de despesas do PMO.", r["orcamento"], motivo="Receita (o template é só de despesas)"))
     for o in sorted(todos - com_linha):
-        res.avisos.append(Aviso("aviso", "Projeto sem nenhuma linha com valor em 2027.", o))
+        res.avisos.append(Aviso("aviso", "Projeto sem nenhuma linha com valor em 2027.", o, motivo="Sem valor em 2027"))
     if not res.linhas:
         res.avisos.append(Aviso("erro", "Não há nenhuma linha com valor para exportar."))
     return res

@@ -110,23 +110,35 @@ export function Exportar({ irProjeto }) {
   const [pre, setPre] = useState(null);
   const carregar = () => api("/export/preflight").then(setPre);
   useEffect(() => { carregar(); }, []);
-  if (!pre) return <p>Conferindo…</p>;
+  if (!pre) return <section className="cartao pco-destaque"><p>Conferindo…</p></section>;
+  const bloqueios = pre.avisos.filter((a) => a.nivel === "erro");
+  const fora = pre.avisos.filter((a) => a.motivo).sort((x, y) => x.motivo.localeCompare(y.motivo) || x.orcamento.localeCompare(y.orcamento));
+  const obs = pre.avisos.filter((a) => a.nivel !== "erro" && !a.motivo);
+  const abrir = (a) => (a.orcamento ? <button className="link" onClick={() => irProjeto(a.orcamento)}>{a.projeto || a.orcamento}</button> : null);
   return (
     <section className="cartao pco-destaque">
       <h3>1. Relatório para importação no PCO (Template Planejamento Anual 2027)</h3>
-      <p>Planilha oficial do PMO da DSS, com a aba Calendarização preenchida, para importar no PCO. Confira as pendências antes de baixar.</p>
-      <div className="kpis"><div className="kpi"><span>Linhas</span><strong>{pre.linhas}</strong></div><div className="kpi"><span>Total</span><strong>{fmt(pre.total)}</strong></div></div>
-      <div className="pco-conf">
-        <h4>Conferência</h4>
-        {pre.avisos.length === 0 && <p className="ok">Nenhuma pendência.</p>}
-        <ul className="avisos">{pre.avisos.map((a, i) => (
-          <li key={i} className={a.nivel}>{a.nivel === "erro" ? "Bloqueia: " : "Aviso: "}{a.orcamento && <button className="link" onClick={() => irProjeto(a.orcamento)}>Orçamento {a.orcamento}</button>} {a.mensagem}</li>))}</ul>
-        <div className="acoes">
-          <a className={"botao primario" + (pre.bloqueado ? " off" : "")} href={pre.bloqueado ? undefined : "/api/export/xlsx"} aria-disabled={pre.bloqueado}>Baixar planilha</a>
-          <button onClick={carregar}>Conferir de novo</button>
-        </div>
-        <p className="mudo">O arquivo é o template oficial com a aba Calendarização preenchida. Ao abrir no Excel, as fórmulas de conta e total são recalculadas.</p>
+      <p>Planilha oficial do PMO da DSS, com a aba Calendarização preenchida. Só despesas ativas e lançadas pela ESR: contingenciados, o projeto lançado pela DSS e receitas ficam de fora.</p>
+      <div className={"pco-status " + (pre.bloqueado ? "bloq" : "ok")}>{pre.bloqueado ? `Bloqueado: ${bloqueios.length} pendência(s) a resolver antes de exportar` : "Pronto para importar no PCO"}</div>
+      <div className="kpis">
+        <div className="kpi"><span>Projetos exportados</span><strong>{pre.projetos}</strong></div>
+        <div className="kpi"><span>Linhas</span><strong>{pre.linhas}</strong></div>
+        <div className="kpi"><span>Total</span><strong>{fmt(pre.total)}</strong></div>
+        <div className="kpi"><span>Ficam de fora</span><strong>{fora.length}</strong></div>
       </div>
+      {bloqueios.length > 0 && (
+        <div className="pco-conf pco-bloq"><h4>Resolva antes de exportar</h4>
+          <table className="tab"><tbody>{bloqueios.map((a, i) => <tr key={i}><td style={{ width: "34%" }}>{abrir(a) || <span className="mudo">Geral</span>}</td><td>{a.mensagem}</td></tr>)}</tbody></table></div>)}
+      <div className="acoes" style={{ margin: "12px 0" }}>
+        <a className={"botao primario" + (pre.bloqueado ? " off" : "")} href={pre.bloqueado ? undefined : "/api/export/xlsx"} aria-disabled={pre.bloqueado}>Baixar planilha do PCO</a>
+        <button onClick={carregar}>Conferir de novo</button>
+      </div>
+      {fora.length > 0 && (
+        <div className="pco-conf"><h4>Ficam de fora desta exportação ({fora.length})</h4>
+          <table className="tab"><thead><tr><th>Projeto</th><th>Orçamento</th><th>Motivo</th><th className="n">Plano 2027</th></tr></thead>
+            <tbody>{fora.map((a, i) => <tr key={i}><td>{abrir(a)}</td><td>{a.orcamento}</td><td>{a.motivo}</td><td className="n">{a.plano ? fmt(a.plano) : <span className="mudo">-</span>}</td></tr>)}</tbody></table></div>)}
+      {obs.length > 0 && <div className="pco-conf"><h4>Observações</h4><ul className="avisos">{obs.map((a, i) => <li key={i} className="aviso">{abrir(a)} {a.mensagem}</li>)}</ul></div>}
+      <p className="mudo" style={{ marginTop: 10 }}>Ao abrir no Excel, as fórmulas de conta e total são recalculadas.</p>
     </section>
   );
 }

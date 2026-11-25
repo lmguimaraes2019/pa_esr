@@ -1115,15 +1115,18 @@ def resetar_senha(uid: int, u: dict = Depends(exige_admin)):
 
 # ---------------------------------------------------------------- exportação e auditoria (admin)
 
-def _aviso(a: export_xlsx.Aviso) -> dict:
-    return {"nivel": a.nivel, "mensagem": a.mensagem, "orcamento": a.orcamento}
+def _aviso(a: export_xlsx.Aviso, nomes: dict, valores: dict) -> dict:
+    return {"nivel": a.nivel, "mensagem": a.mensagem, "orcamento": a.orcamento, "motivo": a.motivo,
+            "projeto": nomes.get(a.orcamento, "") if a.orcamento else "", "plano": valores.get(a.orcamento, 0.0) if a.orcamento else 0.0}
 
 
 @router.get("/export/preflight")
 def preflight(_: dict = Depends(exige_pmo), c: sqlite3.Connection = Depends(_conn)):
     r = export_xlsx.preparar(c)
-    return {"bloqueado": r.bloqueado, "linhas": len(r.linhas),
-            "total": _arred(sum(sum(x["meses"]) for x in r.linhas)), "avisos": [_aviso(a) for a in r.avisos]}
+    nomes = {x["orcamento"]: x["descricao"] for x in c.execute("SELECT orcamento, descricao FROM projetos")}
+    valores = {x["orcamento"]: _arred(x["t"]) for x in c.execute(f"SELECT orcamento, SUM({SOMA_MESES}) t FROM linhas WHERE ciclo=? GROUP BY orcamento", (config.CICLO_PLANO,))}
+    return {"bloqueado": r.bloqueado, "linhas": len(r.linhas), "projetos": len({x["descricao"] for x in r.linhas}),
+            "total": _arred(sum(sum(x["meses"]) for x in r.linhas)), "avisos": [_aviso(a, nomes, valores) for a in r.avisos]}
 
 
 @router.get("/export/xlsx")

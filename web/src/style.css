@@ -518,3 +518,7 @@ label.est-gtit input{width:auto;flex:none}
 .pco-destaque>h3{color:#a8480a;font-size:1.2rem}
 .pco-destaque .pco-conf{background:#fff;border:1px solid #f0d2b0;border-radius:8px;padding:12px 14px;margin-top:10px}
 .pco-destaque .pco-conf h4{margin:0 0 6px}
+.pco-status{padding:10px 14px;border-radius:8px;font-weight:700;margin:10px 0}
+.pco-status.ok{background:#e3f4ea;color:#1f6b45;border:1px solid #9bd3b4}.pco-status.bloq{background:#fbe5e3;color:#a1261b;border:1px solid #efb0aa}
+.pco-conf.pco-bloq{border-color:#efb0aa;background:#fff7f6}
+.pco-destaque .tab th{font-size:.72rem}.pco-destaque .tab td{padding:7px 10px}
