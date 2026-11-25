@@ -10,26 +10,21 @@ function Barra({ valor, max, cor }) {
 
 // Origem dos recursos: quanto de receita foi lançado e quanto de custo está planejado em cada origem
 export function OrigemDosRecursos({ d }) {
-  const max = Math.max(1, ...d.origens.map((o) => Math.max(o.receita, o.custo)));
   const fomento = (o) => /fomento|fndct/i.test(o);
+  const saldo = (o) => (fomento(o.origem) && o.receita === 0 ? <span className="mudo">conta única</span>
+    : <strong className={o.saldo < 0 ? "res-neg" : o.saldo > 0 ? "res-pos" : ""}>{fmt(o.saldo)}</strong>);
+  const dif = d.total_receita - d.total_custo;
   return (
     <section className="cartao">
       <h3>Origem dos recursos: receita e custo em 2027</h3>
       <p className="mudo" style={{ marginTop: 0 }}>Para cada origem, a receita lançada e o custo planejado. Em fomento a conta é única na RNP, então o recurso vem do contrato e não de receita lançada.</p>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(110px, 170px) 1fr minmax(120px, 150px) minmax(120px, 150px)", gap: "10px 14px", alignItems: "center" }}>
-        <span className="mudo">Origem</span>
-        <span className="mudo" style={{ display: "flex", gap: 14, whiteSpace: "nowrap", flexWrap: "wrap" }}><span><i style={{ background: LARANJA, display: "inline-block", width: 10, height: 10, borderRadius: 2 }} /> Receita lançada</span><span><i style={{ background: AZUL, display: "inline-block", width: 10, height: 10, borderRadius: 2 }} /> Custo planejado</span></span>
-        <span className="mudo n" style={{ textAlign: "right" }}>Custo</span><span className="mudo n" style={{ textAlign: "right" }}>Saldo</span>
-        {d.origens.map((o) => (
-          <React.Fragment key={o.origem}>
-            <strong>{o.origem}</strong>
-            <div style={{ display: "grid", gap: 4 }}><Barra valor={o.receita} max={max} cor={LARANJA} /><Barra valor={o.custo} max={max} cor={AZUL} /></div>
-            <span style={{ textAlign: "right" }}>{fmt(o.custo)}<br /><small className="mudo">receita {fmt(o.receita)}</small></span>
-            <span style={{ textAlign: "right" }}>{fomento(o.origem) && o.receita === 0 ? <span className="mudo">conta única</span>
-              : <strong className={o.saldo < 0 ? "res-neg" : o.saldo > 0 ? "res-pos" : ""}>{fmt(o.saldo)}</strong>}</span>
-          </React.Fragment>))}
-      </div>
-      <p style={{ margin: "14px 0 0" }}><strong>Total:</strong> receita lançada {fmt(d.total_receita)} para um custo de {fmt(d.total_custo)}. A diferença é coberta por fomento e por origens ainda sem receita lançada. Considera só os seus projetos, sem contingenciados.</p>
+      <table className="tabela">
+        <thead><tr><th>Origem</th><th className="n">Receita lançada</th><th className="n">Custo planejado</th><th className="n">Saldo (receita menos custo)</th></tr></thead>
+        <tbody>{d.origens.map((o) => (
+          <tr key={o.origem}><td><strong>{o.origem}</strong></td><td className="n">{fmt(o.receita)}</td><td className="n">{fmt(o.custo)}</td><td className="n">{saldo(o)}</td></tr>))}</tbody>
+        <tfoot><tr><td>Total</td><td className="n">{fmt(d.total_receita)}</td><td className="n">{fmt(d.total_custo)}</td><td className="n"><strong className={dif < 0 ? "res-neg" : dif > 0 ? "res-pos" : ""}>{fmt(dif)}</strong></td></tr></tfoot>
+      </table>
+      <p className="mudo" style={{ margin: "10px 0 0" }}>A diferença é coberta por fomento e por origens ainda sem receita lançada. Considera só os seus projetos, sem contingenciados.</p>
     </section>);
 }
 
