@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { fmt } from "./api.js";
-import { Delta, pct, nomeFinalidade, classeFinalidade, celPrevisao } from "./ui.jsx";
+import { Delta, pct, nomeFinalidade, classeFinalidade, celPrevisao, fmtV, semValor } from "./ui.jsx";
 
 const vazio = "Sem gerência definida";
 const soma = (l, k) => l.reduce((a, p) => a + p[k], 0);
-const vp = (de, para) => (de ? (((para - de) / de) * 100).toFixed(0).replace(".", ",") + "%" : "novo");
+const vp = (de, para) => (de ? (((para - de) / de) * 100).toFixed(0).replace(".", ",") + "%" : Math.abs(para) < 0.005 ? semValor : "novo");
 
 /** Por gerência: o que foi aprovado e executado em 2026 e o que se planeja para 2027, com a situação do planejamento (admin). */
 export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
@@ -15,9 +15,9 @@ export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
   const tot27 = soma(ps, "total_2027");
   const sit = (n) => status && status[n];
   const celulas = (a, e, p27, n, rotulo, lp = null) => (
-    <>{rotulo}<td className="n">{n}</td><td className="n">{fmt(a)}</td><td className="n">{fmt(e)}</td><td className="n">{pct(e, a)}</td>{lp ? celPrevisao(lp) : <><td className="n mudo">-</td><td className="n mudo">-</td></>}
-      <td className="n"><strong>{fmt(p27)}</strong></td><td className="n"><Delta de={a} para={p27} /></td><td className="n">{vp(a, p27)}</td>
-      <td><span className="peso"><span className="peso-barra"><i style={{ width: Math.max(tot27 ? p27 / tot27 * 100 : 0, p27 > 0 ? 2 : 0) + "%" }} /></span>{tot27 ? (p27 / tot27 * 100).toFixed(0) : 0}%</span></td></>);
+    <>{rotulo}<td className="n">{n || semValor}</td><td className="n">{fmtV(a)}</td><td className="n">{fmtV(e)}</td><td className="n">{a > 0 && e > 0 ? pct(e, a) : semValor}</td>{lp ? celPrevisao(lp) : <><td className="n">{semValor}</td><td className="n">{semValor}</td></>}
+      <td className="n"><strong>{fmtV(p27)}</strong></td><td className="n"><Delta de={a} para={p27} /></td><td className="n">{vp(a, p27)}</td>
+      <td>{p27 > 0 ? <span className="peso"><span className="peso-barra"><i style={{ width: Math.max(tot27 ? p27 / tot27 * 100 : 0, 2) + "%" }} /></span>{tot27 ? (p27 / tot27 * 100).toFixed(0) : 0}%</span> : <span className="peso">{semValor}</span>}</td></>);
   const linha = (nome, l, total) => {
     const a = soma(l, "total_2026"), e = soma(l, "realizado_2026"), p27 = soma(l, "total_2027");
     const s = !total && sit(nome);
@@ -82,8 +82,8 @@ export function ProjetosDoPlano({ ps, abrir, verTodos }) {
             <td><strong>{p.descricao}</strong><div className="mudo" style={{ fontSize: ".78rem" }}>{p.novo ? "novo" : p.orcamento}{p.contingenciado && " | contingenciado"}</div></td>
             <td>{p.gerencia || vazio}</td><td>{p.origem}</td>
             <td><span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span></td>
-            <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>{celPrevisao([p])}
-            <td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td></tr>))}</tbody>
+            <td className="n">{fmtV(p.total_2026)}</td><td className="n">{fmtV(p.realizado_2026)}</td><td className="n">{p.total_2026 > 0 && p.realizado_2026 > 0 ? pct(p.realizado_2026, p.total_2026) : semValor}</td>{celPrevisao([p])}
+            <td className="n"><strong>{fmtV(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td></tr>))}</tbody>
         <tfoot><tr><td colSpan={4}>Total ({ps.length})</td><td className="n">{fmt(soma(ps, "total_2026"))}</td><td className="n">{fmt(soma(ps, "realizado_2026"))}</td><td className="n">{pct(soma(ps, "realizado_2026"), soma(ps, "total_2026"))}</td>{celPrevisao(ps)}<td className="n">{fmt(soma(ps, "total_2027"))}</td><td className="n"><Delta de={soma(ps, "total_2026")} para={soma(ps, "total_2027")} /></td></tr></tfoot>
       </table></div>
       <div style={{ marginTop: 10, display: "flex", gap: 10 }}>

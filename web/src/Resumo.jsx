@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt, mi } from "./api.js";
-import { Kpi, Delta, pct, Selo, FiltroGerencia } from "./ui.jsx";
+import { Kpi, Delta, pct, Selo, FiltroGerencia, fmtV } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 import OutrosProjetos from "./OutrosProjetos.jsx";
 import useFluxo, { OrigemDosRecursos } from "./FluxoRecursos.jsx";
@@ -13,8 +13,8 @@ function Quadro({ itens, rotulo, aninhado }) {
   const linha = (i, filho, tem) => (
     <tr key={(filho ? "f-" : "") + i.nome + (filho || "")} className={filho ? "filho" : tem ? "pai" : ""} onClick={tem ? () => setFechado({ ...fechado, [i.nome]: !fechado[i.nome] }) : undefined} style={tem ? { cursor: "pointer" } : undefined}>
       <td style={filho ? { paddingLeft: 28 } : undefined}>{tem && <span className="mudo" style={{ marginRight: 6 }}>{fechado[i.nome] ? "▸" : "▾"}</span>}{filho ? <span className="mudo">{i.nome}</span> : i.nome}</td>
-      <td className="n">{fmt(i.base)}</td><td className="n">{fmt(i.executado)}</td><td className="n">{pct(i.executado, i.base)}</td>
-      <td className="n"><strong>{fmt(i.plano)}</strong></td><td className="n"><Delta de={i.base} para={i.plano} /></td>
+      <td className="n">{fmtV(i.base)}</td><td className="n">{fmtV(i.executado)}</td><td className="n">{pct(i.executado, i.base)}</td>
+      <td className="n"><strong>{fmtV(i.plano)}</strong></td><td className="n"><Delta de={i.base} para={i.plano} /></td>
       <td className="n"><Vp de={i.base} para={i.plano} /></td>
     </tr>);
   return (
@@ -28,8 +28,8 @@ function Quadro({ itens, rotulo, aninhado }) {
         const fs = aninhado ? i.finalidades || [] : [];
         return [linha(i, null, fs.length > 0), ...(fechado[i.nome] ? [] : fs.map((f) => linha(f, i.nome, false)))];
       })}</tbody>
-      <tfoot><tr><td>Total</td><td className="n">{fmt(itens.reduce((a, i) => a + i.base, 0))}</td><td className="n">{fmt(itens.reduce((a, i) => a + i.executado, 0))}</td><td />
-        <td className="n">{fmt(itens.reduce((a, i) => a + i.plano, 0))}</td><td className="n"><Delta de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td><td className="n"><Vp de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td></tr></tfoot>
+      <tfoot><tr><td>Total</td><td className="n">{fmtV(itens.reduce((a, i) => a + i.base, 0))}</td><td className="n">{fmtV(itens.reduce((a, i) => a + i.executado, 0))}</td><td />
+        <td className="n">{fmtV(itens.reduce((a, i) => a + i.plano, 0))}</td><td className="n"><Delta de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td><td className="n"><Vp de={itens.reduce((a, i) => a + i.base, 0)} para={itens.reduce((a, i) => a + i.plano, 0)} /></td></tr></tfoot>
     </table>
   );
 }

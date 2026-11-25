@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt } from "./api.js";
 import OutrosProjetos from "./OutrosProjetos.jsx";
-import { Delta, pct, Selo, Passos, FINALIDADES, nomeFinalidade, classeFinalidade, FiltroGerencia, celPrevisao } from "./ui.jsx";
+import { Delta, pct, Selo, Passos, FINALIDADES, nomeFinalidade, classeFinalidade, FiltroGerencia, celPrevisao, fmtV } from "./ui.jsx";
 
 export function NovoOrcamento({ listas, onCriar, onFechar, tipoFixo }) {
   const [f, setF] = useState({ tipo: tipoFixo || "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
@@ -105,8 +105,8 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   const subtotal = (lista) => {
     const s = (k) => lista.reduce((a, p) => a + p[k], 0);
     const t26 = s("total_2026"), re = s("realizado_2026");
-    return <><td className="n">{fmt(t26)}</td>{mais && <td className="n">{fmt(s("empenhado_2026"))}</td>}<td className="n">{fmt(re)}</td><td className="n">{fmt(t26 - re)}</td>{mais && <td className="n">{pct(re, t26)}</td>}{celPrevisao(lista)}
-      <td className="n"><strong>{fmt(s("total_2027"))}</strong></td><td className="n"><Delta de={t26} para={s("total_2027")} /></td></>;
+    return <><td className="n">{fmtV(t26)}</td>{mais && <td className="n">{fmtV(s("empenhado_2026"))}</td>}<td className="n">{fmtV(re)}</td><td className="n">{fmtV(t26 - re)}</td>{mais && <td className="n">{pct(re, t26)}</td>}{celPrevisao(lista)}
+      <td className="n"><strong>{fmtV(s("total_2027"))}</strong></td><td className="n"><Delta de={t26} para={s("total_2027")} /></td></>;
   };
   const estado = (p) => p.extinto ? <span className="tag aviso" title="Não existirá no PA 2027">extinta</span>
     : p.contingenciado ? <span className="tag aviso" title="Orçamento contingenciado, não liberado para execução">contingenciado</span>
@@ -117,9 +117,9 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
       <td>{p.descricao}<div className="sub-proj"><span className={"tag " + classeFinalidade(p.finalidade)} title="Finalidade do orçamento">{nomeFinalidade(p.finalidade)}</span>
         {estado(p)}{p.replicado_para && <span className="mudo"> migrado para {p.replicado_para}</span>}{p.replicado_de && <span className="mudo"> replicado de {p.replicado_de}</span>}</div></td>
       <td>{p.gerente}</td>
-      <td className="n">{fmt(p.total_2026)}</td>{mais && <td className="n">{fmt(p.empenhado_2026)}</td>}<td className="n">{fmt(p.realizado_2026)}</td>
+      <td className="n">{fmtV(p.total_2026)}</td>{mais && <td className="n">{fmtV(p.empenhado_2026)}</td>}<td className="n">{fmtV(p.realizado_2026)}</td>
       <td className={"n " + (p.total_2026 - p.realizado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026)}</td>{mais && <td className="n">{pct(p.realizado_2026, p.total_2026)}</td>}{celPrevisao([p])}
-      <td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td>
+      <td className="n"><strong>{fmtV(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td>
     </tr>
   );
   const tabela = (lista, grupos) => {
@@ -141,7 +141,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
                 {!fechado[o.chave] && o.ps.map(linhaProjeto)}
               </React.Fragment>))}
           </React.Fragment>))}</tbody>
-        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma(lista, "total_2026"))}</td>{mais && <td className="n">{fmt(soma(lista, "empenhado_2026"))}</td>}<td className="n">{fmt(soma(lista, "realizado_2026"))}</td><td className="n">{fmt(soma(lista, "total_2026") - soma(lista, "realizado_2026"))}</td>{mais && <td className="n">{pct(soma(lista, "realizado_2026"), soma(lista, "total_2026"))}</td>}{celPrevisao(lista)}<td className="n"><strong>{fmt(soma(lista, "total_2027"))}</strong></td><td className="n"><Delta de={soma(lista, "total_2026")} para={soma(lista, "total_2027")} /></td></tr></tfoot>
+        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmtV(soma(lista, "total_2026"))}</td>{mais && <td className="n">{fmtV(soma(lista, "empenhado_2026"))}</td>}<td className="n">{fmtV(soma(lista, "realizado_2026"))}</td><td className="n">{fmtV(soma(lista, "total_2026") - soma(lista, "realizado_2026"))}</td>{mais && <td className="n">{pct(soma(lista, "realizado_2026"), soma(lista, "total_2026"))}</td>}{celPrevisao(lista)}<td className="n"><strong>{fmtV(soma(lista, "total_2027"))}</strong></td><td className="n"><Delta de={soma(lista, "total_2026")} para={soma(lista, "total_2027")} /></td></tr></tfoot>
       </table></div>
     );
   };

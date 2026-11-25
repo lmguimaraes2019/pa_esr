@@ -5,8 +5,13 @@ export function Kpi({ rotulo, valor, sub, tom }) {
   return <div className={"kpi " + (tom || "")}><span>{rotulo}</span><strong>{valor}</strong>{sub && <small>{sub}</small>}</div>;
 }
 
+/** Valor em reais; sem valor (zero) aparece sempre como traço, em todas as tabelas do app. */
+export const semValor = <span className="mudo">-</span>;
+export const fmtV = (v) => (Math.abs(v || 0) < 0.005 ? semValor : fmt(v));
+
 export function Delta({ de, para, pct = false, altaBoa = false }) {
   const d = para - de;
+  if (Math.abs(de) < 0.005 && Math.abs(para) < 0.005) return semValor;
   if (Math.abs(d) < 0.005) return <span className="mudo">igual</span>;
   return <span className={(d > 0) !== altaBoa ? "up" : "down"}>{d > 0 ? "+" : ""}{fmt(d)}{pct && de ? ` (${((d / de) * 100).toFixed(1).replace(".", ",")}%)` : ""}</span>;
 }
@@ -20,8 +25,8 @@ export function previsaoDe(lista) {
 }
 export const celPrevisao = (lista) => {
   const q = previsaoDe(lista);
-  if (lista.length === 0) return <><td className="n mudo">-</td><td className="n mudo">-</td></>;
-  if (q.n === 0) return <><td className="n mudo" title="Nenhum gestor informou ainda">não informada</td><td className="n mudo">-</td></>;
+  if (lista.length === 0) return <><td className="n">{semValor}</td><td className="n">{semValor}</td></>;
+  if (q.n === 0) return <><td className="n" title="Nenhum gestor informou a previsão ainda">{semValor}</td><td className="n">{semValor}</td></>;
   return <><td className="n">{fmt(q.valor)}{q.n < q.de && <div className="mudo" style={{ fontSize: ".72rem", fontWeight: 400 }}>{q.n} de {q.de} informaram</div>}</td>
     <td className="n" title="Previsão sobre o aprovado de 2026 dos projetos que informaram">{pct(q.valor, q.base)}</td></>;
 };

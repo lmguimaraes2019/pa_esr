@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt, mi } from "./api.js";
-import { Delta, pct, celPrevisao } from "./ui.jsx";
+import { Delta, pct, celPrevisao, fmtV, semValor } from "./ui.jsx";
 
 // Origem dos recursos: 2026 (aprovado e executado) e 2027 (plano, receita lançada e saldo) em cada origem
 export function OrigemDosRecursos({ d, ps }) {
@@ -10,10 +10,10 @@ export function OrigemDosRecursos({ d, ps }) {
   d.origens.forEach((o) => { (por[o.origem] ||= { origem: o.origem, n: 0, a26: 0, e26: 0, p27: 0, rec: 0, ps: [] }).rec = o.receita; });
   const linhas = Object.values(por).sort((a, b) => b.p27 - a.p27);
   const tot = linhas.reduce((t, x) => ({ n: t.n + x.n, a26: t.a26 + x.a26, e26: t.e26 + x.e26, p27: t.p27 + x.p27, rec: t.rec + x.rec }), { n: 0, a26: 0, e26: 0, p27: 0, rec: 0 });
-  const saldo = (x, total) => { const v = x.rec - x.p27; return !total && fomento(x.origem) && x.rec === 0 ? <span className="mudo">conta única</span> : <strong className={v < 0 ? "res-neg" : v > 0 ? "res-pos" : ""}>{fmt(v)}</strong>; };
+  const saldo = (x, total) => { const v = x.rec - x.p27; return !total && fomento(x.origem) && x.rec === 0 ? <span className="mudo">conta única</span> : Math.abs(v) < 0.005 ? semValor : <strong className={v < 0 ? "res-neg" : "res-pos"}>{fmt(v)}</strong>; };
   const linha = (x, total) => (
-    <tr key={x.origem}><td><strong>{x.origem}</strong>{!total && <span className="mudo"> ({x.n})</span>}</td><td className="n">{fmt(x.a26)}</td><td className="n">{fmt(x.e26)}</td><td className="n">{pct(x.e26, x.a26)}</td>{celPrevisao(x.ps)}
-      <td className="n"><strong>{fmt(x.p27)}</strong></td><td className="n"><Delta de={x.a26} para={x.p27} /></td><td className="n">{fmt(x.rec)}</td><td className="n">{saldo(x, total)}</td></tr>);
+    <tr key={x.origem}><td><strong>{x.origem}</strong>{!total && <span className="mudo"> ({x.n})</span>}</td><td className="n">{fmtV(x.a26)}</td><td className="n">{fmtV(x.e26)}</td><td className="n">{x.a26 > 0 && x.e26 > 0 ? pct(x.e26, x.a26) : semValor}</td>{celPrevisao(x.ps)}
+      <td className="n"><strong>{fmtV(x.p27)}</strong></td><td className="n"><Delta de={x.a26} para={x.p27} /></td><td className="n">{fmtV(x.rec)}</td><td className="n">{saldo(x, total)}</td></tr>);
   return (
     <section className="cartao">
       <h3>Origem dos recursos: 2026 e plano 2027</h3>
