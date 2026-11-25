@@ -463,6 +463,7 @@ def listar_projetos(u: dict, c: sqlite3.Connection, incluir_fora: bool = False) 
              "receitas_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else 0)),
              "resultado_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
              "realizado_2026": _arred(r["realizado"]),
+             "previsao_2026": None if r["previsao_2026"] is None else _arred(r["previsao_2026"]), "previsao_em": r["previsao_em"], "previsao_por": r["previsao_por"],
              "pessoal_2026": _arred(r["pessoal_base"]), "pessoal_2027": _arred(r["pessoal_plano"]) if not r["extinto"] and r["tipo"] != "receita" else 0.0, "pessoal_realizado_2026": _arred(r["pessoal_real"]),
              "empenhado_2026": _arred(r["empenhado"]),
              "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] and not r["extinto"] else [])
@@ -589,6 +590,27 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
     return {"ok": True}
 
 
+class PrevisaoIn(BaseModel):
+    valor: float | None = Field(default=None, ge=0, le=1e10)      # vazio apaga a previsão
+
+
+@router.put("/projetos/{orcamento}/previsao-2026")
+def previsao_2026(orcamento: str, dados: PrevisaoIn, u: dict = Depends(usuario_liberado)):
+    """O gestor informa quanto o projeto terá executado até 31/12/2026; o % de execução do ano sai dessa previsão."""
+    with tx() as c:
+        p = exige_acesso(c, u, orcamento)
+        real = c.execute("SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=?", (orcamento,)).fetchone()[0]
+        if dados.valor is not None and dados.valor < real - 0.5:
+            raise HTTPException(422, f"A previsão não pode ser menor que o que já foi realizado em 2026 (R$ {real:,.2f}).".replace(",", "X").replace(".", ",").replace("X", "."))
+        if dados.valor is None:
+            c.execute("UPDATE projetos SET previsao_2026=NULL, previsao_em='', previsao_por='' WHERE orcamento=?", (orcamento,))
+        else:
+            c.execute("UPDATE projetos SET previsao_2026=?, previsao_em=?, previsao_por=? WHERE orcamento=?",
+                      (_arred(dados.valor), datetime.now().strftime("%Y-%m-%d %H:%M"), u["login"], orcamento))
+        audit(c, u["login"], "informou a previsão de execução até 31/12/2026", orcamento, detalhe=f"{p['previsao_2026']} para {dados.valor}")
+    return {"ok": True}
+
+
 _SQL_LINHAS = f"""
 SELECT l.*, k.descricao AS conta_desc, k.grupo,
        {', '.join('b.' + m + ' AS b_' + m for m in MESES)},
@@ -634,7 +656,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
         "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
-                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "fora_contabilidade": bool(p["fora_contabilidade"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
+                   | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "fora_contabilidade": bool(p["fora_contabilidade"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "previsao_2026": None if p["previsao_2026"] is None else _arred(p["previsao_2026"]), "previsao_em": p["previsao_em"], "previsao_por": p["previsao_por"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
                       "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "recurso_situacao": p["recurso_situacao"], "recurso_1q": bool(p["recurso_1q"]), "alertas": _alertas(c, p), "grupo_diretriz": GRUPO_DIRETRIZ.get(p["finalidade"], ""), "asrnp_conv": bool(p["asrnp_conv"]), "centro_receita": p["centro_receita"], "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}
                    | {k: p[k] for k in ("replicado_de", "replicado_para", "replicado_nome", "replicado_origem", "replicado_em", "replicado_por")}

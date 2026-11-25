@@ -80,6 +80,33 @@ function agrupar(linhas) {
 }
 
 /* ---------------------------------------------------------------- passo 1: o que aconteceu em 2026 */
+/* previsão do gestor para o executado até 31/12/2026 */
+function PrevisaoFimAno({ p, aprovado, realizado, onSalvo, setErro }) {
+  const inicial = p.previsao_2026 === null || p.previsao_2026 === undefined ? "" : fmtN(p.previsao_2026);
+  const [txt, setTxt] = useState(inicial);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { setTxt(inicial); }, [inicial]);
+  const v = txt.trim() === "" ? null : lerNumero(txt);
+  const salvar = async (valor) => {
+    try { setErro(""); setMsg(""); await api(`/projetos/${p.orcamento}/previsao-2026`, { method: "PUT", body: { valor } }); setMsg(valor === null ? "Previsão removida." : "Previsão salva."); onSalvo(); } catch (e) { setErro(e.message); }
+  };
+  const prev = p.previsao_2026;
+  return (
+    <section className="cartao previsao-fim">
+      <h3>Previsão de execução até 31/12/2026</h3>
+      <p className="mudo" style={{ marginTop: 0 }}>Informe quanto este projeto terá executado até o fim do ano (o realizado atual mais o que ainda será gasto). O % de execução previsto e o valor aparecem nas planilhas do diretor.</p>
+      <div className="acoes" style={{ alignItems: "end" }}>
+        <label style={{ minWidth: 220 }}>Valor previsto até 31/12 (R$)
+          <input inputMode="decimal" value={txt} placeholder={fmtN(realizado)} onChange={(e) => { setTxt(e.target.value); setMsg(""); }} /></label>
+        <button className="primario" disabled={v === null || Number.isNaN(v) || (prev !== null && prev !== undefined && Math.abs(v - prev) < 0.005)} onClick={() => salvar(v)}>Salvar previsão</button>
+        {prev !== null && prev !== undefined && <button onClick={() => { setTxt(""); salvar(null); }}>Limpar</button>}
+        {prev !== null && prev !== undefined && aprovado > 0 && <span><strong>{((prev / aprovado) * 100).toFixed(0)}%</strong> do aprovado ({fmt(aprovado)})</span>}
+        {msg && <span className="mudo">{msg}</span>}
+      </div>
+      {prev !== null && prev !== undefined && p.previsao_em && <p className="mudo" style={{ marginBottom: 0 }}>Informado por {p.previsao_por} em {p.previsao_em}. Realizado até agora: {fmt(realizado)} ({prev > 0 ? ((realizado / prev) * 100).toFixed(0) : 0}% da previsão).</p>}
+    </section>);
+}
+
 function Passado({ d, irPlano, recarregar, setErro }) {
   const [meses, setMeses] = useState(false);
   const restaurar = async (l) => { try { setErro(""); await api(`/linhas/${l.id}/restaurar`, { method: "POST" }); recarregar(); } catch (e) { setErro(e.message); } };
@@ -93,6 +120,7 @@ function Passado({ d, irPlano, recarregar, setErro }) {
   return (
     <>
       <div className="nota">Esta é a fotografia de 2026: o que foi aprovado, o que já foi realizado e empenhado, e o que cada linha virou no plano de 2027. Os valores de 2026 não são editáveis; o realizado e o empenhado vêm da importação da base do Protheus. Uma linha excluída do plano de 2027 aparece como "removida" e pode ser trazida de volta.</div>
+      <PrevisaoFimAno p={d.projeto} aprovado={t.base} realizado={t.realizado} onSalvo={recarregar} setErro={setErro} />
       <div className="kpis">
         <Kpi rotulo="Aprovado 2026" valor={fmt(t.base)} tom="f26" />
         <Kpi rotulo="Realizado" valor={fmt(t.realizado)} tom="f26" />

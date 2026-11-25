@@ -1528,3 +1528,42 @@ def test_viajante_externo_usa_o_auxilio_transporte_proprio(client):
     assert client.put(f"/api/viagens/{i}", json={**base, "viajante": "externo"}).status_code == 200      # o usuário pode editar e marcar o tipo
     assert next(x for x in client.get("/api/viagens").json()["viagens"] if x["id"] == i)["custo"]["aux_transporte"] == 180.0
     assert client.post("/api/viagens", json={**base, "viajante": "visitante"}).status_code == 422
+
+
+def test_previsao_de_execucao_ate_o_fim_do_ano(client):
+    import io
+    from openpyxl import load_workbook
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    p = next(x for x in ps if x["tipo"] == "despesa" and not x["extinto"] and x["total_2026"] > 0 and not x["fora_contabilidade"])
+    o = p["orcamento"]
+    assert p["previsao_2026"] is None
+    # nao pode ser menor que o realizado
+    if p["realizado_2026"] > 1:
+        assert client.put(f"/api/projetos/{o}/previsao-2026", json={"valor": p["realizado_2026"] / 2}).status_code == 422
+    alvo = round(p["total_2026"] * 0.9 + p["realizado_2026"] * 0.1, 2)
+    assert client.put(f"/api/projetos/{o}/previsao-2026", json={"valor": alvo}).status_code == 200
+    p2 = next(x for x in client.get("/api/projetos").json() if x["orcamento"] == o)
+    assert p2["previsao_2026"] == alvo and p2["previsao_por"] == "leandro"
+    assert client.get(f"/api/projetos/{o}").json()["projeto"]["previsao_2026"] == alvo
+    # a planilha do diretor traz a previsao e o % previsto
+    wb = load_workbook(io.BytesIO(client.get("/api/export/orcamento").content))
+    cab = [c.value for c in wb["Sumário"][6]]
+    assert "Previsão de execução 31/12/2026" in cab and "% previsto de execução" in cab
+    col = cab.index("Previsão de execução 31/12/2026")
+    achou = [row[col].value for row in wb["Sumário"].iter_rows(min_row=7) if row[0].value == o]
+    assert achou and abs(achou[0] - alvo) < 0.01
+    # limpar
+    assert client.put(f"/api/projetos/{o}/previsao-2026", json={"valor": None}).status_code == 200
+    assert next(x for x in client.get("/api/projetos").json() if x["orcamento"] == o)["previsao_2026"] is None
+
+
+def test_previsao_exige_acesso_ao_projeto(client):
+    entrar(client)
+    todos = client.get("/api/projetos").json()
+    gestor_liberado(client)
+    meus = client.get("/api/projetos").json()
+    alheio = next(p for p in todos if p["orcamento"] not in {m["orcamento"] for m in meus})
+    assert client.put(f"/api/projetos/{alheio['orcamento']}/previsao-2026", json={"valor": 1}).status_code == 404
+    proprio = next(m for m in meus if m["total_2026"] > 0)
+    assert client.put(f"/api/projetos/{proprio['orcamento']}/previsao-2026", json={"valor": proprio["total_2026"]}).status_code == 200

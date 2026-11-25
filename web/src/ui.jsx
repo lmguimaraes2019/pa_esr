@@ -13,6 +13,17 @@ export function Delta({ de, para, pct = false, altaBoa = false }) {
 
 export const pct = (a, b) => (b > 0 ? ((a / b) * 100).toFixed(0) + "%" : "-");
 
+/** Previsão dos gestores para o executado até 31/12/2026. Soma só os projetos que já informaram e compara com o aprovado deles. */
+export function previsaoDe(lista) {
+  const ok = lista.filter((p) => p.previsao_2026 !== null && p.previsao_2026 !== undefined);
+  return { n: ok.length, de: lista.length, valor: ok.reduce((a, p) => a + p.previsao_2026, 0), base: ok.reduce((a, p) => a + p.total_2026, 0) };
+}
+export const celPrevisao = (lista) => {
+  const q = previsaoDe(lista);
+  return q.n === 0 ? <><td className="n mudo">-</td><td className="n mudo">-</td></>
+    : <><td className="n" title={`${q.n} de ${q.de} informaram`}>{fmt(q.valor)}</td><td className="n" title={`${q.n} de ${q.de} informaram`}>{pct(q.valor, q.base)}</td></>;
+};
+
 export function Passos({ itens, ativo, onMudar }) {
   return (
     <div className="passos" role="tablist">

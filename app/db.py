@@ -420,6 +420,9 @@ def init_db() -> None:
                 d = "".join(ch for ch in unicodedata.normalize("NFD", r["descricao"] or "") if unicodedata.category(ch) != "Mn").lower()
                 if "dss" in d and "gestao da area" in d:
                     c.execute("UPDATE projetos SET fora_contabilidade=1 WHERE orcamento=?", (r["orcamento"],))
+        for col, ddl in (("previsao_2026", "REAL"), ("previsao_em", "TEXT NOT NULL DEFAULT ''"), ("previsao_por", "TEXT NOT NULL DEFAULT ''")):      # migração: previsão do gestor para o valor executado até 31/12/2026
+            if col not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:
+                c.execute(f"ALTER TABLE projetos ADD COLUMN {col} {ddl}")
         from .fontes import FONTES
         for i, k in enumerate(("fomento", "intercompany", "receita", "tbd")):      # fontes de base: o nome pode ser editado, mas não saem
             c.execute("INSERT OR IGNORE INTO fontes_financiamento (codigo, nome, ordem, sistema) VALUES (?,?,?,1)", (k, FONTES[k], i))

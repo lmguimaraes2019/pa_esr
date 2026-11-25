@@ -186,16 +186,24 @@ def gerar(u: dict, c: sqlite3.Connection) -> bytes:
 # ---------------------------------------------------------------- sumário
 
 SUM_COLS = ["Orçamento", "Nº do projeto", "Projeto", "Gerência", "Gerente", "Situação", "Tipo de projeto", "Origem de recursos", "Fonte de financiamento",
-            "Previsto 2026", "Empenhado 2026", "Executado 2026", "Saldo 2026", "Previsto 2027", "Δ 2027 vs 2026", "Status"]
+            "Previsto 2026", "Empenhado 2026", "Executado 2026", "Saldo 2026", "Previsão de execução 31/12/2026", "% previsto de execução",
+            "Previsto 2027", "Δ 2027 vs 2026", "Status"]
+P_PREV = PatternFill("solid", fgColor="FCE9D2")      # previsão do gestor para o fim de 2026
+PCT = '0%;[Red]-0%;"-"'
+
+
+def _prev_pct(r: int) -> str:
+    return f'=IF(OR(N{r}="",J{r}=0),"",N{r}/J{r})'
 
 
 def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str, info: list[dict] = ()) -> None:
     _titulo(ws, "Orçamento ESR 2027: sumário das ações", f"Gerado em {gerado}. Executado = realizado de 2026 (o empenhado é informativo e não entra no saldo). "
-            "Saldo 2026 = previsto menos executado. Valores em R$. Use os filtros para fatiar por gerência, origem ou tipo.")
+            "Saldo 2026 = previsto menos executado. Previsão de execução = valor que o gestor informou que o projeto terá executado até 31/12/2026; % previsto = previsão ÷ previsto 2026 "
+            "(vazio quando o gestor ainda não informou). Valores em R$. Use os filtros para fatiar por gerência, origem ou tipo.")
     ini = 5
-    _cab(ws, ini - 1, SUM_COLS, {10: P_26, 11: P_26, 12: P_26, 13: P_26, 14: P_27, 15: P_27})
+    _cab(ws, ini - 1, SUM_COLS, {10: P_26, 11: P_26, 12: P_26, 13: P_26, 14: P_PREV, 15: P_PREV, 16: P_27, 17: P_27})
     ws.freeze_panes = ws.cell(row=ini, column=4)
-    moeda = {10, 11, 12, 13, 14, 15}
+    moeda = {10, 11, 12, 13, 14, 16, 17}
     r = ini
     for p in ps:
         ext = p["extinto"]
@@ -203,56 +211,64 @@ def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str, i
         prev27 = 0 if ext else p["total_2027"]
         _linha(ws, r, [p["orcamento"] if not p["novo"] else p["orcamento"], p["n_projeto"], p["descricao"], p["gerencia"], p["gerente"],
                        "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
-                       p["total_2026"], p["empenhado_2026"], p["realizado_2026"], f"=J{r}-L{r}", prev27, f"=N{r}-J{r}", status],
-               moeda=moeda, centro={1, 2, 6, 16}, quebra={3, 5}, fonte=F_EXT if ext else None,
+                       p["total_2026"], p["empenhado_2026"], p["realizado_2026"], f"=J{r}-L{r}", p["previsao_2026"], _prev_pct(r), prev27, f"=P{r}-J{r}", status],
+               moeda=moeda, centro={1, 2, 6, 18}, quebra={3, 5}, fonte=F_EXT if ext else None,
                fill=P_EXT if ext else P_CONT if p["contingenciado"] else None)
+        ws.cell(row=r, column=15).number_format = PCT
         r += 1
     fim = r - 1
-    _total(ws, r, 3, [10, 11, 12, 13, 14, 15], ini, fim, "Total (conforme filtro)")
+    _total(ws, r, 3, [10, 11, 12, 13, 14, 16, 17], ini, fim, "Total (conforme filtro)")
+    cc = ws.cell(row=r, column=15, value=f'=IFERROR(SUBTOTAL(109,N{ini}:N{fim})/SUMIF(N{ini}:N{fim},"<>",J{ini}:J{fim}),"")')
+    cc.number_format = PCT
+    ws.cell(row=r + 1, column=3, value="O % do total compara a previsão com o previsto 2026 apenas dos projetos que já informaram a previsão.").font = F_NOTA
     ws.auto_filter.ref = f"A{ini - 1}:{L(len(SUM_COLS))}{fim}"
     if info:      # projeto lançado pela DSS: só informação, fora dos totais, dos filtros e dos resumos
-        r += 2
+        r += 3
         ws.cell(row=r, column=3, value="Informativo: projeto lançado pela DSS (não soma nos totais nem nos resumos)").font = Font(name="Calibri", size=12, bold=True, color="7A4A00")
         for p in info:
             r += 1
             _linha(ws, r, [p["orcamento"], p["n_projeto"], p["descricao"], p["gerencia"], p["gerente"],
                            "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
-                           p["total_2026"], p["empenhado_2026"], p["realizado_2026"], p["total_2026"] - p["realizado_2026"],
+                           p["total_2026"], p["empenhado_2026"], p["realizado_2026"], p["total_2026"] - p["realizado_2026"], p["previsao_2026"], _prev_pct(r),
                            0 if p["extinto"] else p["total_2027"], (0 if p["extinto"] else p["total_2027"]) - p["total_2026"], "Informativo (DSS)"],
-                   moeda=moeda, centro={1, 2, 6, 16}, quebra={3, 5}, fonte=Font(name="Calibri", italic=True, color="7A4A00"), fill=P_INFO)
+                   moeda=moeda, centro={1, 2, 6, 18}, quebra={3, 5}, fonte=Font(name="Calibri", italic=True, color="7A4A00"), fill=P_INFO)
+            ws.cell(row=r, column=15).number_format = PCT
         fim_info = r
         r += 1
     else:
         fim_info = fim
-    _larguras(ws, [12, 12, 48, 20, 22, 11, 22, 16, 22, 15, 15, 15, 15, 15, 15, 14])
+    _larguras(ws, [12, 12, 48, 20, 22, 11, 22, 16, 22, 15, 15, 15, 15, 17, 13, 15, 15, 14])
     # resumos por origem e por gerência (fórmulas sobre a tabela acima, sem contar extintos no 2027)
     r += 3
     for titulo, col, chaves in (("Resumo por origem de recursos", "H", sorted({p["origem"] for p in ps})),
                                 ("Resumo por gerência", "D", sorted({p["gerencia"] for p in ps}, key=ordem_ger_g))):
         ws.cell(row=r, column=3, value=titulo).font = Font(name="Calibri", size=13, bold=True, color=AZUL)
         r += 1
-        _cab(ws, r, ["", "", titulo.split(" por ")[1].capitalize(), "", "", "", "", "", "", "Previsto 2026", "Empenhado 2026", "Executado 2026", "Saldo 2026", "Previsto 2027", "Δ 2027 vs 2026"],
-             {10: P_26, 11: P_26, 12: P_26, 13: P_26, 14: P_27, 15: P_27})
+        _cab(ws, r, ["", "", titulo.split(" por ")[1].capitalize(), "", "", "", "", "", "", "Previsto 2026", "Empenhado 2026", "Executado 2026", "Saldo 2026",
+                     "Previsão de execução 31/12/2026", "% previsto de execução", "Previsto 2027", "Δ 2027 vs 2026"],
+             {10: P_26, 11: P_26, 12: P_26, 13: P_26, 14: P_PREV, 15: P_PREV, 16: P_27, 17: P_27})
         ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=9)
         a = r + 1
         for k in chaves:
             r += 1
             ws.cell(row=r, column=3, value=k)
             ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=9)
-            for j in range(3, 16):
+            for j in range(3, 18):
                 ws.cell(row=r, column=j).border = BORDA
-            for j, cl in ((10, "J"), (11, "K"), (12, "L"), (14, "N")):
+            for j, cl in ((10, "J"), (11, "K"), (12, "L"), (14, "N"), (16, "P")):
                 cc = ws.cell(row=r, column=j, value=f"=SUMIF(${col}${ini}:${col}${fim},$C{r},{cl}${ini}:{cl}${fim})")
                 cc.number_format = MOEDA
             ws.cell(row=r, column=13, value=f"=J{r}-L{r}").number_format = MOEDA
-            ws.cell(row=r, column=15, value=f"=N{r}-J{r}").number_format = MOEDA
+            ws.cell(row=r, column=15, value=f'=IFERROR(N{r}/SUMIFS($J${ini}:$J${fim},${col}${ini}:${col}${fim},$C{r},$N${ini}:$N${fim},"<>"),"")').number_format = PCT
+            ws.cell(row=r, column=17, value=f"=P{r}-J{r}").number_format = MOEDA
         r += 1
         ws.cell(row=r, column=3, value="Total")
-        for j in range(3, 16):
+        for j in range(3, 18):
             cc = ws.cell(row=r, column=j); cc.font, cc.fill, cc.border = F_NEG, P_TOT, BORDA
         ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=9)
-        for j in (10, 11, 12, 13, 14, 15):
+        for j in (10, 11, 12, 13, 14, 16, 17):
             ws.cell(row=r, column=j, value=f"=SUM({L(j)}{a}:{L(j)}{r - 1})").number_format = MOEDA
+        ws.cell(row=r, column=15, value=f'=IFERROR(N{r}/SUMIF($N${ini}:$N${fim},"<>",$J${ini}:$J${fim}),"")').number_format = PCT
         r += 3
 
 
@@ -286,6 +302,15 @@ def _aba_projeto(ws: Worksheet, p: dict, c: sqlite3.Connection) -> None:
     ws.cell(row=7, column=7, value="=G4-G6").number_format = MOEDA
     ws.cell(row=7, column=9, value="=I4-G4").number_format = MOEDA
     ws.cell(row=7, column=8, value="Δ vs 2026").font = F_NOTA
+    ws.cell(row=8, column=6, value="Previsão 31/12").font = F_NEG
+    pc = ws.cell(row=8, column=7, value=p["previsao_2026"])
+    pc.number_format = MOEDA
+    pc.fill = P_PREV
+    ws.cell(row=9, column=6, value="% previsto").font = F_NEG
+    pp = ws.cell(row=9, column=7, value='=IF(OR(G8="",G4=0),"",G8/G4)')
+    pp.number_format = PCT
+    pp.fill = P_PREV
+    ws.cell(row=8, column=8, value="valor que o gestor informou" if p["previsao_2026"] is not None else "não informada").font = F_NOTA
     ini = 3 + max(len(info), 5) + 2
     cols = ["EDT", "Tarefa", "Conta", "Descrição da conta"] + MES + ["Total 2027", "Previsto 2026", "Executado 2026", "Empenhado 2026"]
     _cab(ws, ini, cols, {17: P_27, 18: P_26, 19: P_26, 20: P_26})

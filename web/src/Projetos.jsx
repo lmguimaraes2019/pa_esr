@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt } from "./api.js";
 import OutrosProjetos from "./OutrosProjetos.jsx";
-import { Delta, pct, Selo, Passos, FINALIDADES, nomeFinalidade, classeFinalidade, FiltroGerencia } from "./ui.jsx";
+import { Delta, pct, Selo, Passos, FINALIDADES, nomeFinalidade, classeFinalidade, FiltroGerencia, celPrevisao } from "./ui.jsx";
 
 export function NovoOrcamento({ listas, onCriar, onFechar, tipoFixo }) {
   const [f, setF] = useState({ tipo: tipoFixo || "despesa", finalidade: "caixa", descricao: "", origem: "", gerente: "" });
@@ -105,7 +105,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   const subtotal = (lista) => {
     const s = (k) => lista.reduce((a, p) => a + p[k], 0);
     const t26 = s("total_2026"), re = s("realizado_2026");
-    return <><td className="n">{fmt(t26)}</td>{mais && <td className="n">{fmt(s("empenhado_2026"))}</td>}<td className="n">{fmt(re)}</td><td className="n">{fmt(t26 - re)}</td>{mais && <td className="n">{pct(re, t26)}</td>}
+    return <><td className="n">{fmt(t26)}</td>{mais && <td className="n">{fmt(s("empenhado_2026"))}</td>}<td className="n">{fmt(re)}</td><td className="n">{fmt(t26 - re)}</td>{mais && <td className="n">{pct(re, t26)}</td>}{celPrevisao(lista)}
       <td className="n"><strong>{fmt(s("total_2027"))}</strong></td><td className="n"><Delta de={t26} para={s("total_2027")} /></td></>;
   };
   const estado = (p) => p.extinto ? <span className="tag aviso" title="Não existirá no PA 2027">extinta</span>
@@ -118,7 +118,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
         {estado(p)}{p.replicado_para && <span className="mudo"> migrado para {p.replicado_para}</span>}{p.replicado_de && <span className="mudo"> replicado de {p.replicado_de}</span>}</div></td>
       <td>{p.gerente}</td>
       <td className="n">{fmt(p.total_2026)}</td>{mais && <td className="n">{fmt(p.empenhado_2026)}</td>}<td className="n">{fmt(p.realizado_2026)}</td>
-      <td className={"n " + (p.total_2026 - p.realizado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026)}</td>{mais && <td className="n">{pct(p.realizado_2026, p.total_2026)}</td>}
+      <td className={"n " + (p.total_2026 - p.realizado_2026 < -0.5 ? "res-neg" : "")}>{fmt(p.total_2026 - p.realizado_2026)}</td>{mais && <td className="n">{pct(p.realizado_2026, p.total_2026)}</td>}{celPrevisao([p])}
       <td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td>
     </tr>
   );
@@ -127,8 +127,8 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
     return (
       <div className="rolagem"><table className="tab clic pa">
         <thead>
-          <tr className="grupos"><th colSpan={3} style={{ background: "#fff" }} /><th colSpan={mais ? 5 : 3} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th></tr>
-          <tr><th>Orçamento</th><th>Projeto</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Aprovado</th>{mais && <th className="n g26" title="Empenhado, ainda não realizado. Só informativo: não entra no saldo">Empenhado</th>}<th className="n g26">Realizado</th><th className="n g26" title="Aprovado menos realizado">Saldo</th>{mais && <th className="n g26">% real.</th>}<th className="n g27">Plano</th><th className="n g27" title="Diferença do plano 2027 para o aprovado de 2026">Δ vs 2026</th></tr>
+          <tr className="grupos"><th colSpan={3} style={{ background: "#fff" }} /><th colSpan={mais ? 7 : 5} className="g26"><Selo ano={2026} /></th><th colSpan={2} className="g27"><Selo ano={2027} /></th></tr>
+          <tr><th>Orçamento</th><th>Projeto</th><th>Gerente</th><th className="n g26" title="Valor aprovado em 2026">Aprovado</th>{mais && <th className="n g26" title="Empenhado, ainda não realizado. Só informativo: não entra no saldo">Empenhado</th>}<th className="n g26">Realizado</th><th className="n g26" title="Aprovado menos realizado">Saldo</th>{mais && <th className="n g26">% real.</th>}<th className="n g26" title="Quanto o gestor prevê ter executado até 31/12/2026">Previsão 31/12</th><th className="n g26" title="Previsão de execução sobre o aprovado de 2026">% prev.</th><th className="n g27">Plano</th><th className="n g27" title="Diferença do plano 2027 para o aprovado de 2026">Δ vs 2026</th></tr>
         </thead>
         <tbody>{grupos.map((g) => (
           <React.Fragment key={g.chave}>
@@ -141,7 +141,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
                 {!fechado[o.chave] && o.ps.map(linhaProjeto)}
               </React.Fragment>))}
           </React.Fragment>))}</tbody>
-        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma(lista, "total_2026"))}</td>{mais && <td className="n">{fmt(soma(lista, "empenhado_2026"))}</td>}<td className="n">{fmt(soma(lista, "realizado_2026"))}</td><td className="n">{fmt(soma(lista, "total_2026") - soma(lista, "realizado_2026"))}</td>{mais && <td className="n">{pct(soma(lista, "realizado_2026"), soma(lista, "total_2026"))}</td>}<td className="n"><strong>{fmt(soma(lista, "total_2027"))}</strong></td><td className="n"><Delta de={soma(lista, "total_2026")} para={soma(lista, "total_2027")} /></td></tr></tfoot>
+        <tfoot><tr><td colSpan={3}>Total</td><td className="n">{fmt(soma(lista, "total_2026"))}</td>{mais && <td className="n">{fmt(soma(lista, "empenhado_2026"))}</td>}<td className="n">{fmt(soma(lista, "realizado_2026"))}</td><td className="n">{fmt(soma(lista, "total_2026") - soma(lista, "realizado_2026"))}</td>{mais && <td className="n">{pct(soma(lista, "realizado_2026"), soma(lista, "total_2026"))}</td>}{celPrevisao(lista)}<td className="n"><strong>{fmt(soma(lista, "total_2027"))}</strong></td><td className="n"><Delta de={soma(lista, "total_2026")} para={soma(lista, "total_2027")} /></td></tr></tfoot>
       </table></div>
     );
   };
