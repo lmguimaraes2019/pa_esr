@@ -20,8 +20,10 @@ export function previsaoDe(lista) {
 }
 export const celPrevisao = (lista) => {
   const q = previsaoDe(lista);
-  return q.n === 0 ? <><td className="n mudo">-</td><td className="n mudo">-</td></>
-    : <><td className="n" title={`${q.n} de ${q.de} informaram`}>{fmt(q.valor)}</td><td className="n" title={`${q.n} de ${q.de} informaram`}>{pct(q.valor, q.base)}</td></>;
+  if (lista.length === 0) return <><td className="n mudo">-</td><td className="n mudo">-</td></>;
+  if (q.n === 0) return <><td className="n mudo" title="Nenhum gestor informou ainda">não informada</td><td className="n mudo">-</td></>;
+  return <><td className="n">{fmt(q.valor)}{q.n < q.de && <div className="mudo" style={{ fontSize: ".72rem", fontWeight: 400 }}>{q.n} de {q.de} informaram</div>}</td>
+    <td className="n" title="Previsão sobre o aprovado de 2026 dos projetos que informaram">{pct(q.valor, q.base)}</td></>;
 };
 
 export function Passos({ itens, ativo, onMudar }) {

@@ -26,7 +26,7 @@ export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
     return (
       <React.Fragment key={nome}>
         <tr className={total ? "" : "ger-linha-res"} onClick={() => !total && setFechado((f) => ({ ...f, [nome]: !f[nome] }))} style={{ cursor: total ? "default" : "pointer" }}>
-          {celulas(a, e, p27, l.length, <td><span className="seta">{total ? "" : aberto ? "▾" : "▸"}</span> <strong>{nome}</strong></td>, l)}
+          {celulas(a, e, p27, l.length, <td style={{ whiteSpace: "nowrap" }}><span className="seta">{total ? "" : aberto ? "▾" : "▸"}</span> <strong>{nome}</strong></td>, l)}
           {status && <td>{total ? "" : s ? (s.concluida ? <span className="estado ok">concluída</span> : <span className={"estado " + (s.pendencias ? "pend" : "neutro")}>{s.pendencias ? `${s.pendencias} pendência(s)` : "em andamento"}</span>) : <span className="mudo">-</span>}</td>}
         </tr>
         {aberto && ordem.flatMap((o) => {
@@ -36,14 +36,17 @@ export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
           const temHc = nome === "Diretoria Adjunta" && hc("pessoal_2026") + hc("pessoal_2027") + hc("pessoal_realizado_2026") > 0;
           const nHc = l2.filter((p) => p.pessoal_2026 + p.pessoal_2027 + p.pessoal_realizado_2026 > 0).length;
           const tira = (k, kp) => soma(l2, k) - (temHc ? hc(kp) : 0);
+          // a previsão é por projeto: o projeto de headcount (pessoal é a maior parte) leva a previsão para a linha de headcount
+          const ehHc = (p) => p.pessoal_2026 > 0 && p.pessoal_2026 >= p.total_2026 * 0.5;
+          const lpHc = temHc ? l2.filter(ehHc) : [], lpOrg = temHc ? l2.filter((p) => !ehHc(p)) : l2;
           const linhas = [
             <tr key={nome + "|" + o} className="ger-origem">
-              {celulas(tira("total_2026", "pessoal_2026"), tira("realizado_2026", "pessoal_realizado_2026"), tira("total_2027", "pessoal_2027"), l2.length, <td style={{ paddingLeft: 34 }}>{o}</td>, l2)}
+              {celulas(tira("total_2026", "pessoal_2026"), tira("realizado_2026", "pessoal_realizado_2026"), tira("total_2027", "pessoal_2027"), temHc ? lpOrg.length : l2.length, <td style={{ paddingLeft: 34, whiteSpace: "nowrap" }}>{o}</td>, lpOrg)}
               {status && <td />}
             </tr>];
           if (temHc) linhas.push(
             <tr key={nome + "|" + o + "|hc"} className="ger-origem ger-hc">
-              {celulas(hc("pessoal_2026"), hc("pessoal_realizado_2026"), hc("pessoal_2027"), nHc, <td style={{ paddingLeft: 56 }}>{o} Headcount</td>)}
+              {celulas(hc("pessoal_2026"), hc("pessoal_realizado_2026"), hc("pessoal_2027"), nHc, <td style={{ paddingLeft: 56, whiteSpace: "nowrap" }}>{o} Headcount</td>, lpHc)}
               {status && <td />}
             </tr>);
           return linhas;
@@ -53,7 +56,7 @@ export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
   return (
     <section className="cartao">
       <h3>Por gerência e origem do recurso: 2026 e plano 2027</h3>
-      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz todas as origens de recurso. O headcount fica todo nos projetos da Diretoria Adjunta e aparece em linha separada ("Fomento Headcount"), sem somar na linha da origem. A previsão de execução é informada por projeto, então não aparece na linha de headcount. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
+      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz todas as origens de recurso. O headcount fica todo nos projetos da Diretoria Adjunta e aparece em linha separada ("Fomento Headcount"), sem somar na linha da origem. A previsão de execução é informada por projeto; os projetos de headcount levam a previsão para a linha de headcount. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
       <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande">
         <thead><tr><th>Gerência</th><th className="n">Projetos</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n" title="Quanto os gestores preveem ter executado até 31/12/2026 (soma dos projetos que já informaram)">Previsão 31/12</th><th className="n" title="Previsão sobre o aprovado de 2026, só dos projetos que informaram">% prev.</th><th className="n">Plano 2027</th><th className="n">Variação</th><th className="n">Var. %</th><th style={{ width: 120 }}>Peso</th>{status && <th>Planejamento</th>}</tr></thead>
         <tbody>{nomes.map((n) => linha(n, g[n], false))}</tbody>
