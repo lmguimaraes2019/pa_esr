@@ -151,9 +151,10 @@ def excluir(eid: int, u: dict = Depends(usuario_liberado)):
 @router.get("/estrategia/cobertura")
 def cobertura(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     """Para cada diretriz, RE, RO e indicador do CG: quantos projetos e entregas o atendem e quanto do plano 2027 está ligado a ele.
-    Vincular um projeto a um RO cobre também o RE, a diretriz e o indicador do CG acima dele.
+    Projetos contingenciados ficam de fora. Vincular um projeto a um RO cobre também o RE, a diretriz e o indicador do CG acima dele.
     O valor é o plano dos projetos vinculados (um projeto pode atender a mais de um item, por isso os valores não se somam)."""
-    ids = sorted(proprios(c, u))
+    cont = {r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE contingenciado=1")}      # contingenciado não entra na conexão estratégica
+    ids = sorted(proprios(c, u) - cont)
     marks = ",".join("?" for _ in ids) or "''"
     plano = {r["orcamento"]: _arred(r["t"]) for r in c.execute(
         f"SELECT orcamento, SUM({SOMA}) t FROM linhas WHERE ciclo=? AND orcamento IN ({marks}) AND orcamento IN (SELECT orcamento FROM projetos WHERE tipo='despesa') GROUP BY orcamento",

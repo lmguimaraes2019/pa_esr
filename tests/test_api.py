@@ -1447,3 +1447,18 @@ def test_projeto_fora_da_contabilidade(client):
     assert client.get("/api/export/relatorio").status_code == 200
     assert client.patch(f"/api/projetos/{alvo['orcamento']}", json={"fora_contabilidade": False}).status_code == 200
     assert round(client.get("/api/resumo").json()["total_plano"], 2) == round(antes, 2)
+
+
+def test_conexao_estrategica_ignora_contingenciados(client):
+    entrar(client)
+    arq = _xlsx([["Tipo", "Código", "Descrição", "Meta ou critério"], ["PO", "RC 6.1.2", "900 alunos capacitados via parcerias", "Q3"]])
+    assert _envia(client, "estrategia", arq, False).status_code == 200
+    orc = next(p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0)["orcamento"]
+    po = next(e for e in client.get(f"/api/projetos/{orc}/entregas").json()["catalogo"] if e["tipo"] == "po")
+    client.put(f"/api/projetos/{orc}/estrategia", json={"ids": [po["id"]]})
+    cob = client.get("/api/estrategia/cobertura").json()
+    assert orc in [x["orcamento"] for i in cob["itens"] for x in i["lista_projetos"]]
+    client.patch(f"/api/projetos/{orc}", json={"contingenciado": True})
+    cob = client.get("/api/estrategia/cobertura").json()
+    assert orc not in [x["orcamento"] for i in cob["itens"] for x in i["lista_projetos"]]
+    assert orc not in [x["orcamento"] for x in cob["sem_vinculo"]]
