@@ -6,10 +6,10 @@ const MESES_N = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "ju
 const COMP = [["passagem", "passagens"], ["hospedagem", "hospedagem"], ["ajuda_custo", "diárias"], ["aux_transporte", "transporte"], ["seguro", "seguro"]];
 
 // mesma regra do servidor (app/viagens.py), usada só para a prévia no formulário
-function custo(tipo, t, n, dias, pern, bv) {
+function custo(tipo, t, n, dias, pern, bv, viajante) {
   if (!t || dias < 1 || n < 1) return 0;
   const p = pern === "" || pern == null ? Math.max(dias - 1, 0) : Math.max(Number(pern), 0);
-  return t.passagem * n + t.bagagem * n * bv + p * t.hospedagem * n + t.ajuda_custo * dias * n + t.aux_transporte * n + (tipo === "int" ? t.seguro * n : 0);
+  return t.passagem * n + t.bagagem * n * bv + p * t.hospedagem * n + t.ajuda_custo * dias * n + (viajante === "externo" ? t.aux_transporte_ext || 0 : t.aux_transporte) * n + (tipo === "int" ? t.seguro * n : 0);
 }
 
 function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
@@ -21,7 +21,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
   const destinos = opts.tarifas.filter((t) => t.tipo === f.tipo && t.origem === f.origem).map((t) => t.destino);
   const projeto = opts.projetos.find((p) => p.orcamento === f.orcamento);
   const tarifa = tarifas.find((t) => t.tipo === f.tipo && t.origem === f.origem && t.destino === f.destino);
-  const prev = custo(f.tipo, tarifa, Number(f.n_viagens), Number(f.dias), f.pernoites, bv);
+  const prev = custo(f.tipo, tarifa, Number(f.n_viagens), Number(f.dias), f.pernoites, bv, f.viajante);
   const trocarTipo = (tipo) => setF((x) => ({ ...x, tipo, origem: "", destino: "" }));
   const trocarProjeto = (o) => {
     const pr = opts.projetos.find((p) => p.orcamento === o);
@@ -32,7 +32,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
     e.preventDefault(); setErro("");
     try {
       await onSalvar({ tipo: f.tipo, mes: Number(f.mes), origem: f.origem, destino: f.destino, n_viagens: Number(f.n_viagens), dias: Number(f.dias),
-        pernoites: f.pernoites === "" || f.pernoites == null ? null : Number(f.pernoites), objetivo: f.objetivo, area: f.area, gerencia: f.gerencia ?? f.gerencias?.[0] ?? "",
+        pernoites: f.pernoites === "" || f.pernoites == null ? null : Number(f.pernoites), viajante: f.viajante || "interno", objetivo: f.objetivo, area: f.area, gerencia: f.gerencia ?? f.gerencias?.[0] ?? "",
         orcamento: f.orcamento || null, edt: f.edt || null, tarefa: f.tarefa || null });
     } catch (x) { setErro(x.message); }
   };
@@ -47,6 +47,7 @@ function Formulario({ inicial, dados, tarifas, bv, onSalvar, onFechar }) {
         <label>Nº de viagens (pessoas)<input type="number" min="1" value={f.n_viagens} onChange={(e) => set("n_viagens", e.target.value)} required /></label>
         <label>Dias<input type="number" min="1" value={f.dias} onChange={(e) => set("dias", e.target.value)} required /></label>
         <label>Pernoites<input type="number" min="0" value={f.pernoites ?? ""} placeholder={`padrão ${Math.max(Number(f.dias) - 1, 0)}`} onChange={(e) => set("pernoites", e.target.value)} /></label>
+        <label>Viajante<select value={f.viajante || "interno"} onChange={(e) => set("viajante", e.target.value)}><option value="interno">Interno</option><option value="externo">Externo</option></select></label>
         <label>Gerência<select value={f.gerencia ?? f.gerencias?.[0] ?? ""} onChange={(e) => set("gerencia", e.target.value)}>
           <option value="">Gerência do projeto</option>{dados.gerencias.map((g) => <option key={g} value={g}>{g}</option>)}</select></label>
         <label>Área<input value={f.area} onChange={(e) => set("area", e.target.value)} placeholder="ex.: GADM" /></label>
@@ -74,7 +75,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
   const [erro, setErro] = useState("");
   const lista = dados.viagens.filter((v) => nasGer(v, ger) && (tipo === "todas" || v.tipo === tipo) && (proj === "todos" || (v.orcamento || "") === proj)
     && (!soPend || !v.orcamento || !v.edt || !v.tem_tarifa));
-  const novo = { tipo: "nac", mes: 1, origem: "", destino: "", n_viagens: 1, dias: 3, pernoites: null, objetivo: "", area: "", orcamento: "", edt: "", tarefa: "" };
+  const novo = { tipo: "nac", mes: 1, origem: "", destino: "", n_viagens: 1, dias: 3, pernoites: null, viajante: "interno", objetivo: "", area: "", orcamento: "", edt: "", tarefa: "" };
   const salvar = async (corpo) => {
     if (edit.id) await api(`/viagens/${edit.id}`, { method: "PUT", body: corpo }); else await api("/viagens", { method: "POST", body: corpo });
     setEdit(null); recarregar();
@@ -110,7 +111,7 @@ function PlanoViagens({ dados, tarifas, recarregar }) {
                 <td>{MESES_N[v.mes - 1].slice(0, 3)}</td>
                 <td>{v.origem} <span className="mudo">para</span> {v.destino} {v.tipo === "int" && <span className="tag nova bloco">int.</span>}</td>
                 <td className="n">{v.n_viagens}</td><td className="n">{v.dias}</td>
-                <td className="obj">{v.evento_id && <span className="tag nova bloco">evento</span>}{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}{v.gerencias.map((g) => <span key={g} className="tag bloco">{g}</span>)}</td>
+                <td className="obj">{v.evento_id && <span className="tag nova bloco">evento</span>}{v.viajante === "externo" && <span className="tag aviso bloco">externo</span>}{v.objetivo}{v.area && <span className="tag bloco">{v.area}</span>}{v.gerencias.map((g) => <span key={g} className="tag bloco">{g}</span>)}</td>
                 <td>{v.orcamento ? <>{v.orcamento} | {v.projeto}{v.outro && <> <span className="tag aviso" title="Projeto da Diretoria: não entra nos totais dos seus projetos">Diretoria</span></>}<br /><span className="mudo">{v.tarefa || <span className="up">tarefa pendente</span>}</span></> : <span className="tag aviso">sem projeto</span>}</td>
                 <td><div className="custos">{COMP.filter(([k]) => v.custo[k] > 0).map(([k, n]) => <span key={k}>{n} {fmtN(v.custo[k])}</span>)}</div>{!v.tem_tarifa && <span className="erro">sem tarifa</span>}</td>
                 <td className="n"><strong>{fmtN(v.custo.total)}</strong></td>
@@ -131,7 +132,7 @@ function Tarifas({ admin, tarifas, recarregar, premissas, recarregarPrem }) {
   const [erro, setErro] = useState("");
   const [perc, setPerc] = useState("");
   const [bag, setBag] = useState(String(premissas?.viagens_bagagem_vezes?.valor ?? 1).replace(".", ","));
-  const campos = [["passagem", "Passagem ida/volta"], ["hospedagem", "Hospedagem (pernoite)"], ["bagagem", "Bagagem"], ["aux_transporte", "Transporte"], ["ajuda_custo", "Diária"], ["seguro", "Seguro"]];
+  const campos = [["passagem", "Passagem ida/volta"], ["hospedagem", "Hospedagem (pernoite)"], ["bagagem", "Bagagem"], ["aux_transporte", "Transporte interno"], ["aux_transporte_ext", "Transporte externo"], ["ajuda_custo", "Diária"], ["seguro", "Seguro"]];
   const v = (t, k) => vals[t.id]?.[k] ?? String(t[k]).replace(".", ",");
   const salvar = async (t) => {
     setErro(""); setMsg("");

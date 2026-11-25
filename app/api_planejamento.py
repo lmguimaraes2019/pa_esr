@@ -68,7 +68,7 @@ def resumir(c: sqlite3.Connection, ids: list[str]) -> dict[str, dict]:
         t = tar.get((v["tipo"], v["origem"], v["destino"]))
         x = out[v["orcamento"]]["viagens"]
         x["n"] += 1
-        x["total"] += vg.calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bv)["total"]
+        x["total"] += vg.calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bv, v["viajante"])["total"]
         if t is None or not v["edt"] or not v["tarefa"]:
             x["pendentes"] += 1
     for r in c.execute(f"SELECT * FROM eventos WHERE orcamento IN ({marks})", ids):

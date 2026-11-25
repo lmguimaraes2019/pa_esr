@@ -5,7 +5,7 @@ Regras (as mesmas da planilha VIAGENS - ORÇAMENTO 2026):
   passagem    = passagem(ida/volta) x viagens + bagagem x viagens   (a bagagem entra na conta de passagens)
   hospedagem  = pernoites x diária de hospedagem x viagens
   ajuda custo = ajuda de custo por dia x dias x viagens
-  transporte  = auxílio transporte x viagens
+  transporte  = auxílio transporte x viagens (valor do viajante interno ou do externo, conforme a viagem)
   seguro      = seguro x viagens (internacionais)
 Viagens com menos de 1 dia não geram custo.
 """
@@ -32,8 +32,18 @@ COMPONENTES = ["passagem", "hospedagem", "ajuda_custo", "aux_transporte", "segur
 CAMPOS_TARIFA = ["passagem", "hospedagem", "bagagem", "aux_transporte", "ajuda_custo", "seguro"]
 
 
+def _aux_transporte(t, viajante: str) -> float:
+    """Auxílio transporte do viajante: interno usa a coluna da tarifa, externo usa o valor próprio do externo."""
+    if viajante == "externo":
+        try:
+            return float(t["aux_transporte_ext"])
+        except (KeyError, IndexError):
+            pass
+    return float(t["aux_transporte"])
+
+
 def calcular(tipo: str, t: sqlite3.Row | dict | None, n: int, dias: int, pernoites: int | None = None,
-             bagagem_vezes: float = 1.0) -> dict[str, float]:
+             bagagem_vezes: float = 1.0, viajante: str = "interno") -> dict[str, float]:
     """Custo de uma linha de viagens, por componente. Sem tarifa ou sem dias, tudo zero."""
     zero = {k: 0.0 for k in COMPONENTES} | {"bagagem": 0.0, "total": 0.0, "pernoites": 0}
     if t is None or dias < 1 or n < 1:
@@ -44,7 +54,7 @@ def calcular(tipo: str, t: sqlite3.Row | dict | None, n: int, dias: int, pernoit
         "passagem": float(t["passagem"]) * n + bag,
         "hospedagem": pern * float(t["hospedagem"]) * n,
         "ajuda_custo": float(t["ajuda_custo"]) * dias * n,
-        "aux_transporte": float(t["aux_transporte"]) * n,
+        "aux_transporte": _aux_transporte(t, viajante) * n,
         "seguro": float(t["seguro"]) * n if tipo == "int" else 0.0,
         "bagagem": bag,
         "pernoites": pern,
@@ -176,7 +186,7 @@ def plano_por_linha(c: sqlite3.Connection, ciclo: int = config.CICLO_PLANO, so_e
     filtro = " AND evento_id IS NOT NULL" if so_evento else ""
     for v in c.execute("SELECT * FROM viagens WHERE ciclo=?" + filtro + " ORDER BY id", (ciclo,)):
         t = tar.get((v["tipo"], v["origem"], v["destino"]))
-        custo = calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bvezes)
+        custo = calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bvezes, v["viajante"])
         if t is None and v["dias"] >= 1:
             pend.append(f"Viagem {v['id']} ({v['origem']} para {v['destino']}) sem tarifa cadastrada.")
             continue

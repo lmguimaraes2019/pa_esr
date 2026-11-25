@@ -454,6 +454,10 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN natureza TEXT NOT NULL DEFAULT ''")
         c.execute("UPDATE projetos SET finalidade=natureza WHERE natureza<>''")      # a natureza foi unificada na finalidade
         c.execute("UPDATE projetos SET natureza='' WHERE natureza<>''")
+        if "viajante" not in {r[1] for r in c.execute("PRAGMA table_info(viagens)")}:      # migração: viajante interno ou externo (muda o auxílio transporte)
+            c.execute("ALTER TABLE viagens ADD COLUMN viajante TEXT NOT NULL DEFAULT 'interno'")
+        if "aux_transporte_ext" not in {r[1] for r in c.execute("PRAGMA table_info(viagem_tarifas)")}:
+            c.execute("ALTER TABLE viagem_tarifas ADD COLUMN aux_transporte_ext REAL NOT NULL DEFAULT 0")
         if "evento_id" not in {r[1] for r in c.execute("PRAGMA table_info(viagens)")}:      # migração: viagens vindas de eventos
             c.execute("ALTER TABLE viagens ADD COLUMN evento_id INTEGER")
         if "rnp" not in {r[1] for r in c.execute("PRAGMA table_info(eventos)")}:      # migração: evento promovido pela RNP

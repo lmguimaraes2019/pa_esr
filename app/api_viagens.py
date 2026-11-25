@@ -26,6 +26,7 @@ class ViagemIn(BaseModel):
     objetivo: str = Field(default="", max_length=300)
     area: str = Field(default="", max_length=40)
     gerencia: str = Field(default="", max_length=120)      # gerência da ESR que faz a viagem
+    viajante: str = Field(default="interno", pattern="^(interno|externo)$")
     orcamento: str | None = None
     edt: str | None = None
     tarefa: str | None = None
@@ -36,6 +37,7 @@ class TarifaIn(BaseModel):
     hospedagem: float = Field(ge=0, le=1e7)
     bagagem: float = Field(ge=0, le=1e7)
     aux_transporte: float = Field(ge=0, le=1e7)
+    aux_transporte_ext: float = Field(default=0, ge=0, le=1e7)
     ajuda_custo: float = Field(ge=0, le=1e7)
     seguro: float = Field(ge=0, le=1e7)
 
@@ -60,13 +62,13 @@ def _tarefas_por_projeto(c: sqlite3.Connection, ids: set[str]) -> dict[str, list
 
 def _json(v: sqlite3.Row, tar, bvezes: float, base: sqlite3.Row | None, nomes: dict[str, str]) -> dict:
     t = tar.get((v["tipo"], v["origem"], v["destino"]))
-    custo = vg.calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bvezes)
+    custo = vg.calcular(v["tipo"], t, v["n_viagens"], v["dias"], v["pernoites"], bvezes, v["viajante"])
     ref = None
     if base is not None:
         bt = tar.get((base["tipo"], base["origem"], base["destino"]))
-        ref = vg.calcular(base["tipo"], bt, base["n_viagens"], base["dias"], base["pernoites"], bvezes)["total"]
+        ref = vg.calcular(base["tipo"], bt, base["n_viagens"], base["dias"], base["pernoites"], bvezes, base["viajante"])["total"]
     return {"id": v["id"], "tipo": v["tipo"], "mes": v["mes"], "origem": v["origem"], "destino": v["destino"],
-            "n_viagens": v["n_viagens"], "dias": v["dias"], "pernoites": v["pernoites"], "objetivo": v["objetivo"],
+            "n_viagens": v["n_viagens"], "dias": v["dias"], "pernoites": v["pernoites"], "viajante": v["viajante"], "objetivo": v["objetivo"],
             "area": v["area"], "gerencias": json.loads(v["gerencias"] or "[]"), "orcamento": v["orcamento"], "projeto": nomes.get(v["orcamento"] or "", ""),
             "edt": v["edt"], "tarefa": v["tarefa"], "tem_tarifa": t is not None, "custo": custo,
             "ref_2026": ref, "evento_id": v["evento_id"], "atualizado_por": v["atualizado_por"]}
@@ -174,7 +176,7 @@ def _grava(c: sqlite3.Connection, d: ViagemIn) -> tuple:
     g = d.gerencia.strip()
     if g and g not in gerencias_da_casa(c):
         raise HTTPException(422, "Gerência não encontrada.")
-    return (d.tipo, d.mes, d.origem, d.destino, d.n_viagens, d.dias, d.pernoites, d.objetivo.strip(), d.area.strip(), json.dumps([g] if g else []),
+    return (d.tipo, d.mes, d.origem, d.destino, d.n_viagens, d.dias, d.pernoites, d.viajante, d.objetivo.strip(), d.area.strip(), json.dumps([g] if g else []),
             d.orcamento or None, (d.edt or None) if d.orcamento else None, (d.tarefa or None) if d.orcamento else None)
 
 
@@ -194,8 +196,8 @@ def _so_pelo_evento(v: sqlite3.Row) -> None:
 def criar(d: ViagemIn, u: dict = Depends(usuario_liberado)):
     with tx() as c:
         _validar(c, u, d)
-        cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, objetivo, area, gerencias,"
-                        " orcamento, edt, tarefa, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        cur = c.execute("INSERT INTO viagens (ciclo, tipo, mes, origem, destino, n_viagens, dias, pernoites, viajante, objetivo, area, gerencias,"
+                        " orcamento, edt, tarefa, atualizado_por, criado_por) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (config.CICLO_PLANO, *_grava(c, d), u["login"], u["login"]))
         audit(c, u["login"], "incluiu viagem", d.orcamento, detalhe=f"{d.origem} para {d.destino}, mês {d.mes}")
         sync.sincronizar_viagens(c, d.orcamento or "", u["login"], True)
@@ -208,7 +210,7 @@ def editar(vid: int, d: ViagemIn, u: dict = Depends(usuario_liberado)):
         v = _viagem_do_usuario(c, u, vid)
         _so_pelo_evento(v)
         _validar(c, u, d)
-        c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, objetivo=?, area=?, gerencias=?,"
+        c.execute("UPDATE viagens SET tipo=?, mes=?, origem=?, destino=?, n_viagens=?, dias=?, pernoites=?, viajante=?, objetivo=?, area=?, gerencias=?,"
                   " orcamento=?, edt=?, tarefa=?, atualizado_por=?, atualizado_em=datetime('now') WHERE id=?",
                   (*_grava(c, d), u["login"], vid))
         audit(c, u["login"], "editou viagem", d.orcamento or v["orcamento"], detalhe=f"id {vid}: {d.origem} para {d.destino}")
@@ -240,8 +242,8 @@ def gravar_tarifa(tid: int, d: TarifaIn, u: dict = Depends(exige_admin)):
     with tx() as c:
         if not c.execute("SELECT 1 FROM viagem_tarifas WHERE id=?", (tid,)).fetchone():
             raise HTTPException(404, "Tarifa não encontrada.")
-        c.execute("UPDATE viagem_tarifas SET passagem=?, hospedagem=?, bagagem=?, aux_transporte=?, ajuda_custo=?, seguro=? WHERE id=?",
-                  (*[round(getattr(d, k), 2) for k in vg.CAMPOS_TARIFA], tid))
+        c.execute("UPDATE viagem_tarifas SET passagem=?, hospedagem=?, bagagem=?, aux_transporte=?, ajuda_custo=?, seguro=?, aux_transporte_ext=? WHERE id=?",
+                  (*[round(getattr(d, k), 2) for k in vg.CAMPOS_TARIFA], round(d.aux_transporte_ext, 2), tid))
         audit(c, u["login"], "alterou tarifa", detalhe=f"id {tid}: {d.model_dump()}")
         sync.sincronizar_todos(c, u["login"])
     return {"ok": True}

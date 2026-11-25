@@ -1505,3 +1505,26 @@ def test_projetos_trazem_o_valor_de_pessoal_separado(client):
     assert all(k in ps[0] for k in ("pessoal_2026", "pessoal_2027", "pessoal_realizado_2026"))
     assert all(p["pessoal_2027"] <= p["total_2027"] + 0.01 for p in ps)
     assert all(p["pessoal_2026"] <= p["total_2026"] + 0.01 for p in ps)
+
+
+def test_viajante_externo_usa_o_auxilio_transporte_proprio(client):
+    entrar(client)
+    t = next(x for x in client.get("/api/viagens/tarifas").json() if x["tipo"] == "nac")
+    corpo_t = {k: t[k] for k in ("passagem", "hospedagem", "bagagem", "ajuda_custo", "seguro")} | {"aux_transporte": 30}
+    assert client.put(f"/api/viagens/tarifas/{t['id']}", json={**corpo_t, "aux_transporte_ext": 90}).status_code == 200
+    t = next(x for x in client.get("/api/viagens/tarifas").json() if x["id"] == t["id"])
+    assert next(x for x in client.get("/api/viagens/tarifas").json() if x["id"] == t["id"])["aux_transporte_ext"] == 90
+    dados = client.get("/api/viagens").json()
+    pr = next(p for p in dados["opcoes"]["projetos"] if p["tarefas"])
+    tf = pr["tarefas"][0]
+    base = {"tipo": "nac", "mes": 3, "origem": t["origem"], "destino": t["destino"], "n_viagens": 2, "dias": 2, "orcamento": pr["orcamento"], "edt": tf["edt"], "tarefa": tf["tarefa"]}
+    i = client.post("/api/viagens", json=base).json()["id"]
+    e = client.post("/api/viagens", json={**base, "viajante": "externo"}).json()["id"]
+    v = {x["id"]: x for x in client.get("/api/viagens").json()["viagens"]}
+    assert v[i]["viajante"] == "interno" and v[e]["viajante"] == "externo"
+    assert v[i]["custo"]["aux_transporte"] == round(t["aux_transporte"] * 2, 2)
+    assert v[e]["custo"]["aux_transporte"] == 180.0
+    assert round(v[e]["custo"]["total"] - v[i]["custo"]["total"], 2) == round(180 - t["aux_transporte"] * 2, 2)
+    assert client.put(f"/api/viagens/{i}", json={**base, "viajante": "externo"}).status_code == 200      # o usuário pode editar e marcar o tipo
+    assert next(x for x in client.get("/api/viagens").json()["viagens"] if x["id"] == i)["custo"]["aux_transporte"] == 180.0
+    assert client.post("/api/viagens", json={**base, "viajante": "visitante"}).status_code == 422
