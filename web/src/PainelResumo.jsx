@@ -32,23 +32,28 @@ export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
         {aberto && ordem.flatMap((o) => {
           const l2 = l.filter((p) => (p.origem || "Sem origem") === o);
           const hc = (k) => soma(l2, k);
-          const hcTem = l2.filter((p) => p.pessoal_2026 + p.pessoal_2027 + p.pessoal_realizado_2026 > 0).length;
-          return [
+          // headcount fica todo nos projetos da Diretoria Adjunta: só ali a linha separada aparece, e só nas origens que têm lançamento
+          const temHc = nome === "Diretoria Adjunta" && hc("pessoal_2026") + hc("pessoal_2027") + hc("pessoal_realizado_2026") > 0;
+          const nHc = l2.filter((p) => p.pessoal_2026 + p.pessoal_2027 + p.pessoal_realizado_2026 > 0).length;
+          const tira = (k, kp) => soma(l2, k) - (temHc ? hc(kp) : 0);
+          const linhas = [
             <tr key={nome + "|" + o} className="ger-origem">
-              {celulas(soma(l2, "total_2026") - hc("pessoal_2026"), soma(l2, "realizado_2026") - hc("pessoal_realizado_2026"), soma(l2, "total_2027") - hc("pessoal_2027"), l2.length, <td style={{ paddingLeft: 34 }}>{o}</td>)}
-              {status && <td />}
-            </tr>,
-            <tr key={nome + "|" + o + "|hc"} className="ger-origem ger-hc">
-              {celulas(hc("pessoal_2026"), hc("pessoal_realizado_2026"), hc("pessoal_2027"), hcTem, <td style={{ paddingLeft: 56 }}>{o} Headcount</td>)}
+              {celulas(tira("total_2026", "pessoal_2026"), tira("realizado_2026", "pessoal_realizado_2026"), tira("total_2027", "pessoal_2027"), l2.length, <td style={{ paddingLeft: 34 }}>{o}</td>)}
               {status && <td />}
             </tr>];
+          if (temHc) linhas.push(
+            <tr key={nome + "|" + o + "|hc"} className="ger-origem ger-hc">
+              {celulas(hc("pessoal_2026"), hc("pessoal_realizado_2026"), hc("pessoal_2027"), nHc, <td style={{ paddingLeft: 56 }}>{o} Headcount</td>)}
+              {status && <td />}
+            </tr>);
+          return linhas;
         })}
       </React.Fragment>);
   };
   return (
     <section className="cartao">
       <h3>Por gerência e origem do recurso: 2026 e plano 2027</h3>
-      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz todas as origens de recurso, cada uma com a linha de headcount separada (pessoal), sem somar uma na outra. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
+      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz todas as origens de recurso. O headcount fica todo nos projetos da Diretoria Adjunta e aparece em linha separada ("Fomento Headcount"), sem somar na linha da origem. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
       <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande">
         <thead><tr><th>Gerência</th><th className="n">Projetos</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Variação</th><th className="n">Var. %</th><th style={{ width: 120 }}>Peso</th>{status && <th>Planejamento</th>}</tr></thead>
         <tbody>{nomes.map((n) => linha(n, g[n], false))}</tbody>
