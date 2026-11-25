@@ -7,7 +7,7 @@ const soma = (l, k) => l.reduce((a, p) => a + p[k], 0);
 const vp = (de, para) => (de ? (((para - de) / de) * 100).toFixed(0).replace(".", ",") + "%" : "novo");
 
 /** Por gerência: o que foi aprovado e executado em 2026 e o que se planeja para 2027, com a situação do planejamento (admin). */
-export function PorGerencia({ ps, status }) {
+export function PorGerencia({ ps, status, nExtintos = 0 }) {
   const [fechado, setFechado] = useState({});
   const g = {};
   ps.forEach((p) => { (g[p.gerencia || vazio] ||= []).push(p); });
@@ -41,7 +41,7 @@ export function PorGerencia({ ps, status }) {
   return (
     <section className="cartao">
       <h3>Por gerência e origem do recurso: 2026 e plano 2027</h3>
-      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz a soma por origem de recurso logo abaixo. Clique na gerência para recolher ou abrir.</p>
+      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz a soma por origem de recurso logo abaixo. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
       <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande">
         <thead><tr><th>Gerência</th><th className="n">Projetos</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Variação</th><th className="n">Var. %</th><th style={{ width: 120 }}>Peso</th>{status && <th>Planejamento</th>}</tr></thead>
         <tbody>{nomes.map((n) => linha(n, g[n], false))}</tbody>

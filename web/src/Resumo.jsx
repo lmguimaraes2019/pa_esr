@@ -108,7 +108,9 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
   if (erro) return <p className="erro">{erro}</p>;
   if (!r) return <p>Carregando…</p>;
   const max = Math.max(1, ...r.mensal_plano.map((m) => m.valor));
-  const psVisiveis = (projetos || []).filter((p) => p.tipo !== "receita" && !p.extinto && (conting || !p.contingenciado) && (!ger || (p.gerencia || "Sem gerência definida") === ger));
+  const psTodos = (projetos || []).filter((p) => p.tipo !== "receita" && (conting || !p.contingenciado) && (!ger || (p.gerencia || "Sem gerência definida") === ger));
+  const psVisiveis = psTodos.filter((p) => !p.extinto);      // lista de projetos do plano: sem as ações extintas
+  const nExtintos = psTodos.length - psVisiveis.length;
   const statusGer = admin && plano && plano.gerencias ? Object.fromEntries(plano.gerencias.filter((g) => g.nivel === "gerencia").map((g) => [g.gerencia || "Sem gerência definida", { pendencias: g.pendencias, concluida: g.concluido }])) : null;
   const s = r.linhas_status;
   const delta = r.total_plano - r.total_base;
@@ -132,8 +134,8 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
         <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receita menos despesa" tom={resultado < 0 ? "rneg" : "rpos"} />
         {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} tom={r.total_plano <= r.teto ? "rpos" : "rneg"} />}
       </div>
-      {projetos && <PorGerencia ps={psVisiveis} status={statusGer} />}
-      {projetos && fluxo && fluxo.origens.length > 0 && <OrigemDosRecursos d={fluxo} ps={psVisiveis} />}
+      {projetos && <PorGerencia ps={psTodos} status={statusGer} nExtintos={nExtintos} />}
+      {projetos && fluxo && fluxo.origens.length > 0 && <OrigemDosRecursos d={fluxo} ps={psTodos} />}
       <section className="cartao"><h3>Calendarização mensal do plano 2027 <span className="mudo" style={{ fontSize: ".8rem", fontWeight: 400 }}>(R$ mi)</span></h3>
           <div className="meses compacto">{r.mensal_plano.map((m) => (
             <div key={m.mes} title={fmt(m.valor)}><small className="val">{(m.valor / 1e6).toFixed(2).replace(".", ",")}</small><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
