@@ -100,7 +100,7 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
   const [erro, setErro] = useState("");
   const [ger, setGer] = useState("");
   const [gerencias, setGerencias] = useState([]);
-  const [conting, setConting] = useState(true);
+  const [conting, setConting] = useState(false);      // contingenciados ficam fora dos números, a menos que o usuário marque
   const [origens, setOrigens] = useState([]);
   useEffect(() => { api("/listas").then((d) => setOrigens(d.origens || [])).catch(() => {}); }, []);
   const fluxo = useFluxo(ger, conting);
