@@ -513,3 +513,4 @@ label.est-gtit input{width:auto;flex:none}
 .peso{display:flex;align-items:center;gap:8px;font-size:.85rem}.peso-barra{flex:1;height:8px;background:#e4e8ef;border-radius:4px;overflow:hidden}.peso-barra i{display:block;height:100%;background:var(--azul)}
 .meses.compacto .col{height:44px}.meses.compacto{gap:6px}.meses.compacto small.val{font-size:.8rem;color:var(--texto,#222);font-weight:600;min-height:0;margin-bottom:3px}
 .tab tr.conting td{background:#fff4e0}.tab tr.conting td:first-child{box-shadow:inset 4px 0 0 #E87722}.tab.clic tr.conting:hover td{background:#ffe9c2}
+.tab tr.ger-linha-res td{background:#f3f6fb}.tab tr.ger-origem td{font-size:.92rem;color:#3c4656;background:#fff}.tab tr.ger-origem td strong{font-weight:600}.tab tr.ger-linha-res .seta{display:inline-block;width:14px;color:var(--azul)}
