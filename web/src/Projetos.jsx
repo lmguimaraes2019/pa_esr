@@ -88,7 +88,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
   const ps = todos.filter((p) => p.tipo !== "receita" && (!fGer || (p.gerencia || "Sem gerência definida") === fGer) && (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
-  const inativo = (p) => p.extinto || p.contingenciado;      // sem previsão de execução em 2027
+  const inativo = (p) => p.extinto;      // sem previsão de execução em 2027; os contingenciados ficam na tabela das gerências, em outra cor
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
   const ordem = (a, b) => a.localeCompare(b, "pt-BR");
   const agrupa = (lista, pre) => {
@@ -112,7 +112,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
     : p.contingenciado ? <span className="tag aviso" title="Orçamento contingenciado, não liberado para execução">contingenciado</span>
     : p.pendencias.length > 0 ? <span className="tag aviso" title={p.pendencias.join(", ")}>{p.pendencias.length} {p.pendencias.length === 1 ? "pendência" : "pendências"}</span> : null;
   const linhaProjeto = (p) => (
-    <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido && !p.extinto ? "concluido " : "") + (p.extinto ? "extinta" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
+    <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido && !p.extinto ? "concluido " : "") + (p.extinto ? "extinta " : "") + (p.contingenciado && !p.extinto ? "conting" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
       <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td>
       <td>{p.descricao}<div className="sub-proj"><span className={"tag " + classeFinalidade(p.finalidade)} title="Finalidade do orçamento">{nomeFinalidade(p.finalidade)}</span>
         {estado(p)}{p.replicado_para && <span className="mudo"> migrado para {p.replicado_para}</span>}{p.replicado_de && <span className="mudo"> replicado de {p.replicado_de}</span>}</div></td>
@@ -168,8 +168,8 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
       {!ps.length && <p className="mudo">{todos.length ? "Nenhum projeto neste filtro." : "Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima."}</p>}
       {gAtivos.length > 0 && tabela(ativos, gAtivos)}
       {gInativos.length > 0 && <>
-        <h3 className="secao">Projetos extintos ou contingenciados</h3>
-        <p className="mudo" style={{ marginTop: 0 }}>Sem previsão de execução em 2027: as ações extintas migram suas entregas para outros projetos, e os orçamentos contingenciados não estão liberados para execução.</p>
+        <h3 className="secao">Projetos extintos</h3>
+        <p className="mudo" style={{ marginTop: 0 }}>Sem previsão de execução em 2027: as ações extintas migram suas entregas para outros projetos.</p>
         {tabela(inativos, gInativos)}
       </>}
       </>}

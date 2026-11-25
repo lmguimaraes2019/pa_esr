@@ -1,0 +1,63 @@
+import React, { useState } from "react";
+import { fmt } from "./api.js";
+import { Delta, pct, nomeFinalidade, classeFinalidade } from "./ui.jsx";
+
+const vazio = "Sem gerência definida";
+const soma = (l, k) => l.reduce((a, p) => a + p[k], 0);
+const vp = (de, para) => (de ? (((para - de) / de) * 100).toFixed(0).replace(".", ",") + "%" : "novo");
+
+/** Por gerência: o que foi aprovado e executado em 2026 e o que se planeja para 2027, com a situação do planejamento (admin). */
+export function PorGerencia({ ps, status }) {
+  const g = {};
+  ps.forEach((p) => { (g[p.gerencia || vazio] ||= []).push(p); });
+  const nomes = Object.keys(g).sort((a, b) => (a === "Diretoria Adjunta" ? -1 : b === "Diretoria Adjunta" ? 1 : a === vazio ? 1 : b === vazio ? -1 : a.localeCompare(b, "pt-BR")));
+  const tot27 = soma(ps, "total_2027");
+  const sit = (n) => status && status[n];
+  const linha = (nome, l, total) => {
+    const a = soma(l, "total_2026"), e = soma(l, "realizado_2026"), p27 = soma(l, "total_2027");
+    const s = !total && sit(nome);
+    return (
+      <tr key={nome}><td><strong>{nome}</strong></td><td className="n">{l.length}</td><td className="n">{fmt(a)}</td><td className="n">{fmt(e)}</td><td className="n">{pct(e, a)}</td>
+        <td className="n"><strong>{fmt(p27)}</strong></td><td className="n"><Delta de={a} para={p27} /></td><td className="n">{vp(a, p27)}</td>
+        <td><span className="peso"><span className="peso-barra"><i style={{ width: Math.max(tot27 ? p27 / tot27 * 100 : 0, p27 > 0 ? 2 : 0) + "%" }} /></span>{tot27 ? (p27 / tot27 * 100).toFixed(0) : 0}%</span></td>
+        {status && <td>{total ? "" : s ? (s.concluida ? <span className="estado ok">concluída</span> : <span className={"estado " + (s.pendencias ? "pend" : "neutro")}>{s.pendencias ? `${s.pendencias} pendência(s)` : "em andamento"}</span>) : <span className="mudo">-</span>}</td>}
+      </tr>);
+  };
+  return (
+    <section className="cartao">
+      <h3>Por gerência: 2026 e plano 2027</h3>
+      <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande">
+        <thead><tr><th>Gerência</th><th className="n">Projetos</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Variação</th><th className="n">Var. %</th><th style={{ width: 120 }}>Peso</th>{status && <th>Planejamento</th>}</tr></thead>
+        <tbody>{nomes.map((n) => linha(n, g[n], false))}</tbody>
+        <tfoot>{linha("Total", ps, true)}</tfoot>
+      </table></div>
+    </section>);
+}
+
+/** Os projetos do plano: nome, gerência, origem do recurso, finalidade (propósito) e os valores de 2026 e 2027. */
+export function ProjetosDoPlano({ ps, abrir, verTodos }) {
+  const [todos, setTodos] = useState(false);
+  const lista = [...ps].sort((a, b) => b.total_2027 - a.total_2027);
+  const mostra = todos ? lista : lista.slice(0, 12);
+  const conting = ps.filter((p) => p.contingenciado);
+  return (
+    <section className="cartao">
+      <h3>Projetos do plano 2027 <span className="contagem">{ps.length}</span></h3>
+      <p className="mudo" style={{ marginTop: 0 }}>Do maior para o menor valor em 2027. {conting.length > 0 && <>Em laranja, os {conting.length} contingenciados ({fmt(soma(conting, "total_2027"))} em 2027), não liberados para execução. </>}Clique em um projeto para abrir.</p>
+      <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande tab-proj">
+        <thead><tr><th>Projeto</th><th>Gerência</th><th>Origem</th><th>Finalidade</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Variação</th></tr></thead>
+        <tbody>{mostra.map((p) => (
+          <tr key={p.orcamento} className={"proj " + (p.contingenciado ? "conting" : "")} onClick={() => abrir(p.orcamento)} style={{ cursor: "pointer" }}>
+            <td><strong>{p.descricao}</strong><div className="mudo" style={{ fontSize: ".78rem" }}>{p.novo ? "novo" : p.orcamento}{p.contingenciado && " | contingenciado"}</div></td>
+            <td>{p.gerencia || vazio}</td><td>{p.origem}</td>
+            <td><span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span></td>
+            <td className="n">{fmt(p.total_2026)}</td><td className="n">{fmt(p.realizado_2026)}</td><td className="n">{pct(p.realizado_2026, p.total_2026)}</td>
+            <td className="n"><strong>{fmt(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td></tr>))}</tbody>
+        <tfoot><tr><td colSpan={4}>Total ({ps.length})</td><td className="n">{fmt(soma(ps, "total_2026"))}</td><td className="n">{fmt(soma(ps, "realizado_2026"))}</td><td className="n">{pct(soma(ps, "realizado_2026"), soma(ps, "total_2026"))}</td><td className="n">{fmt(soma(ps, "total_2027"))}</td><td className="n"><Delta de={soma(ps, "total_2026")} para={soma(ps, "total_2027")} /></td></tr></tfoot>
+      </table></div>
+      <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+        {lista.length > 12 && <button type="button" onClick={() => setTodos(!todos)}>{todos ? "Mostrar só os 12 maiores" : `Mostrar todos os ${lista.length} projetos`}</button>}
+        <button type="button" onClick={verTodos}>Abrir a página de projetos</button>
+      </div>
+    </section>);
+}

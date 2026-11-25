@@ -3,7 +3,8 @@ import { api, fmt, mi } from "./api.js";
 import { Kpi, Delta, pct, Selo, FiltroGerencia } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 import OutrosProjetos from "./OutrosProjetos.jsx";
-import useFluxo, { OrigemDosRecursos, CustoPorGerencia } from "./FluxoRecursos.jsx";
+import useFluxo, { OrigemDosRecursos } from "./FluxoRecursos.jsx";
+import { PorGerencia, ProjetosDoPlano } from "./PainelResumo.jsx";
 
 function Quadro({ itens, rotulo, aninhado }) {
   const [fechado, setFechado] = useState({});
@@ -100,10 +101,14 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
   const [ger, setGer] = useState("");
   const [gerencias, setGerencias] = useState([]);
   const fluxo = useFluxo(ger);
+  const [projetos, setProjetos] = useState(null);
+  useEffect(() => { api("/projetos").then(setProjetos).catch(() => setProjetos([])); }, []);
   useEffect(() => { api("/resumo" + (ger ? `?gerencia=${encodeURIComponent(ger)}` : "")).then((x) => { setR(x); if (!ger) setGerencias(x.gerencias || []); }).catch((e) => setErro(e.message)); }, [ger]);
   if (erro) return <p className="erro">{erro}</p>;
   if (!r) return <p>Carregando…</p>;
   const max = Math.max(1, ...r.mensal_plano.map((m) => m.valor));
+  const psVisiveis = (projetos || []).filter((p) => p.tipo !== "receita" && !p.extinto && (!ger || (p.gerencia || "Sem gerência definida") === ger));
+  const statusGer = admin && plano && plano.gerencias ? Object.fromEntries(plano.gerencias.filter((g) => g.nivel === "gerencia").map((g) => [g.gerencia || "Sem gerência definida", { pendencias: g.pendencias, concluida: g.concluido }])) : null;
   const s = r.linhas_status;
   const delta = r.total_plano - r.total_base;
   const receitas = ger ? (fluxo ? fluxo.total_receita : 0) : (plano ? plano.etapas.receitas.total : 0);
@@ -115,17 +120,22 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
       <h3 className="secao">Visão executiva do orçamento{ger ? `: ${ger}` : ""}</h3>
       {gerencias.length > 1 && <div className="filtros" style={{ margin: "0 0 10px" }}><FiltroGerencia valor={ger} onChange={setGer} opcoes={gerencias} largura={300} />{ger && <span className="mudo">Os números abaixo são só dos projetos desta gerência.</span>}</div>}
       <div className="kpis">
+        <Kpi rotulo="Aprovado 2026" valor={mi(r.total_base)} tom="f26" sub="orçamento do ano corrente" />
+        <Kpi rotulo="Executado 2026" valor={mi(r.total_realizado)} tom="f26" sub={`${pct(r.total_realizado, r.total_base)} do aprovado`} />
         <Kpi rotulo="Despesa planejada 2027" valor={mi(r.total_plano)} tom="f27" sub={<>{r.total_base ? ((delta / r.total_base) * 100).toFixed(1).replace(".", ",") + "% sobre o aprovado de 2026" : ""}</>} />
         <Kpi rotulo="Receita prevista 2027" valor={mi(receitas)} tom="f27" sub={plano ? `${plano.etapas.receitas.n} lançamento(s)` : ""} />
         <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receita menos despesa" tom={resultado < 0 ? "rneg" : "rpos"} />
         {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} tom={r.total_plano <= r.teto ? "rpos" : "rneg"} />}
-        <Kpi rotulo="Aprovado 2026" valor={mi(r.total_base)} tom="f26" sub={`${mi(r.total_realizado)} realizados (${pct(r.total_realizado, r.total_base)})`} />
       </div>
-      {fluxo && fluxo.origens.length > 0 && <div className="duas-colunas"><OrigemDosRecursos d={fluxo} /><CustoPorGerencia d={fluxo} /></div>}
-      <section className="cartao"><h3>Calendarização mensal do plano 2027 <span className="mudo" style={{ fontSize: ".8rem", fontWeight: 400 }}>(R$ mi)</span></h3>
-        <div className="meses compacto">{r.mensal_plano.map((m) => (
-          <div key={m.mes} title={fmt(m.valor)}><small className="val">{(m.valor / 1e6).toFixed(2).replace(".", ",")}</small><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
-      </section>
+      {projetos && <PorGerencia ps={psVisiveis} status={statusGer} />}
+      <div className="duas-colunas">
+        {fluxo && fluxo.origens.length > 0 && <OrigemDosRecursos d={fluxo} />}
+        <section className="cartao"><h3>Calendarização mensal do plano 2027 <span className="mudo" style={{ fontSize: ".8rem", fontWeight: 400 }}>(R$ mi)</span></h3>
+          <div className="meses compacto">{r.mensal_plano.map((m) => (
+            <div key={m.mes} title={fmt(m.valor)}><small className="val">{(m.valor / 1e6).toFixed(2).replace(".", ",")}</small><div className="col"><span style={{ height: (m.valor / max) * 100 + "%" }} /></div><small>{m.mes.slice(0, 3)}</small></div>))}</div>
+        </section>
+      </div>
+      {projetos && <ProjetosDoPlano ps={psVisiveis} abrir={(o) => ir("projetos", o)} verTodos={() => ir("projetos")} />}
       <Cobertura admin={admin} />
       <EstrategiaFinanciamento />
       {r.extintos && r.extintos.n > 0 && (
