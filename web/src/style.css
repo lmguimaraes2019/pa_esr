@@ -514,3 +514,7 @@ label.est-gtit input{width:auto;flex:none}
 .meses.compacto .col{height:44px}.meses.compacto{gap:6px}.meses.compacto small.val{font-size:.8rem;color:var(--texto,#222);font-weight:600;min-height:0;margin-bottom:3px}
 .tab tr.conting td{background:#fff4e0}.tab tr.conting td:first-child{box-shadow:inset 4px 0 0 #E87722}.tab.clic tr.conting:hover td{background:#ffe9c2}
 .tab tr.ger-linha-res td{background:#f3f6fb}.tab tr.ger-origem td{font-size:.92rem;color:#3c4656;background:#fff}.tab tr.ger-origem td strong{font-weight:600}.tab tr.ger-linha-res .seta{display:inline-block;width:14px;color:var(--azul)}
+.pco-destaque{background:#fff4e5;border:2px solid #E87722;border-left-width:8px}
+.pco-destaque>h3{color:#a8480a;font-size:1.2rem}
+.pco-destaque .pco-conf{background:#fff;border:1px solid #f0d2b0;border-radius:8px;padding:12px 14px;margin-top:10px}
+.pco-destaque .pco-conf h4{margin:0 0 6px}

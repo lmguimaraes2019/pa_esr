@@ -11,7 +11,7 @@ import Headcount from "./Headcount.jsx";
 import Execucao from "./Execucao.jsx";
 import Exposicao from "./Exposicao.jsx";
 import Relatorios from "./Relatorios.jsx";
-import { Premissas, Usuarios, Exportar, Auditoria, Realizado, Referencias } from "./Admin.jsx";
+import { Premissas, Usuarios, Auditoria, Realizado, Referencias } from "./Admin.jsx";
 
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -31,7 +31,7 @@ export default function App() {
   if (user.trocar_senha) return <TrocarSenha obrigatoria onFeito={carregar} />;
 
   const admin = user.perfil === "admin";
-  const ADMIN = [["premissas", "Premissas"], ["realizado", "Realizado 2026"], ["referencias", "Tabelas de referência"], ["exportar", "Exportar para o PMO"], ["usuarios", "Usuários"], ["auditoria", "Histórico"]];
+  const ADMIN = [["premissas", "Premissas"], ["realizado", "Realizado 2026"], ["referencias", "Tabelas de referência"], ["usuarios", "Usuários"], ["auditoria", "Histórico"]];
   const ETAPAS = [["projetos", "Despesas"], ["receitas", "Receitas"], ["viagens", "Viagens"], ["eventos", "Eventos"], ["headcount", "Headcount"], ["exposicao", "Exposição ao dólar"], ["execucao", "Execução 2026"]];
   const emPlano = ETAPAS.some(([k]) => k === aba);
   const emAdmin = ADMIN.some(([k]) => k === aba);
@@ -57,7 +57,7 @@ export default function App() {
         {aba === "projetos" && (proj
           ? <Projeto orcamento={proj} admin={admin} voltar={() => setProj(null)} irViagens={() => ir("viagens")} irEtapa={(k) => ir(k)} irProjeto={(o) => ir("projetos", o)} />
           : <Projetos abrir={setProj} semEntregas={soEntregas === "entregas" && plano ? plano.projetos.filter((p) => p.entregas.pendentes > 0).map((p) => p.orcamento) : null} semFonte={soEntregas === "financiamento" && plano ? plano.projetos.filter((p) => p.financiamento.pendentes > 0).map((p) => p.orcamento) : null} limparFiltro={() => setSoEntregas(false)} />)}
-        {aba === "relatorios" && <Relatorios />}
+        {aba === "relatorios" && <Relatorios pmo={admin || user.cargo === "pmo"} irProjeto={(o) => ir("projetos", o)} />}
         {aba === "receitas" && <Receitas admin={admin} irProjeto={(o) => ir("projetos", o)} />}
         {aba === "eventos" && <Eventos irProjeto={(o) => ir("projetos", o)} />}
         {aba === "exposicao" && <Exposicao irProjeto={(o) => ir("projetos", o)} />}
@@ -67,7 +67,6 @@ export default function App() {
         {admin && aba === "premissas" && <Premissas />}
         {admin && aba === "realizado" && <Realizado />}
         {admin && aba === "referencias" && <Referencias />}
-        {admin && aba === "exportar" && <Exportar irProjeto={(o) => ir("projetos", o)} />}
         {admin && aba === "usuarios" && <Usuarios />}
         {admin && aba === "auditoria" && <Auditoria />}
       </main>

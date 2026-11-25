@@ -1462,3 +1462,20 @@ def test_conexao_estrategica_ignora_contingenciados(client):
     cob = client.get("/api/estrategia/cobertura").json()
     assert orc not in [x["orcamento"] for i in cob["itens"] for x in i["lista_projetos"]]
     assert orc not in [x["orcamento"] for x in cob["sem_vinculo"]]
+
+
+def test_template_do_pco_liberado_para_o_pmo(client):
+    entrar(client)
+    ger = client.get("/api/usuarios").json()["gerentes"][0]
+    r = client.post("/api/usuarios", json={"login": "pmo.t", "nome": "Pessoa PMO", "perfil": "gestor", "cargo": "pmo", "gerencia": "PMO", "gerentes": [ger]})
+    assert r.status_code == 201, r.text
+    gestor_liberado(client, "pmo.t")
+    assert client.get("/api/me").json()["cargo"] == "pmo"
+    assert client.get("/api/export/preflight").status_code == 200
+    r = client.get("/api/export/xlsx")
+    assert r.status_code in (200, 409)
+    client.post("/api/logout")
+    entrar(client)
+    gestor_liberado(client)       # luciana não é do PMO
+    assert client.get("/api/export/preflight").status_code == 403
+    assert client.get("/api/export/xlsx").status_code == 403

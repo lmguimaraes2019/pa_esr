@@ -50,6 +50,13 @@ def exige_admin(u: dict = Depends(usuario_liberado)) -> dict:
     return u
 
 
+def exige_pmo(u: dict = Depends(usuario_liberado)) -> dict:
+    """Administrador ou usuário do PMO (cargo pmo)."""
+    if u["perfil"] != "admin" and u.get("cargo") != "pmo":
+        raise HTTPException(403, "Apenas o administrador ou o PMO podem fazer isso.")
+    return u
+
+
 def permitidos(c: sqlite3.Connection, u: dict, extintos: bool = False) -> set[str]:
     """Orçamentos que o usuário enxerga. As ações extintas (que não existirão no PA 2027) ficam de fora do plano 2027,
     das pendências e das exportações; o aprovado e o executado de 2026 delas continuam contando (extintos=True)."""
@@ -229,7 +236,7 @@ class UsuarioPatch(BaseModel):
 
 def _publico(u: dict) -> dict:
     return {"id": u["id"], "login": u["login"], "nome": u["nome"], "perfil": u["perfil"],
-            "gerente": u["gerente"], "trocar_senha": bool(u["trocar_senha"])}
+            "gerente": u["gerente"], "cargo": u.get("cargo") or "", "trocar_senha": bool(u["trocar_senha"])}
 
 
 @router.post("/login")
@@ -1106,14 +1113,14 @@ def _aviso(a: export_xlsx.Aviso) -> dict:
 
 
 @router.get("/export/preflight")
-def preflight(_: dict = Depends(exige_admin), c: sqlite3.Connection = Depends(_conn)):
+def preflight(_: dict = Depends(exige_pmo), c: sqlite3.Connection = Depends(_conn)):
     r = export_xlsx.preparar(c)
     return {"bloqueado": r.bloqueado, "linhas": len(r.linhas),
             "total": _arred(sum(sum(x["meses"]) for x in r.linhas)), "avisos": [_aviso(a) for a in r.avisos]}
 
 
 @router.get("/export/xlsx")
-def exportar(u: dict = Depends(exige_admin)):
+def exportar(u: dict = Depends(exige_pmo)):
     with tx() as c:
         r = export_xlsx.preparar(c)
         if r.bloqueado:

@@ -112,11 +112,12 @@ export function Exportar({ irProjeto }) {
   useEffect(() => { carregar(); }, []);
   if (!pre) return <p>Conferindo…</p>;
   return (
-    <>
-      <h2>Exportar para o PMO da DSS (Template Planejamento Anual 2027)</h2>
+    <section className="cartao pco-destaque">
+      <h3>1. Relatório para importação no PCO (Template Planejamento Anual 2027)</h3>
+      <p>Planilha oficial do PMO da DSS, com a aba Calendarização preenchida, para importar no PCO. Confira as pendências antes de baixar.</p>
       <div className="kpis"><div className="kpi"><span>Linhas</span><strong>{pre.linhas}</strong></div><div className="kpi"><span>Total</span><strong>{fmt(pre.total)}</strong></div></div>
-      <section className="cartao">
-        <h3>Conferência</h3>
+      <div className="pco-conf">
+        <h4>Conferência</h4>
         {pre.avisos.length === 0 && <p className="ok">Nenhuma pendência.</p>}
         <ul className="avisos">{pre.avisos.map((a, i) => (
           <li key={i} className={a.nivel}>{a.nivel === "erro" ? "Bloqueia: " : "Aviso: "}{a.orcamento && <button className="link" onClick={() => irProjeto(a.orcamento)}>Orçamento {a.orcamento}</button>} {a.mensagem}</li>))}</ul>
@@ -125,8 +126,8 @@ export function Exportar({ irProjeto }) {
           <button onClick={carregar}>Conferir de novo</button>
         </div>
         <p className="mudo">O arquivo é o template oficial com a aba Calendarização preenchida. Ao abrir no Excel, as fórmulas de conta e total são recalculadas.</p>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
 
