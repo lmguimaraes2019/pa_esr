@@ -442,6 +442,9 @@ def listar_projetos(u: dict, c: sqlite3.Connection, incluir_fora: bool = False) 
             (SELECT COUNT(*) FROM linhas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS n_linhas,
             (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM receitas WHERE ciclo={config.CICLO_PLANO} AND orcamento=p.orcamento) AS t_receitas,
             (SELECT COALESCE(SUM(realizado),0) FROM execucao WHERE orcamento=p.orcamento) AS realizado,
+            (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas l JOIN contas k ON k.codigo=l.conta_codigo WHERE l.ciclo={config.CICLO_BASE} AND l.orcamento=p.orcamento AND k.grupo='Pessoal') AS pessoal_base,
+            (SELECT COALESCE(SUM({SOMA_MESES}),0) FROM linhas l JOIN contas k ON k.codigo=l.conta_codigo WHERE l.ciclo={config.CICLO_PLANO} AND l.orcamento=p.orcamento AND k.grupo='Pessoal') AS pessoal_plano,
+            (SELECT COALESCE(SUM(e.realizado),0) FROM execucao e JOIN contas k ON k.codigo=e.conta_codigo WHERE e.orcamento=p.orcamento AND k.grupo='Pessoal') AS pessoal_real,
             (SELECT COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=p.orcamento) AS empenhado
             FROM projetos p WHERE p.orcamento IN ({marks}) ORDER BY p.novo DESC, {ORIGEM_27}, p.descricao""", ids).fetchall()
     # gestor que já marcou o planejamento como concluído (usuário ligado ao gerente do projeto, que não seja coordenador)
@@ -460,6 +463,7 @@ def listar_projetos(u: dict, c: sqlite3.Connection, incluir_fora: bool = False) 
              "receitas_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else 0)),
              "resultado_2027": 0.0 if r["extinto"] else _arred(r["t_receitas"] + (r["t_plano"] if r["tipo"] == "receita" else -r["t_plano"])),
              "realizado_2026": _arred(r["realizado"]),
+             "pessoal_2026": _arred(r["pessoal_base"]), "pessoal_2027": _arred(r["pessoal_plano"]) if not r["extinto"] and r["tipo"] != "receita" else 0.0, "pessoal_realizado_2026": _arred(r["pessoal_real"]),
              "empenhado_2026": _arred(r["empenhado"]),
              "pendencias": (["Nº do Projeto"] if not r["n_projeto"] and r["n_linhas"] and not r["contingenciado"] and not r["novo"] and not r["extinto"] else [])
                            + (["Fonte de financiamento"] if r["tipo"] == "despesa" and r["t_plano"] and not r["contingenciado"] and not r["extinto"]

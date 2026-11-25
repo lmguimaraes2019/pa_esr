@@ -1497,3 +1497,11 @@ def test_template_do_pco_sem_contingenciados_nem_projeto_da_dss_e_planilha_compl
     textos = [str(c.value) for row in wb["Sumário"].iter_rows() for c in row if c.value is not None]
     assert cont["orcamento"] in textos and "Contingenciado" in textos
     assert dss["orcamento"] in textos and "Informativo (DSS)" in textos
+
+
+def test_projetos_trazem_o_valor_de_pessoal_separado(client):
+    entrar(client)
+    ps = client.get("/api/projetos").json()
+    assert all(k in ps[0] for k in ("pessoal_2026", "pessoal_2027", "pessoal_realizado_2026"))
+    assert all(p["pessoal_2027"] <= p["total_2027"] + 0.01 for p in ps)
+    assert all(p["pessoal_2026"] <= p["total_2026"] + 0.01 for p in ps)

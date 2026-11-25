@@ -522,3 +522,4 @@ label.est-gtit input{width:auto;flex:none}
 .pco-status.ok{background:#e3f4ea;color:#1f6b45;border:1px solid #9bd3b4}.pco-status.bloq{background:#fbe5e3;color:#a1261b;border:1px solid #efb0aa}
 .pco-conf.pco-bloq{border-color:#efb0aa;background:#fff7f6}
 .pco-destaque .tab th{font-size:.72rem}.pco-destaque .tab td{padding:7px 10px}
+.tab tr.ger-hc td{font-size:.86rem;color:#6a7384;font-style:italic;background:#fafbfd}

@@ -7,7 +7,7 @@ const soma = (l, k) => l.reduce((a, p) => a + p[k], 0);
 const vp = (de, para) => (de ? (((para - de) / de) * 100).toFixed(0).replace(".", ",") + "%" : "novo");
 
 /** Por gerência: o que foi aprovado e executado em 2026 e o que se planeja para 2027, com a situação do planejamento (admin). */
-export function PorGerencia({ ps, status, nExtintos = 0 }) {
+export function PorGerencia({ ps, status, nExtintos = 0, origens = [] }) {
   const [fechado, setFechado] = useState({});
   const g = {};
   ps.forEach((p) => { (g[p.gerencia || vazio] ||= []).push(p); });
@@ -21,9 +21,7 @@ export function PorGerencia({ ps, status, nExtintos = 0 }) {
   const linha = (nome, l, total) => {
     const a = soma(l, "total_2026"), e = soma(l, "realizado_2026"), p27 = soma(l, "total_2027");
     const s = !total && sit(nome);
-    const orig = {};
-    l.forEach((p) => { (orig[p.origem || "Sem origem"] ||= []).push(p); });
-    const onomes = Object.keys(orig).sort((x, y) => soma(orig[y], "total_2027") - soma(orig[x], "total_2027"));
+    const ordem = [...origens, ...[...new Set(ps.map((p) => p.origem || "Sem origem"))].filter((o) => !origens.includes(o))];      // mesma ordem e mesmas origens em todas as gerências
     const aberto = !total && !fechado[nome];
     return (
       <React.Fragment key={nome}>
@@ -31,17 +29,26 @@ export function PorGerencia({ ps, status, nExtintos = 0 }) {
           {celulas(a, e, p27, l.length, <td><span className="seta">{total ? "" : aberto ? "▾" : "▸"}</span> <strong>{nome}</strong></td>)}
           {status && <td>{total ? "" : s ? (s.concluida ? <span className="estado ok">concluída</span> : <span className={"estado " + (s.pendencias ? "pend" : "neutro")}>{s.pendencias ? `${s.pendencias} pendência(s)` : "em andamento"}</span>) : <span className="mudo">-</span>}</td>}
         </tr>
-        {aberto && onomes.map((o) => (
-          <tr key={nome + "|" + o} className="ger-origem">
-            {celulas(soma(orig[o], "total_2026"), soma(orig[o], "realizado_2026"), soma(orig[o], "total_2027"), orig[o].length, <td style={{ paddingLeft: 34 }}>{o}</td>)}
-            {status && <td />}
-          </tr>))}
+        {aberto && ordem.flatMap((o) => {
+          const l2 = l.filter((p) => (p.origem || "Sem origem") === o);
+          const hc = (k) => soma(l2, k);
+          const hcTem = l2.filter((p) => p.pessoal_2026 + p.pessoal_2027 + p.pessoal_realizado_2026 > 0).length;
+          return [
+            <tr key={nome + "|" + o} className="ger-origem">
+              {celulas(soma(l2, "total_2026") - hc("pessoal_2026"), soma(l2, "realizado_2026") - hc("pessoal_realizado_2026"), soma(l2, "total_2027") - hc("pessoal_2027"), l2.length, <td style={{ paddingLeft: 34 }}>{o}</td>)}
+              {status && <td />}
+            </tr>,
+            <tr key={nome + "|" + o + "|hc"} className="ger-origem ger-hc">
+              {celulas(hc("pessoal_2026"), hc("pessoal_realizado_2026"), hc("pessoal_2027"), hcTem, <td style={{ paddingLeft: 56 }}>{o} Headcount</td>)}
+              {status && <td />}
+            </tr>];
+        })}
       </React.Fragment>);
   };
   return (
     <section className="cartao">
       <h3>Por gerência e origem do recurso: 2026 e plano 2027</h3>
-      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz a soma por origem de recurso logo abaixo. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
+      <p className="mudo" style={{ margin: "0 0 8px", fontSize: ".85rem" }}>Cada gerência traz todas as origens de recurso, cada uma com a linha de headcount separada (pessoal), sem somar uma na outra. Clique na gerência para recolher ou abrir.{nExtintos > 0 && <> Inclui {nExtintos} ação(ões) extinta(s), que mantêm o aprovado e o executado de 2026 e têm plano 2027 zerado.</>}</p>
       <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande">
         <thead><tr><th>Gerência</th><th className="n">Projetos</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th><th className="n">Variação</th><th className="n">Var. %</th><th style={{ width: 120 }}>Peso</th>{status && <th>Planejamento</th>}</tr></thead>
         <tbody>{nomes.map((n) => linha(n, g[n], false))}</tbody>

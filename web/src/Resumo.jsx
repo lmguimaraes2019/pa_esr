@@ -101,6 +101,8 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
   const [ger, setGer] = useState("");
   const [gerencias, setGerencias] = useState([]);
   const [conting, setConting] = useState(true);
+  const [origens, setOrigens] = useState([]);
+  useEffect(() => { api("/listas").then((d) => setOrigens(d.origens || [])).catch(() => {}); }, []);
   const fluxo = useFluxo(ger, conting);
   const [projetos, setProjetos] = useState(null);
   useEffect(() => { api("/projetos").then(setProjetos).catch(() => setProjetos([])); }, []);
@@ -134,7 +136,7 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
         <Kpi rotulo="Resultado 2027" valor={mi(resultado)} sub="receita menos despesa" tom={resultado < 0 ? "rneg" : "rpos"} />
         {r.teto > 0 && <Kpi rotulo="Teto PRO-RNP" valor={mi(r.teto)} sub={(r.total_plano <= r.teto ? "Dentro do teto: folga de " : "Acima do teto em ") + mi(Math.abs(r.teto - r.total_plano))} tom={r.total_plano <= r.teto ? "rpos" : "rneg"} />}
       </div>
-      {projetos && <PorGerencia ps={psTodos} status={statusGer} nExtintos={nExtintos} />}
+      {projetos && <PorGerencia ps={psTodos} status={statusGer} nExtintos={nExtintos} origens={origens} />}
       {projetos && fluxo && fluxo.origens.length > 0 && <OrigemDosRecursos d={fluxo} ps={psTodos} />}
       <section className="cartao"><h3>Calendarização mensal do plano 2027 <span className="mudo" style={{ fontSize: ".8rem", fontWeight: 400 }}>(R$ mi)</span></h3>
           <div className="meses compacto">{r.mensal_plano.map((m) => (
