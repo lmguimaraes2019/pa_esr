@@ -844,9 +844,11 @@ async def importar_execucao(simular: bool = True, arquivo: UploadFile = File(...
 # ---------------------------------------------------------------- resumo
 
 @router.get("/resumo")
-def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn), gerencia: str | None = None):
+def resumo(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn), gerencia: str | None = None, contingenciados: bool = True):
     # orçamentos de receita não entram na despesa: o valor deles aparece em Receitas, com sinal positivo
     ids = sorted(o for o in proprios(c, u, extintos=True) if c.execute("SELECT tipo FROM projetos WHERE orcamento=?", (o,)).fetchone()["tipo"] == "despesa")
+    if not contingenciados:
+        ids = [o for o in ids if not c.execute("SELECT contingenciado FROM projetos WHERE orcamento=?", (o,)).fetchone()[0]]
     por_ger = gerencia_dos_projetos(c)
     gerencias_ids = sorted({por_ger.get(o, "Sem gerência definida") for o in ids}, key=str.lower)
     if gerencia:      # filtro por gerência: só os projetos cuja gerência é a escolhida

@@ -1419,3 +1419,14 @@ def test_planejamento_com_gerencia_sem_projetos_e_headcount_existente(client):
     from app.db import tx
     with tx() as c:
         assert resumir(c, []) == {}
+
+
+def test_resumo_e_fluxo_sem_contingenciados(client):
+    entrar(client)
+    orc = next(p for p in client.get("/api/projetos").json() if p["tipo"] == "despesa" and p["total_2027"] > 0)
+    com = client.get("/api/resumo").json()["total_plano"]
+    assert client.patch(f"/api/projetos/{orc['orcamento']}", json={"contingenciado": True}).status_code == 200
+    assert client.get("/api/resumo?contingenciados=true").json()["total_plano"] == com
+    sem = client.get("/api/resumo?contingenciados=false").json()["total_plano"]
+    assert round(com - sem, 2) == round(orc["total_2027"], 2)
+    assert client.get("/api/fluxo?contingenciados=false").status_code == 200

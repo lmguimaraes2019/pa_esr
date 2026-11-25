@@ -27,8 +27,8 @@ export function OrigemDosRecursos({ d, ps }) {
 }
 
 
-export default function useFluxo(gerencia = "") {
+export default function useFluxo(gerencia = "", conting = true) {
   const [d, setD] = useState(null);
-  useEffect(() => { api("/fluxo" + (gerencia ? `?gerencia=${encodeURIComponent(gerencia)}` : "")).then(setD).catch(() => setD(false)); }, [gerencia]);
+  useEffect(() => { api("/fluxo?contingenciados=" + conting + (gerencia ? `&gerencia=${encodeURIComponent(gerencia)}` : "")).then(setD).catch(() => setD(false)); }, [gerencia, conting]);
   return d;
 }

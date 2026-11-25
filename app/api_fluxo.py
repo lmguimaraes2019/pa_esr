@@ -33,7 +33,7 @@ def fluxo(c: sqlite3.Connection, ids: list[str]) -> dict:
         o = p["origem"] or "Sem origem"
         if p["tipo"] == "receita":                # orçamento de receita: o resultado das linhas é receita
             k = ("Centros de receita", o); rec[k] = rec.get(k, 0.0) + r["t"]
-        elif not p["contingenciado"]:
+        else:
             g = _gerencia_do(p["gerente"], ger_de) or "Sem gerência"
             custo[(o, g)] = custo.get((o, g), 0.0) + r["t"]
     base: dict[str, float] = {}                  # aprovado 2026 por gerência (comparação)
@@ -64,8 +64,10 @@ def fluxo(c: sqlite3.Connection, ids: list[str]) -> dict:
 
 
 @router.get("")
-def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn), gerencia: str | None = None):
+def listar(u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn), gerencia: str | None = None, contingenciados: bool = True):
     ids = sorted(proprios(c, u))
+    if not contingenciados:
+        ids = [o for o in ids if not c.execute("SELECT contingenciado FROM projetos WHERE orcamento=?", (o,)).fetchone()[0]]
     if gerencia:
         por_ger = gerencia_dos_projetos(c)
         ids = [o for o in ids if por_ger.get(o, "Sem gerência definida") == gerencia]

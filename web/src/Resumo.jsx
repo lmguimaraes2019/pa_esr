@@ -100,25 +100,30 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
   const [erro, setErro] = useState("");
   const [ger, setGer] = useState("");
   const [gerencias, setGerencias] = useState([]);
-  const fluxo = useFluxo(ger);
+  const [conting, setConting] = useState(true);
+  const fluxo = useFluxo(ger, conting);
   const [projetos, setProjetos] = useState(null);
   useEffect(() => { api("/projetos").then(setProjetos).catch(() => setProjetos([])); }, []);
-  useEffect(() => { api("/resumo" + (ger ? `?gerencia=${encodeURIComponent(ger)}` : "")).then((x) => { setR(x); if (!ger) setGerencias(x.gerencias || []); }).catch((e) => setErro(e.message)); }, [ger]);
+  useEffect(() => { api("/resumo?contingenciados=" + conting + (ger ? `&gerencia=${encodeURIComponent(ger)}` : "")).then((x) => { setR(x); if (!ger) setGerencias(x.gerencias || []); }).catch((e) => setErro(e.message)); }, [ger, conting]);
   if (erro) return <p className="erro">{erro}</p>;
   if (!r) return <p>Carregando…</p>;
   const max = Math.max(1, ...r.mensal_plano.map((m) => m.valor));
-  const psVisiveis = (projetos || []).filter((p) => p.tipo !== "receita" && !p.extinto && (!ger || (p.gerencia || "Sem gerência definida") === ger));
+  const psVisiveis = (projetos || []).filter((p) => p.tipo !== "receita" && !p.extinto && (conting || !p.contingenciado) && (!ger || (p.gerencia || "Sem gerência definida") === ger));
   const statusGer = admin && plano && plano.gerencias ? Object.fromEntries(plano.gerencias.filter((g) => g.nivel === "gerencia").map((g) => [g.gerencia || "Sem gerência definida", { pendencias: g.pendencias, concluida: g.concluido }])) : null;
   const s = r.linhas_status;
   const delta = r.total_plano - r.total_base;
-  const receitas = ger ? (fluxo ? fluxo.total_receita : 0) : (plano ? plano.etapas.receitas.total : 0);
+  const receitas = ger || !conting ? (fluxo ? fluxo.total_receita : 0) : (plano ? plano.etapas.receitas.total : 0);
   const resultado = receitas - r.total_plano;
   return (
     <>
       <h2>{admin ? "Planejamento 2027" : "Meu planejamento 2027"}</h2>
       <MeuPlanejamento plano={plano} erro={planoErro} recarregar={recarregarPlano} admin={admin} ir={ir} />
       <h3 className="secao">Visão executiva do orçamento{ger ? `: ${ger}` : ""}</h3>
-      {gerencias.length > 1 && <div className="filtros" style={{ margin: "0 0 10px" }}><FiltroGerencia valor={ger} onChange={setGer} opcoes={gerencias} largura={300} />{ger && <span className="mudo">Os números abaixo são só dos projetos desta gerência.</span>}</div>}
+      <div className="filtros" style={{ margin: "0 0 10px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+        {gerencias.length > 1 && <FiltroGerencia valor={ger} onChange={setGer} opcoes={gerencias} largura={300} />}
+        <label className="ent-check" style={{ margin: 0 }}><input type="checkbox" checked={conting} onChange={(e) => setConting(e.target.checked)} /> Incluir projetos contingenciados</label>
+        {(ger || !conting) && <span className="mudo">Os números abaixo {ger ? `são só dos projetos desta gerência` : "consideram todos os projetos"}{!conting ? ", sem os contingenciados" : ""}.</span>}
+      </div>
       <div className="kpis">
         <Kpi rotulo="Aprovado 2026" valor={mi(r.total_base)} tom="f26" sub="orçamento do ano corrente" />
         <Kpi rotulo="Executado 2026" valor={mi(r.total_realizado)} tom="f26" sub={`${pct(r.total_realizado, r.total_base)} do aprovado`} />
