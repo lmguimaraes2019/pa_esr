@@ -417,13 +417,19 @@ export default function Projeto({ orcamento, admin, pmo, voltar, irViagens, irEt
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.n_projeto && <> · Projeto {p.n_projeto}</>}{p.centro_custo && <> · Centro de custo {p.centro_custo}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>}{p.extinto && <> · <span className="tag aviso">extinta no PA 2027</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo resumo-proj">
+            <span className="chip-id">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento <strong>{p.orcamento}</strong></>}</span>
+            <span className="chip-id">Projeto <strong>{p.n_projeto || (p.novo ? "NOVO" : "sem número")}</strong></span>
+            <span className="chip-id">Centro de custo <strong>{p.centro_custo || "-"}</strong></span>
+            <span className="chip-id">{p.origem}</span><span className="chip-id">{p.gerente}</span>
+            {p.tipo === "receita" && <span className="tag ok">orçamento de receita</span>}
+            <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>
+            {p.contingenciado && <span className="tag aviso">contingenciado</span>}{p.extinto && <span className="tag aviso">extinta no PA 2027</span>}</p>
           {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
-        {(admin || pmo) && p.tipo !== "receita" && <CentroCusto orcamento={p.orcamento} atual={p.centro_custo} onSalvo={carregar} />}
-        {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} foraContabilidade={p.fora_contabilidade} novo={p.novo} onSalvo={carregar} />}
       </div>
-      <ExtincaoProjeto p={p} onSalvo={carregar} />
+      {(admin || pmo) && p.tipo !== "receita" ? <IdentificacaoProjeto p={p} admin={admin} pmo={pmo} onSalvo={carregar} /> : null}
+      {!((admin || pmo) && p.tipo !== "receita") || p.extinto ? <ExtincaoProjeto p={p} onSalvo={carregar} /> : null}
       <FaixaMigracao p={p} irProjeto={irProjeto} />
       {p.tipo === "despesa" && !p.extinto && <FonteFinanciamento key={p.financiamento_informado + p.financiamento_obs} p={p} onSalvo={carregar} />}
       <FaixaEstrategia key={passo} orcamento={orcamento} abrir={() => setPasso("entregas")} />
@@ -508,7 +514,7 @@ function FonteFinanciamento({ p, onSalvo }) {
 }
 
 /** Ação que acabou: não existirá no PA 2027. Sai dos totais, das pendências e da planilha do PMO; dá para reativar a qualquer momento. */
-function ExtincaoProjeto({ p, onSalvo }) {
+function ExtincaoProjeto({ p, onSalvo, compacto = false }) {
   const [erro, setErro] = useState("");
   const enviar = async (extinto) => { setErro(""); try { await api(`/projetos/${p.orcamento}`, { method: "PATCH", body: { extinto } }); onSalvo(); } catch (e) { setErro(e.message); } };
   const extinguir = () => { if (window.confirm("Marcar esta ação como extinta? Ela não terá orçamento em 2027 (o valor de 2027 vira zero, sem pendências e fora da planilha do PMO). O aprovado e o executado de 2026 continuam nos totais, identificados como ação extinta, porque as entregas migram para outros projetos. Você pode reativá-la depois.")) enviar(true); };
@@ -516,50 +522,62 @@ function ExtincaoProjeto({ p, onSalvo }) {
     <div className="nota aviso" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", margin: "10px 0" }}>
       <span><strong>Ação extinta.</strong> Sem orçamento próprio em 2027{p.extinto_em ? ` (marcada em ${p.extinto_em})` : ""}: as entregas migram para outros projetos. O aprovado e o executado de 2026 seguem nos totais; o plano 2027 desta ação vale zero e ela fica fora da planilha do PMO.</span>
       <button onClick={() => enviar(false)}>Reativar no PA 2027</button>{erro && <span className="erro">{erro}</span>}</div>);
+  if (compacto) return (
+    <div className="chave-extinta"><button type="button" onClick={extinguir} title="Esta ação não existirá no PA 2027">Marcar ação como extinta</button>
+      <small>Use quando a ação acabou e suas entregas migram para outros projetos em 2027.</small>{erro && <span className="erro">{erro}</span>}</div>);
   return (
     <div style={{ margin: "8px 0", display: "flex", gap: 10, alignItems: "center" }}>
       <button type="button" onClick={extinguir} title="Esta ação não existirá no PA 2027">Marcar ação como extinta</button>
       <span className="mudo" style={{ fontSize: ".85rem" }}>Use quando a ação acabou e suas entregas migram para outros projetos em 2027.</span>{erro && <span className="erro">{erro}</span>}</div>);
 }
 
-/* centro de custo do PCO: digitado pelo administrador ou pelo PMO */
-function CentroCusto({ orcamento, atual, onSalvo }) {
+/* campo de código (Nº do projeto, centro de custo): rótulo, estado, entrada e ações em um bloco só */
+function CampoCodigo({ rotulo, atual, placeholder, largura = 170, pendente, nota, pode, salvar, apagarMsg, somenteDigitos = true }) {
   const [v, setV] = useState(atual || "");
   const [erro, setErro] = useState("");
   useEffect(() => { setV(atual || ""); }, [atual]);
-  const enviar = async (valor) => { setErro(""); try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { centro_custo: valor } }); onSalvo(); } catch (e) { setErro(e.message); } };
+  const enviar = async (valor) => { setErro(""); try { await salvar(valor); } catch (e) { setErro(e.message); } };
   return (
-    <div className={"cartao " + (atual ? "" : "pend")} style={{ margin: 0 }}>
-      <strong>{atual ? "Centro de custo (PCO)" : "Centro de custo pendente"}</strong>
-      <div className="acoes"><input style={{ width: 170 }} value={v} onChange={(e) => setV(e.target.value.replace(/\D/g, ""))} placeholder="ex.: 0030000003007" inputMode="numeric" maxLength={20} />
-        <button className="primario" onClick={() => enviar(v)} disabled={!v || v === atual}>Salvar</button>
-        {atual && <button onClick={() => { if (window.confirm("Apagar o centro de custo deste orçamento?")) { setV(""); enviar(""); } }}>Apagar</button>}</div>
+    <div className="campo-cod">
+      <div className="campo-cod-rotulo">{rotulo}{pendente ? <span className="tag aviso">pendente</span> : atual ? <span className="tag ok">informado</span> : null}</div>
+      {pode
+        ? <div className="acoes"><input style={{ width: largura }} value={v} onChange={(e) => setV(somenteDigitos ? e.target.value.replace(/\D/g, "") : e.target.value)} placeholder={placeholder} inputMode="numeric" maxLength={20} />
+            <button className="primario" onClick={() => enviar(v)} disabled={!v || v === atual}>Salvar</button>
+            {atual && <button onClick={() => { if (window.confirm(apagarMsg)) { setV(""); enviar(""); } }}>Apagar</button>}</div>
+        : <div className="campo-cod-valor">{atual || "-"}</div>}
+      {nota && <p className="mudo campo-cod-nota">{nota}</p>}
       {erro && <p className="erro">{erro}</p>}
     </div>
   );
 }
 
-function NumeroProjeto({ orcamento, atual, contingenciado, foraContabilidade, novo, onSalvo }) {
-  const [v, setV] = useState(atual || "");
+/* identificação no PCO e situação do orçamento, juntas em um cartão (administrador e PMO) */
+function IdentificacaoProjeto({ p, admin, pmo, onSalvo }) {
   const [erro, setErro] = useState("");
-  useEffect(() => { setV(atual || ""); }, [atual]);
-  const enviar = async (body) => { setErro(""); try { await api(`/projetos/${orcamento}`, { method: "PATCH", body }); onSalvo(); } catch (e) { setErro(e.message); } };
-  const apagar = () => { if (window.confirm("Apagar o Nº do Projeto deste orçamento?")) { setV(""); enviar({ n_projeto: "" }); } };
-  const pendente = !atual && !contingenciado && !novo;      // orçamento novo ou replicado não tem número até entrar no PCO
+  const patch = (body) => api(`/projetos/${p.orcamento}`, { method: "PATCH", body }).then(onSalvo);
+  const chave = (campo, rotulo, ajuda) => (
+    <label className="chave-situacao">
+      <input type="checkbox" checked={!!p[campo]} disabled={!admin} onChange={(e) => { setErro(""); patch({ [campo]: e.target.checked }).catch((x) => setErro(x.message)); }} />
+      <span><strong>{rotulo}</strong><small>{ajuda}</small></span></label>);
   return (
-    <div className={"cartao " + (pendente ? "pend" : "")} style={{ margin: 0 }}>
-      <strong>{pendente ? "Nº do Projeto pendente" : novo && !atual ? "Nº do Projeto: NOVO" : "Nº do Projeto"}</strong>{novo && !atual && <p className="mudo" style={{ margin: "4px 0 8px" }}>Segue como NOVO na exportação. Depois do lançamento no PCO, informe o número aqui.</p>}
-      <div className="acoes"><input style={{ width: 140 }} value={v} onChange={(e) => setV(e.target.value)} placeholder="ex.: 2999" inputMode="numeric" />
-        <button className="primario" onClick={() => enviar({ n_projeto: v })} disabled={!v || v === atual}>Salvar</button>
-        {atual && <button onClick={apagar}>Apagar número</button>}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-        <input id="cont-chk" type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!contingenciado} onChange={(e) => enviar({ contingenciado: e.target.checked })} />
-        <label htmlFor="cont-chk" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, margin: 0 }}>Orçamento contingenciado (não liberado para execução)</label></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-        <input id="fora-chk" type="checkbox" style={{ width: "auto", margin: 0 }} checked={!!foraContabilidade} onChange={(e) => enviar({ fora_contabilidade: e.target.checked })} />
-        <label htmlFor="fora-chk" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, margin: 0 }}>Fora da contabilidade e dos relatórios (aparece só nos eventos e nas viagens)</label></div>
-      {erro && <p className="erro">{erro}</p>}
-    </div>
+    <section className="cartao ident">
+      <div>
+        <h3>Identificação no PCO</h3>
+        <CampoCodigo rotulo="Nº do Projeto" atual={p.n_projeto} placeholder="ex.: 2999" largura={130} pode={admin} pendente={!p.n_projeto && !p.contingenciado && !p.novo}
+          nota={p.novo && !p.n_projeto ? "Projeto novo: segue como NOVO na exportação até o lançamento no PCO. Depois, informe o número aqui." : !admin ? "Só o administrador altera." : ""}
+          salvar={(v) => patch({ n_projeto: v })} apagarMsg="Apagar o Nº do Projeto deste orçamento?" />
+        <CampoCodigo rotulo="Centro de custo" atual={p.centro_custo} placeholder="ex.: 0030000003007" pode={admin || pmo} pendente={!p.centro_custo}
+          nota="Código do centro de custo no PCO, só dígitos." salvar={(v) => patch({ centro_custo: v })} apagarMsg="Apagar o centro de custo deste orçamento?" />
+      </div>
+      <div>
+        <h3>Situação do orçamento</h3>
+        {chave("contingenciado", "Contingenciado", "Não liberado para execução; fica fora da exportação para o PCO.")}
+        {chave("fora_contabilidade", "Fora da contabilidade e dos relatórios", "Aparece só nos eventos e nas viagens.")}
+        {!p.extinto && <ExtincaoProjeto p={p} onSalvo={onSalvo} compacto />}
+        {!admin && <p className="mudo campo-cod-nota">Só o administrador altera a situação.</p>}
+        {erro && <p className="erro">{erro}</p>}
+      </div>
+    </section>
   );
 }
 
