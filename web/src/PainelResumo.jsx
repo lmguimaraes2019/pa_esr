@@ -76,16 +76,16 @@ export function ProjetosDoPlano({ ps, abrir, verTodos }) {
       <h3>Projetos do plano 2027 <span className="contagem">{ps.length}</span></h3>
       <p className="mudo" style={{ marginTop: 0 }}>Do maior para o menor valor em 2027. {conting.length > 0 && <>Em laranja, os {conting.length} contingenciados ({fmt(soma(conting, "total_2027"))} em 2027), não liberados para execução. </>}Clique em um projeto para abrir.</p>
       <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande tab-proj">
-        <thead><tr><th>Orçamento</th><th>Nº projeto</th><th>Projeto</th><th>Gerência</th><th>Origem</th><th>Finalidade</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n" title="Quanto o gestor prevê ter executado até 31/12/2026">Previsão 31/12</th><th className="n" title="Previsão sobre o aprovado de 2026">% prev.</th><th className="n">Plano 2027</th><th className="n">Variação</th></tr></thead>
+        <thead><tr><th className="cod" title="Número do orçamento">Orçamento</th><th className="cod" title="Número do projeto no PCO">Nº projeto</th><th className="cod" title="Centro de custo no PCO">Centro de custo</th><th className="nome">Projeto</th><th>Gerência</th><th>Origem</th><th>Finalidade</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n" title="Quanto o gestor prevê ter executado até 31/12/2026">Previsão 31/12</th><th className="n" title="Previsão sobre o aprovado de 2026">% prev.</th><th className="n">Plano 2027</th><th className="n">Variação</th></tr></thead>
         <tbody>{mostra.map((p) => (
           <tr key={p.orcamento} className={"proj " + (p.contingenciado ? "conting" : "")} onClick={() => abrir(p.orcamento)} style={{ cursor: "pointer" }}>
-            <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td><td>{p.n_projeto || semValor}</td>
-            <td><strong>{p.descricao}</strong>{p.contingenciado && <div className="mudo" style={{ fontSize: ".78rem" }}>contingenciado</div>}</td>
+            <td className="cod">{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td><td className="cod">{p.n_projeto || semValor}</td><td className="cod">{p.centro_custo || semValor}</td>
+            <td className="nome"><strong>{p.descricao}</strong>{p.contingenciado && <div className="mudo" style={{ fontSize: ".78rem" }}>contingenciado</div>}</td>
             <td>{p.gerencia || vazio}</td><td>{p.origem}</td>
             <td><span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span></td>
             <td className="n">{fmtV(p.total_2026)}</td><td className="n">{fmtV(p.realizado_2026)}</td><td className="n">{p.total_2026 > 0 && p.realizado_2026 > 0 ? pct(p.realizado_2026, p.total_2026) : semValor}</td>{celPrevisao([p])}
             <td className="n"><strong>{fmtV(p.total_2027)}</strong></td><td className="n"><Delta de={p.total_2026} para={p.total_2027} /></td></tr>))}</tbody>
-        <tfoot><tr><td colSpan={6}>Total ({ps.length})</td><td className="n">{fmt(soma(ps, "total_2026"))}</td><td className="n">{fmt(soma(ps, "realizado_2026"))}</td><td className="n">{pct(soma(ps, "realizado_2026"), soma(ps, "total_2026"))}</td>{celPrevisao(ps)}<td className="n">{fmt(soma(ps, "total_2027"))}</td><td className="n"><Delta de={soma(ps, "total_2026")} para={soma(ps, "total_2027")} /></td></tr></tfoot>
+        <tfoot><tr><td colSpan={7}>Total ({ps.length})</td><td className="n">{fmt(soma(ps, "total_2026"))}</td><td className="n">{fmt(soma(ps, "realizado_2026"))}</td><td className="n">{pct(soma(ps, "realizado_2026"), soma(ps, "total_2026"))}</td>{celPrevisao(ps)}<td className="n">{fmt(soma(ps, "total_2027"))}</td><td className="n"><Delta de={soma(ps, "total_2026")} para={soma(ps, "total_2027")} /></td></tr></tfoot>
       </table></div>
       <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
         {lista.length > 12 && <button type="button" onClick={() => setTodos(!todos)}>{todos ? "Mostrar só os 12 maiores" : `Mostrar todos os ${lista.length} projetos`}</button>}
