@@ -1567,3 +1567,28 @@ def test_previsao_exige_acesso_ao_projeto(client):
     assert client.put(f"/api/projetos/{alheio['orcamento']}/previsao-2026", json={"valor": 1}).status_code == 404
     proprio = next(m for m in meus if m["total_2026"] > 0)
     assert client.put(f"/api/projetos/{proprio['orcamento']}/previsao-2026", json={"valor": proprio["total_2026"]}).status_code == 200
+
+
+def test_carga_de_pessoal_2027(client):
+    from app import config, lancar_pessoal
+    from app.db import tx
+    entrar(client)
+    with tx() as c:
+        msgs = []
+        # sem o projeto DSS-ESR-RA-PESSOAL a carga nao grava nada
+        assert lancar_pessoal.executar(c, gravar=True, saida=msgs.append) == 1
+        assert c.execute("SELECT COUNT(*) FROM linhas WHERE atualizado_por=?", (lancar_pessoal.AUTOR,)).fetchone()[0] == 0
+        c.execute("UPDATE projetos SET descricao='DSS-ESR-RA-PESSOAL', origem='RA' WHERE descricao='DSS-ESR-ASSOCIACAO-PESSOAL'")
+        for o in [r[0] for r in c.execute("SELECT orcamento FROM projetos WHERE UPPER(descricao) IN ('DSS-ESR-FOMENTO-PESSOAL','DSS-ESR-RA-PESSOAL','DSS-ESR-ASSOCIACAO-HACKER DO BEM-PESSOAL')")]:
+            c.execute("DELETE FROM linhas WHERE ciclo=? AND orcamento=?", (config.CICLO_PLANO, o))
+        assert lancar_pessoal.executar(c, gravar=False, saida=msgs.append) == 0       # conferencia nao grava
+        assert c.execute("SELECT COUNT(*) FROM linhas WHERE atualizado_por=?", (lancar_pessoal.AUTOR,)).fetchone()[0] == 0
+        assert lancar_pessoal.executar(c, gravar=True, saida=msgs.append) == 0
+        n, tot = c.execute("SELECT COUNT(*), SUM(m01+m02+m03+m04+m05+m06+m07+m08+m09+m10+m11+m12) FROM linhas WHERE atualizado_por=?", (lancar_pessoal.AUTOR,)).fetchone()
+        assert n == 36 and abs(tot - 9329359.84) < 0.01
+        ra = c.execute("SELECT l.tarefa, l.conta_codigo, l.m01, l.edt FROM linhas l JOIN projetos p ON p.orcamento=l.orcamento WHERE p.descricao='DSS-ESR-RA-PESSOAL' AND l.atualizado_por='carga pessoal 2027' ORDER BY l.id").fetchall()
+        assert len(ra) == 11 and ra[0][0] == "SALÁRIOS" and ra[0][1] == "51010101" and ra[0][2] == 124426.77 and ra[0][3] == "CLT"
+        # rodar de novo exige --refazer
+        assert lancar_pessoal.executar(c, gravar=True, saida=msgs.append) == 1
+        assert lancar_pessoal.executar(c, gravar=True, refazer=True, saida=msgs.append) == 0
+        assert c.execute("SELECT COUNT(*) FROM linhas WHERE atualizado_por=?", (lancar_pessoal.AUTOR,)).fetchone()[0] == 36
