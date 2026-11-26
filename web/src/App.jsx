@@ -55,7 +55,7 @@ export default function App() {
       <main>
         {aba === "resumo" && <Resumo plano={plano} planoErro={planoErro} recarregarPlano={carregarPlano} admin={admin} ir={ir} />}
         {aba === "projetos" && (proj
-          ? <Projeto orcamento={proj} admin={admin} voltar={() => setProj(null)} irViagens={() => ir("viagens")} irEtapa={(k) => ir(k)} irProjeto={(o) => ir("projetos", o)} />
+          ? <Projeto orcamento={proj} admin={admin} pmo={admin || user.cargo === "pmo"} voltar={() => setProj(null)} irViagens={() => ir("viagens")} irEtapa={(k) => ir(k)} irProjeto={(o) => ir("projetos", o)} />
           : <Projetos abrir={setProj} semEntregas={soEntregas === "entregas" && plano ? plano.projetos.filter((p) => p.entregas.pendentes > 0).map((p) => p.orcamento) : null} semFonte={soEntregas === "financiamento" && plano ? plano.projetos.filter((p) => p.financiamento.pendentes > 0).map((p) => p.orcamento) : null} limparFiltro={() => setSoEntregas(false)} />)}
         {aba === "relatorios" && <Relatorios pmo={admin || user.cargo === "pmo"} irProjeto={(o) => ir("projetos", o)} />}
         {aba === "receitas" && <Receitas admin={admin} irProjeto={(o) => ir("projetos", o)} />}

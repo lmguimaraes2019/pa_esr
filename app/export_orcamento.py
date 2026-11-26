@@ -187,7 +187,7 @@ def gerar(u: dict, c: sqlite3.Connection) -> bytes:
 
 SUM_COLS = ["Orçamento", "Nº do projeto", "Projeto", "Gerência", "Gerente", "Situação", "Tipo de projeto", "Origem de recursos", "Fonte de financiamento",
             "Previsto 2026", "Empenhado 2026", "Executado 2026", "Saldo 2026", "Previsão de execução 31/12/2026", "% previsto de execução",
-            "Previsto 2027", "Δ 2027 vs 2026", "Status"]
+            "Previsto 2027", "Δ 2027 vs 2026", "Status", "Centro de custo (PCO)"]
 P_PREV = PatternFill("solid", fgColor="FCE9D2")      # previsão do gestor para o fim de 2026
 PCT = '0%;[Red]-0%;"-"'
 
@@ -211,8 +211,8 @@ def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str, i
         prev27 = 0 if ext else p["total_2027"]
         _linha(ws, r, [p["orcamento"] if not p["novo"] else p["orcamento"], p["n_projeto"], p["descricao"], p["gerencia"], p["gerente"],
                        "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
-                       p["total_2026"], p["empenhado_2026"], p["realizado_2026"], f"=J{r}-L{r}", p["previsao_2026"], _prev_pct(r), prev27, f"=P{r}-J{r}", status],
-               moeda=moeda, centro={1, 2, 6, 18}, quebra={3, 5}, fonte=F_EXT if ext else None,
+                       p["total_2026"], p["empenhado_2026"], p["realizado_2026"], f"=J{r}-L{r}", p["previsao_2026"], _prev_pct(r), prev27, f"=P{r}-J{r}", status, p["centro_custo"] or ""],
+               moeda=moeda, centro={1, 2, 6, 18, 19}, quebra={3, 5}, fonte=F_EXT if ext else None,
                fill=P_EXT if ext else P_CONT if p["contingenciado"] else None)
         ws.cell(row=r, column=15).number_format = PCT
         r += 1
@@ -230,14 +230,14 @@ def _sumario(ws: Worksheet, ps: list[dict], abas: dict[str, str], gerado: str, i
             _linha(ws, r, [p["orcamento"], p["n_projeto"], p["descricao"], p["gerencia"], p["gerente"],
                            "Novo" if p["novo"] else "Existente", FINALIDADES.get(p["finalidade"], p["finalidade"]), p["origem"], p["financiamento"] or "",
                            p["total_2026"], p["empenhado_2026"], p["realizado_2026"], p["total_2026"] - p["realizado_2026"], p["previsao_2026"], _prev_pct(r),
-                           0 if p["extinto"] else p["total_2027"], (0 if p["extinto"] else p["total_2027"]) - p["total_2026"], "Informativo (DSS)"],
-                   moeda=moeda, centro={1, 2, 6, 18}, quebra={3, 5}, fonte=Font(name="Calibri", italic=True, color="7A4A00"), fill=P_INFO)
+                           0 if p["extinto"] else p["total_2027"], (0 if p["extinto"] else p["total_2027"]) - p["total_2026"], "Informativo (DSS)", p["centro_custo"] or ""],
+                   moeda=moeda, centro={1, 2, 6, 18, 19}, quebra={3, 5}, fonte=Font(name="Calibri", italic=True, color="7A4A00"), fill=P_INFO)
             ws.cell(row=r, column=15).number_format = PCT
         fim_info = r
         r += 1
     else:
         fim_info = fim
-    _larguras(ws, [12, 12, 48, 20, 22, 11, 22, 16, 22, 15, 15, 15, 15, 17, 13, 15, 15, 14])
+    _larguras(ws, [12, 12, 48, 20, 22, 11, 22, 16, 22, 15, 15, 15, 15, 17, 13, 15, 15, 14, 18])
     # resumos por origem e por gerência (fórmulas sobre a tabela acima, sem contar extintos no 2027)
     r += 3
     for titulo, col, chaves in (("Resumo por origem de recursos", "H", sorted({p["origem"] for p in ps})),
@@ -282,7 +282,7 @@ def _aba_projeto(ws: Worksheet, p: dict, c: sqlite3.Connection) -> None:
     _titulo(ws, f"{p['orcamento']} | {p['descricao']}")
     info = [("Gerente", p["gerente"]), ("Gerência", p["gerencia"]), ("Situação", "Novo" if p["novo"] else "Existente"),
             ("Tipo de projeto", FINALIDADES.get(p["finalidade"], p["finalidade"])), ("Origem de recursos", p["origem"]),
-            ("Fonte de financiamento", p["financiamento"] or ""), ("Nº do projeto (PCO)", p["n_projeto"] or "a lançar"),
+            ("Fonte de financiamento", p["financiamento"] or ""), ("Nº do projeto (PCO)", p["n_projeto"] or "a lançar"), ("Centro de custo (PCO)", p["centro_custo"] or "a informar"),
             ("Status", "Contingenciado (não liberado para execução)" if p["contingenciado"] else "Ativo")]
     if p["replicado_de"]:
         info.append(("Replicado de", p["replicado_de"]))

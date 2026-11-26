@@ -1592,3 +1592,30 @@ def test_carga_de_pessoal_2027(client):
         assert lancar_pessoal.executar(c, gravar=True, saida=msgs.append) == 1
         assert lancar_pessoal.executar(c, gravar=True, refazer=True, saida=msgs.append) == 0
         assert c.execute("SELECT COUNT(*) FROM linhas WHERE atualizado_por=?", (lancar_pessoal.AUTOR,)).fetchone()[0] == 36
+
+
+def test_centro_de_custo_do_pco(client):
+    import io
+    from openpyxl import load_workbook
+    entrar(client)
+    p = next(x for x in client.get("/api/projetos").json() if x["tipo"] == "despesa" and not x["extinto"] and not x["fora_contabilidade"])
+    outro = next(x for x in client.get("/api/projetos").json() if x["tipo"] == "despesa" and x["orcamento"] != p["orcamento"] and not x["fora_contabilidade"])
+    assert p["centro_custo"] == ""
+    assert client.patch(f"/api/projetos/{p['orcamento']}", json={"centro_custo": "abc"}).status_code == 422
+    assert client.patch(f"/api/projetos/{p['orcamento']}", json={"centro_custo": "0030000003007"}).status_code == 200
+    assert client.get(f"/api/projetos/{p['orcamento']}").json()["projeto"]["centro_custo"] == "0030000003007"
+    assert next(x for x in client.get("/api/projetos").json() if x["orcamento"] == p["orcamento"])["centro_custo"] == "0030000003007"
+    # o mesmo centro de custo nao vai para dois orcamentos
+    assert client.patch(f"/api/projetos/{outro['orcamento']}", json={"centro_custo": "0030000003007"}).status_code == 409
+    # aparece na planilha do diretor
+    wb = load_workbook(io.BytesIO(client.get("/api/export/orcamento").content))
+    cab = [c.value for c in wb["Sumário"][6]]
+    col = cab.index("Centro de custo (PCO)")
+    assert any(row[col].value == "0030000003007" for row in wb["Sumário"].iter_rows(min_row=7))
+    # apagar
+    assert client.patch(f"/api/projetos/{p['orcamento']}", json={"centro_custo": ""}).status_code == 200
+    assert client.get(f"/api/projetos/{p['orcamento']}").json()["projeto"]["centro_custo"] == ""
+    # gestor comum nao altera
+    gestor_liberado(client)
+    meu = next(x for x in client.get("/api/projetos").json() if x["total_2026"] > 0)
+    assert client.patch(f"/api/projetos/{meu['orcamento']}", json={"centro_custo": "0030000003008"}).status_code == 403

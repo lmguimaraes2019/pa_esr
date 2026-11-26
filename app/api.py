@@ -173,6 +173,7 @@ class ProjetoNovo(BaseModel):
 
 class ProjetoPatch(BaseModel):
     n_projeto: str | None = Field(default=None, max_length=12)
+    centro_custo: str | None = Field(default=None, max_length=20)      # centro de custo do PCO (ex.: 0030000003007)
     descricao: str | None = Field(default=None, min_length=3, max_length=200)
     origem: str | None = Field(default=None, min_length=1, max_length=40)
     gerente: str | None = Field(default=None, min_length=1, max_length=100)
@@ -189,6 +190,14 @@ class ProjetoPatch(BaseModel):
     centro_receita: str | None = Field(default=None, max_length=20)
     recurso_situacao: str | None = Field(default=None, pattern="^(caixa|assinado|contratado)?$")
     recurso_1q: bool | None = None
+
+    @field_validator("centro_custo")
+    @classmethod
+    def _cc(cls, v):
+        v = (v or "").strip() if v is not None else v
+        if v and not re.fullmatch(r"\d{4,20}", v):
+            raise ValueError("O centro de custo deve conter apenas dígitos (ex.: 0030000003007).")
+        return v
 
     @field_validator("n_projeto")
     @classmethod
@@ -452,7 +461,7 @@ def listar_projetos(u: dict, c: sqlite3.Connection, incluir_fora: bool = False) 
         "SELECT DISTINCT ug.gerente FROM user_gerentes ug JOIN users us ON us.id=ug.user_id JOIN conclusoes cn ON cn.login=us.login "
         "WHERE us.ativo=1 AND COALESCE(us.cargo,'')<>'coordenador'")}
     ger_de = {_chave_nome(x["nome"]): x["gerencia"] for x in c.execute("SELECT nome, gerencia FROM users WHERE COALESCE(gerencia,'')<>''")}
-    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
+    return [{**{k: r[k] for k in ("orcamento", "n_projeto", "centro_custo", "descricao", "gerente", "n_linhas")}, "novo": bool(r["novo"]),
              "planejamento_concluido": r["gerente"] in concluidos, "gerencia": _gerencia_do(r["gerente"], ger_de), "tipo": r["tipo"], "finalidade": r["finalidade"], "contingenciado": bool(r["contingenciado"]), "fora_contabilidade": bool(r["fora_contabilidade"]), "extinto": bool(r["extinto"]),
              "origem": r["origem_2027"] or r["origem"], "origem_2026": r["origem"],
              "financiamento": financiamento.efetivo(r["origem_2027"] or r["origem"], r["financiamento"]), "financiamento_informado": r["financiamento"], "financiamento_obs": r["financiamento_obs"],
@@ -563,6 +572,14 @@ def editar_projeto(orcamento: str, dados: ProjetoPatch, u: dict = Depends(usuari
                 audit(c, u["login"], "marcou a ação como extinta (fora do PA 2027)" if campos["extinto"] else "reativou a ação no PA 2027", orcamento, detalhe=p["descricao"])
         if u["perfil"] != "admin" and ("n_projeto" in campos or ("descricao" in campos and not p["novo"])):
             raise HTTPException(403, "Apenas o administrador altera o Nº do Projeto e o nome de orçamentos existentes.")
+        if "centro_custo" in campos:
+            if u["perfil"] != "admin" and u.get("cargo") != "pmo":
+                raise HTTPException(403, "Apenas o administrador ou o PMO informam o centro de custo.")
+            if campos["centro_custo"]:
+                outro = c.execute("SELECT orcamento FROM projetos WHERE centro_custo=? AND orcamento<>? LIMIT 1", (campos["centro_custo"], orcamento)).fetchone()
+                if outro:
+                    raise HTTPException(409, f"O centro de custo {campos['centro_custo']} já está no orçamento {outro['orcamento']}.")
+            audit(c, u["login"], "informou o centro de custo", orcamento, detalhe=f"{p['centro_custo']} para {campos['centro_custo']}")
         if "tipo" in campos and u["perfil"] != "admin" and not p["novo"]:
             raise HTTPException(403, "Apenas o administrador altera o tipo de um orçamento que já existia em 2026.")
         if "origem" in campos or "gerente" in campos:
@@ -655,7 +672,7 @@ def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqli
     casado_e = sum(x["empenhado"] for x in linhas)
     contagem = {k: sum(1 for x in linhas if x["status"] == k) for k in ("mantida", "ajustada", "nova", "viagens")}
     return {
-        "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "descricao", "gerente", "diretoria")}
+        "projeto": {k: p[k] for k in ("orcamento", "n_projeto", "centro_custo", "descricao", "gerente", "diretoria")}
                    | {"novo": bool(p["novo"]), "tipo": p["tipo"], "finalidade": p["finalidade"], "contingenciado": bool(p["contingenciado"]), "fora_contabilidade": bool(p["fora_contabilidade"]), "extinto": bool(p["extinto"]), "extinto_em": p["extinto_em"], "previsao_2026": None if p["previsao_2026"] is None else _arred(p["previsao_2026"]), "previsao_em": p["previsao_em"], "previsao_por": p["previsao_por"], "financiamento": financiamento.efetivo(p["origem_2027"] or p["origem"], p["financiamento"]),
                       "financiamento_informado": p["financiamento"], "financiamento_obs": p["financiamento_obs"], "detalhe": p["detalhe"], "memoria": p["memoria"], "recurso_situacao": p["recurso_situacao"], "recurso_1q": bool(p["recurso_1q"]), "alertas": _alertas(c, p), "grupo_diretriz": GRUPO_DIRETRIZ.get(p["finalidade"], ""), "asrnp_conv": bool(p["asrnp_conv"]), "centro_receita": p["centro_receita"], "origem_diretriz": financiamento.origem_diretriz(p["origem_2027"] or p["origem"], bool(p["asrnp_conv"])), "origem": p["origem_2027"] or p["origem"], "origem_2026": p["origem"],
                       "gerente_2026": (p["gerente_2026"] or p["gerente"]) if not p["novo"] else ""}

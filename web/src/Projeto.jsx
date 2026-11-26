@@ -403,7 +403,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   );
 }
 
-export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, irProjeto }) {
+export default function Projeto({ orcamento, admin, pmo, voltar, irViagens, irEtapa, irProjeto }) {
   const [d, setD] = useState(null);
   const [contas, setContas] = useState([]);
   const [erro, setErro] = useState("");
@@ -417,9 +417,10 @@ export default function Projeto({ orcamento, admin, voltar, irViagens, irEtapa, 
     <>
       <button className="link" onClick={voltar}>← Projetos</button>
       <div className="cab">
-        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>}{p.extinto && <> · <span className="tag aviso">extinta no PA 2027</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
+        <div><h2 style={{ marginBottom: 6 }}>{p.descricao}</h2><p className="mudo">{p.novo ? <span className="tag ok">novo</span> : <>Orçamento {p.orcamento}</>}{p.n_projeto && <> · Projeto {p.n_projeto}</>}{p.centro_custo && <> · Centro de custo {p.centro_custo}</>}{p.tipo === "receita" && <> · <span className="tag ok">orçamento de receita</span></>} · <span className={"tag " + classeFinalidade(p.finalidade)}>{nomeFinalidade(p.finalidade)}</span>{p.contingenciado && <> · <span className="tag aviso">contingenciado</span></>}{p.extinto && <> · <span className="tag aviso">extinta no PA 2027</span></>} · Projeto {p.n_projeto || (p.novo ? "NOVO (número após o lançamento no PCO)" : "sem número")} · {p.origem} · {p.gerente}</p>
           {!p.novo && p.gerente !== p.gerente_2026 && <p className="troca-origem"><span className="rotulo-nivel">Gestor</span><span className="selo s26">2026</span> {p.gerente_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.gerente}</strong></p>}
           {!p.novo && p.origem !== p.origem_2026 && <p className="troca-origem"><span className="rotulo-nivel">Origem de recursos</span><span className="selo s26">2026</span> {p.origem_2026}<span className="seta" aria-hidden="true">→</span><span className="selo s27">2027</span> <strong>{p.origem}</strong></p>}</div>
+        {(admin || pmo) && p.tipo !== "receita" && <CentroCusto orcamento={p.orcamento} atual={p.centro_custo} onSalvo={carregar} />}
         {admin && p.tipo !== "receita" && <NumeroProjeto orcamento={p.orcamento} atual={p.n_projeto} contingenciado={p.contingenciado} foraContabilidade={p.fora_contabilidade} novo={p.novo} onSalvo={carregar} />}
       </div>
       <ExtincaoProjeto p={p} onSalvo={carregar} />
@@ -519,6 +520,23 @@ function ExtincaoProjeto({ p, onSalvo }) {
     <div style={{ margin: "8px 0", display: "flex", gap: 10, alignItems: "center" }}>
       <button type="button" onClick={extinguir} title="Esta ação não existirá no PA 2027">Marcar ação como extinta</button>
       <span className="mudo" style={{ fontSize: ".85rem" }}>Use quando a ação acabou e suas entregas migram para outros projetos em 2027.</span>{erro && <span className="erro">{erro}</span>}</div>);
+}
+
+/* centro de custo do PCO: digitado pelo administrador ou pelo PMO */
+function CentroCusto({ orcamento, atual, onSalvo }) {
+  const [v, setV] = useState(atual || "");
+  const [erro, setErro] = useState("");
+  useEffect(() => { setV(atual || ""); }, [atual]);
+  const enviar = async (valor) => { setErro(""); try { await api(`/projetos/${orcamento}`, { method: "PATCH", body: { centro_custo: valor } }); onSalvo(); } catch (e) { setErro(e.message); } };
+  return (
+    <div className={"cartao " + (atual ? "" : "pend")} style={{ margin: 0 }}>
+      <strong>{atual ? "Centro de custo (PCO)" : "Centro de custo pendente"}</strong>
+      <div className="acoes"><input style={{ width: 170 }} value={v} onChange={(e) => setV(e.target.value.replace(/\D/g, ""))} placeholder="ex.: 0030000003007" inputMode="numeric" maxLength={20} />
+        <button className="primario" onClick={() => enviar(v)} disabled={!v || v === atual}>Salvar</button>
+        {atual && <button onClick={() => { if (window.confirm("Apagar o centro de custo deste orçamento?")) { setV(""); enviar(""); } }}>Apagar</button>}</div>
+      {erro && <p className="erro">{erro}</p>}
+    </div>
+  );
 }
 
 function NumeroProjeto({ orcamento, atual, contingenciado, foraContabilidade, novo, onSalvo }) {

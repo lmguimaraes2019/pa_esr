@@ -413,6 +413,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE projetos ADD COLUMN extinto_por TEXT NOT NULL DEFAULT ''")
         if "contingenciado" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: orçamento não liberado para execução
             c.execute("ALTER TABLE projetos ADD COLUMN contingenciado INTEGER NOT NULL DEFAULT 0")
+        if "centro_custo" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: centro de custo do PCO, digitado pelo administrador ou pelo PMO
+            c.execute("ALTER TABLE projetos ADD COLUMN centro_custo TEXT NOT NULL DEFAULT ''")
         if "fora_contabilidade" not in {r[1] for r in c.execute("PRAGMA table_info(projetos)")}:      # migração: projeto que não entra na contabilidade nem nos relatórios
             c.execute("ALTER TABLE projetos ADD COLUMN fora_contabilidade INTEGER NOT NULL DEFAULT 0")
             import unicodedata
