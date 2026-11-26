@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, fmt, mi } from "./api.js";
-import { Kpi, Delta, pct, Selo, FiltroGerencia, fmtV } from "./ui.jsx";
+import { Kpi, Delta, pct, Selo, FiltroGerencia, fmtV, semValor } from "./ui.jsx";
 import { MeuPlanejamento } from "./Planejamento.jsx";
 import OutrosProjetos from "./OutrosProjetos.jsx";
 import useFluxo, { OrigemDosRecursos } from "./FluxoRecursos.jsx";
@@ -149,9 +149,13 @@ export default function Resumo({ plano, planoErro, recarregarPlano, admin, ir })
         <section className="cartao" style={{ borderLeft: "4px solid #E87722" }}>
           <h3>Ações extintas ({r.extintos.n})</h3>
           <p className="mudo" style={{ marginTop: 0 }}>Não terão orçamento próprio em 2027: as entregas migram para outros projetos. O aprovado e o executado de 2026 continuam contando nos totais desta página, e o valor delas em 2027 é zero (já está previsto nos projetos que recebem as entregas).</p>
-          <table className="tabela"><thead><tr><th>Ação</th><th>Gerente</th><th className="n">Aprovado 2026</th><th className="n">Executado</th><th className="n">Plano 2027</th></tr></thead>
-            <tbody>{r.extintos.lista.map((x) => <tr key={x.orcamento}><td>{x.orcamento} | {x.descricao}</td><td>{x.gerente}</td><td className="n">{fmt(x.aprovado_2026)}</td><td className="n">{fmt(x.executado_2026)}</td><td className="n">{fmt(0)}</td></tr>)}</tbody>
-            <tfoot><tr><td colSpan="2">Total</td><td className="n">{fmt(r.extintos.aprovado_2026)}</td><td className="n">{fmt(r.extintos.executado_2026)}</td><td className="n">{fmt(0)}</td></tr></tfoot></table>
+          <div className="rolagem" style={{ margin: 0 }}><table className="tab tab-grande tab-proj">
+            <thead><tr><th className="cod">Orçamento</th><th className="cod">Nº projeto</th><th className="nome">Ação extinta</th><th>Gerente</th><th className="n">Aprovado 2026</th><th className="n">Executado 2026</th><th className="n">% exec.</th><th className="n">Plano 2027</th></tr></thead>
+            <tbody>{r.extintos.lista.map((x) => <tr key={x.orcamento} className="proj" onClick={() => ir("projetos", x.orcamento)} style={{ cursor: "pointer" }}>
+              <td className="cod">{x.orcamento}</td><td className="cod">{x.n_projeto || semValor}</td><td className="nome"><strong>{x.descricao}</strong></td><td style={{ whiteSpace: "nowrap" }}>{x.gerente}</td>
+              <td className="n">{fmtV(x.aprovado_2026)}</td><td className="n">{fmtV(x.executado_2026)}</td>
+              <td className={"n " + (x.aprovado_2026 > 0 && x.executado_2026 > x.aprovado_2026 ? "res-neg" : "")}>{x.aprovado_2026 > 0 && x.executado_2026 > 0 ? pct(x.executado_2026, x.aprovado_2026) : semValor}</td><td className="n">{semValor}</td></tr>)}</tbody>
+            <tfoot><tr><td colSpan="4">Total ({r.extintos.n})</td><td className="n">{fmtV(r.extintos.aprovado_2026)}</td><td className="n">{fmtV(r.extintos.executado_2026)}</td><td className="n">{pct(r.extintos.executado_2026, r.extintos.aprovado_2026)}</td><td className="n">{semValor}</td></tr></tfoot></table></div>
         </section>)}
       <details className="cartao" style={{ padding: "12px 16px" }}>
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>Detalhamento: 2026 e 2027 por origem, finalidade e grupo de despesa</summary>
