@@ -1619,3 +1619,21 @@ def test_centro_de_custo_do_pco(client):
     gestor_liberado(client)
     meu = next(x for x in client.get("/api/projetos").json() if x["total_2026"] > 0)
     assert client.patch(f"/api/projetos/{meu['orcamento']}", json={"centro_custo": "0030000003008"}).status_code == 403
+
+
+def test_excluir_viagens_da_acao_pela_pagina_do_projeto(client):
+    entrar(client)
+    t = next(x for x in client.get("/api/viagens/tarifas").json() if x["tipo"] == "nac")
+    dados = client.get("/api/viagens").json()
+    pr = next(p for p in dados["opcoes"]["projetos"] if p["tarefas"])
+    tf = pr["tarefas"][0]
+    base = {"tipo": "nac", "mes": 3, "origem": t["origem"], "destino": t["destino"], "n_viagens": 2, "dias": 2, "orcamento": pr["orcamento"], "edt": tf["edt"], "tarefa": tf["tarefa"]}
+    assert client.post("/api/viagens", json=base).status_code == 201
+    assert client.post("/api/viagens", json={**base, "mes": 5}).status_code == 201
+    linhas = lambda: [l for l in client.get(f"/api/projetos/{pr['orcamento']}").json()["linhas"] if l["fonte"] == "viagens" and l["edt"] == tf["edt"] and l["tarefa"] == tf["tarefa"]]
+    assert linhas()                       # a linha de viagens aparece bloqueada no projeto
+    q = {"edt": tf["edt"], "tarefa": tf["tarefa"]}
+    r = client.delete(f"/api/viagens/projeto/{pr['orcamento']}", params=q)
+    assert r.status_code == 200 and r.json()["excluidas"] >= 2
+    assert not linhas()                   # sem viagens, a linha some do projeto
+    assert client.delete(f"/api/viagens/projeto/{pr['orcamento']}", params=q).status_code == 404

@@ -219,6 +219,28 @@ def editar(vid: int, d: ViagemIn, u: dict = Depends(usuario_liberado)):
     return {"ok": True}
 
 
+@router.delete("/projeto/{orcamento}")
+def excluir_do_projeto(orcamento: str, edt: str, tarefa: str | None = None, u: dict = Depends(usuario_liberado)):
+    """Exclui as viagens de uma Meta/EDT (ou só de uma Ação/Tarefa) do projeto, a partir da página do projeto.
+    As viagens que pertencem a um evento não saem daqui: o evento é alterado ou excluído na página Eventos."""
+    with tx() as c:
+        sql, args = "SELECT * FROM viagens WHERE ciclo=? AND orcamento=? AND edt=?", [config.CICLO_PLANO, orcamento, edt]
+        if tarefa is not None:
+            sql += " AND tarefa=?"; args.append(tarefa)
+        alvo = [v for v in c.execute(sql, args).fetchall() if _pode_ver(c, u, v)]
+        if not alvo:
+            raise HTTPException(404, "Nenhuma viagem encontrada nessa ação.")
+        manuais = [v for v in alvo if not v["evento_id"]]
+        de_evento = [v for v in alvo if v["evento_id"]]
+        if not manuais:
+            nomes = "; ".join(sorted({(v["objetivo"] or "").replace("Evento: ", "") for v in de_evento}))
+            raise HTTPException(409, f"Estas viagens pertencem a eventos ({nomes}). Altere ou exclua o evento na página Eventos.")
+        c.execute(f"DELETE FROM viagens WHERE id IN ({','.join('?' for _ in manuais)})", [v["id"] for v in manuais])
+        audit(c, u["login"], "excluiu viagens da ação", orcamento, detalhe=f"{edt}{' / ' + tarefa if tarefa is not None else ''}: {len(manuais)} viagem(ns)")
+        sync.sincronizar_viagens(c, orcamento, u["login"], True)
+    return {"ok": True, "excluidas": len(manuais), "de_eventos": len(de_evento)}
+
+
 @router.delete("/{vid}")
 def excluir(vid: int, u: dict = Depends(usuario_liberado)):
     with tx() as c:

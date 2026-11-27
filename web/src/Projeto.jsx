@@ -292,15 +292,21 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
   const excluirGrupo = async (edt, tarefa) => {
     const alvo = d.linhas.filter((l) => l.edt === edt && (tarefa === undefined || l.tarefa === tarefa));
     const manuais = alvo.filter((l) => l.fonte === "manual");
-    const bloq = alvo.length - manuais.length;
+    const viag = alvo.filter((l) => l.fonte === "viagens");      // vêm do plano de viagens: saem junto, excluindo as viagens da ação
+    const bloq = alvo.length - manuais.length - viag.length;      // eventos e headcount: só na página deles
     const nome = tarefa === undefined ? `a Meta/EDT "${edt}" inteira (todas as ações)` : `a ação "${edt} | ${tarefa}"`;
-    if (!manuais.length) { setErro(`${nome[0].toUpperCase() + nome.slice(1)} só tem linhas que vêm de Viagens, Eventos ou Headcount. Para removê-las, exclua o item na página correspondente (por exemplo, a posição em Headcount).`); return; }
-    const aviso = bloq ? `\n\nATENÇÃO: ${bloq} linha(s) vinda(s) de Viagens, Eventos ou Headcount NÃO serão excluídas aqui. Para removê-las, exclua o item na página correspondente.` : "";
-    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${manuais.length} linha(s), ${fmt(manuais.reduce((a, l) => a + l.total, 0))}.\nAs linhas de 2026 continuam em "Passado 2026" e podem ser trazidas de volta.${aviso}`)) return;
+    if (!manuais.length && !viag.length) { setErro(`${nome[0].toUpperCase() + nome.slice(1)} só tem linhas que vêm de Eventos ou Headcount. Para removê-las, exclua o item na página correspondente (por exemplo, a posição em Headcount).`); return; }
+    const soma = (ls) => fmt(ls.reduce((a, l) => a + l.total, 0));
+    const aviso = (bloq ? `\n\nATENÇÃO: ${bloq} linha(s) vinda(s) de Eventos ou Headcount NÃO serão excluídas aqui. Para removê-las, exclua o item na página correspondente.` : "");
+    const partes = [manuais.length ? `${manuais.length} linha(s) lançada(s) à mão, ${soma(manuais)}` : "", viag.length ? `${viag.length} linha(s) do plano de viagens, ${soma(viag)}: as viagens desta ação serão excluídas também na aba Viagens` : ""].filter(Boolean).join("\n");
+    if (!window.confirm(`Excluir ${nome} do orçamento de 2027?\n${partes}.\nAs linhas de 2026 continuam em "Passado 2026" e podem ser trazidas de volta.${aviso}`)) return;
+    const q = new URLSearchParams(tarefa === undefined ? { edt } : { edt, tarefa });
     try {
       setErro("");
-      await api(`/projetos/${d.projeto.orcamento}/linhas?` + new URLSearchParams({ ...(tarefa === undefined ? { edt } : { edt, tarefa }), somente_manuais: "true" }), { method: "DELETE" });
-      if (bloq) setErro(`Linhas manuais excluídas. ${bloq} linha(s) de Viagens, Eventos ou Headcount continuam no grupo: remova o item na página correspondente.`);
+      let falhou = "";
+      if (viag.length) { try { await api(`/viagens/projeto/${d.projeto.orcamento}?` + q, { method: "DELETE" }); } catch (e) { falhou = e.message; } }
+      if (manuais.length) await api(`/projetos/${d.projeto.orcamento}/linhas?` + new URLSearchParams({ ...Object.fromEntries(q), somente_manuais: "true" }), { method: "DELETE" });
+      if (falhou) setErro(falhou); else if (bloq) setErro(`Linhas excluídas. ${bloq} linha(s) de Eventos ou Headcount continuam no grupo: remova o item na página correspondente.`);
       recarregar();
     } catch (e) { setErro(e.message); }
   };
@@ -370,7 +376,7 @@ function Plano({ d, admin, contas, recarregar, setErro, irViagens, voltar }) {
                       <td className="col-acoes">
                         <div className="barra-icones">
                           <BotaoIcone icone={<Lapis />} dica="Editar a linha inteira" onClick={() => { setNova(false); setEditando(l); setTimeout(() => document.getElementById("form-linha")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
-                          <BotaoIcone icone={<Lixeira />} tom="perigo" desligado={l.fonte !== "manual"} dica={l.fonte !== "manual" ? "Linha bloqueada: vem de outra página (Viagens, Eventos ou Headcount)" : "Excluir esta linha de 2027"} onClick={() => excluir(l)} />
+                          <BotaoIcone icone={<Lixeira />} tom="perigo" desligado={l.fonte !== "manual"} dica={l.fonte === "viagens" ? "Linha do plano de viagens: use a lixeira da Ação/Tarefa (no cabeçalho do grupo) para excluir as viagens" : l.fonte !== "manual" ? "Linha bloqueada: vem de outra página (Eventos ou Headcount)" : "Excluir esta linha de 2027"} onClick={() => excluir(l)} />
                           <BotaoIcone icone={<Transferir />} desligado={l.fonte !== "manual"} dica={l.fonte !== "manual" ? "Linha bloqueada: vem de outra página (Viagens, Eventos ou Headcount)" : "Transferir esta linha para outro projeto"} onClick={() => { setNova(false); setEditando(null); setTransferindo({ ids: [l.id], rotulo: `${l.tarefa} | ${l.conta_desc}`, unica: true }); setTimeout(() => document.getElementById("form-transferir")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
                           <BotaoIcone icone={<Desfazer />} desligado={l.status !== "ajustada"} dica={l.status === "ajustada" ? "Voltar aos valores aprovados em 2026" : "Sem alterações para desfazer"} onClick={() => trocar(l, { meses: l.ref.meses })} />
                         </div>
