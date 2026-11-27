@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from . import config, export_xlsx, importers, security
-from .db import MESES, NOMES_MESES, audit, connect, tx
+from .db import MESES, NOMES_MESES, audit, connect, liberar_linhas_orfas, tx
 from . import fontes as financiamento
 
 router = APIRouter(prefix="/api")
@@ -643,6 +643,8 @@ WHERE l.ciclo = {config.CICLO_PLANO}"""
 @router.get("/projetos/{orcamento}")
 def detalhe_projeto(orcamento: str, u: dict = Depends(usuario_liberado), c: sqlite3.Connection = Depends(_conn)):
     p = exige_acesso(c, u, orcamento)
+    with tx() as cw:      # linhas travadas sem viagem, evento ou headcount por trás viram linhas normais
+        liberar_linhas_orfas(cw, orcamento)
     rows = c.execute(_SQL_LINHAS + " AND l.orcamento=? ORDER BY l.edt, l.tarefa, l.conta_codigo, l.id", (orcamento,)).fetchall()
     linhas = [_linha(r) for r in rows]
     ex = c.execute("SELECT COALESCE(SUM(realizado),0), COALESCE(SUM(empenhado),0) FROM execucao WHERE orcamento=?",

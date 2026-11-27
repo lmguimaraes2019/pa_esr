@@ -1637,3 +1637,18 @@ def test_excluir_viagens_da_acao_pela_pagina_do_projeto(client):
     assert r.status_code == 200 and r.json()["excluidas"] >= 2
     assert not linhas()                   # sem viagens, a linha some do projeto
     assert client.delete(f"/api/viagens/projeto/{pr['orcamento']}", params=q).status_code == 404
+
+
+def test_linha_travada_sem_origem_vira_linha_normal(client):
+    from app import db
+    entrar(client)
+    p = client.get("/api/projetos").json()[0]
+    o = p["orcamento"]
+    with db.tx() as c:
+        conta = c.execute("SELECT codigo FROM contas LIMIT 1").fetchone()[0]
+        c.execute("INSERT INTO linhas (ciclo, orcamento, edt, tarefa, conta_codigo, fonte) VALUES (?,?,?,?,?,?)",
+                  (db.config.CICLO_PLANO, o, "ORF", "ORF.1", conta, "viagens"))
+    ls = client.get(f"/api/projetos/{o}").json()["linhas"]       # abrir o projeto libera a linha
+    orf = next(l for l in ls if l["edt"] == "ORF")
+    assert orf["fonte"] == "manual"
+    assert client.delete(f"/api/linhas/{orf['id']}").status_code == 200

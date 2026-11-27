@@ -11,7 +11,7 @@ import re
 import sqlite3
 
 from . import config, equipamentos, pessoal, viagens as vg
-from .db import MESES
+from .db import MESES, liberar_linhas_orfas
 
 FONTES_SYNC = ("eventos", "headcount")
 
@@ -157,6 +157,7 @@ def sincronizar_viagens(c: sqlite3.Connection, orcamento: str, usuario: str, for
     tem_plano = c.execute("SELECT 1 FROM linhas WHERE ciclo=? AND orcamento=? AND fonte='viagens' LIMIT 1", (config.CICLO_PLANO, orcamento)).fetchone()
     # sem viagens do plano já aplicadas, só as viagens dos eventos entram; com plano aplicado, entra tudo
     vg.aplicar_ao_orcamento(c, usuario, False, orcamento=orcamento, tolerante=True, so_evento=so_evento and not tem_plano)
+    liberar_linhas_orfas(c, orcamento, usuario)      # sem viagem por trás, a linha deixa de ficar travada
 
 
 def sincronizar_todos(c: sqlite3.Connection, usuario: str = "sistema") -> int:

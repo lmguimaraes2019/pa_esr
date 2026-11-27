@@ -532,6 +532,7 @@ def init_db() -> None:
                 from . import sync
                 sync.sincronizar_todos(c, "sistema")
             c.execute("INSERT INTO meta (chave, valor) VALUES ('viagens_de_eventos', '1')")
+        liberar_linhas_orfas(c, usuario="sistema (limpeza)")      # a cada partida: linhas travadas sem viagem, evento ou headcount por trás viram linhas normais
 
 
 def semear_receitas(c: sqlite3.Connection) -> bool:
@@ -552,6 +553,23 @@ def semear_receitas(c: sqlite3.Connection) -> bool:
         (p[0], "Growth", "Previsão de receita 2026", *[500000.0] * 12, base, "carga inicial"))
     c.execute("INSERT INTO meta (chave, valor) VALUES ('receitas_semeadas', '1')")
     return True
+
+
+def liberar_linhas_orfas(c: sqlite3.Connection, orcamento: str | None = None, usuario: str = "sistema") -> int:
+    """Linhas marcadas como vindas de Viagens, Eventos ou Headcount, mas sem nenhum item dessas páginas por trás (a viagem ou o
+    evento foi excluído, ou o projeto deixou de ser a fonte pagadora), ficam travadas sem motivo. Aqui elas passam a linhas
+    normais (manuais): o valor é mantido para o gestor decidir, e agora elas podem ser editadas ou excluídas."""
+    filtro, args = (" AND orcamento=?", (orcamento,)) if orcamento else ("", ())
+    base = (config.CICLO_PLANO, *args)
+    n = c.execute("UPDATE linhas SET fonte='manual', editada=1 WHERE ciclo=? AND fonte='viagens'" + filtro +
+                  " AND NOT EXISTS (SELECT 1 FROM viagens v WHERE v.ciclo=linhas.ciclo AND v.orcamento=linhas.orcamento AND v.edt=linhas.edt AND v.tarefa=linhas.tarefa)", base).rowcount
+    n += c.execute("UPDATE linhas SET fonte='manual', editada=1 WHERE ciclo=? AND fonte='eventos'" + filtro +
+                   " AND NOT EXISTS (SELECT 1 FROM eventos e WHERE e.orcamento=linhas.orcamento)", base).rowcount
+    n += c.execute("UPDATE linhas SET fonte='manual', editada=1 WHERE ciclo=? AND fonte='headcount'" + filtro +
+                   " AND NOT EXISTS (SELECT 1 FROM headcount h WHERE h.orcamento=linhas.orcamento OR h.orcamento_equip=linhas.orcamento)", base).rowcount
+    if n:
+        audit(c, usuario, "liberou linhas travadas sem origem", orcamento, detalhe=f"{n} linha(s) de Viagens, Eventos ou Headcount sem item de origem viraram linhas normais")
+    return n
 
 
 def audit(c: sqlite3.Connection, usuario: str, acao: str, orcamento: str | None = None,
