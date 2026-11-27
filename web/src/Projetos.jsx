@@ -83,12 +83,13 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
   const [listas, setListas] = useState(null);
   const [aba, setAba] = useState("despesas");
   const [mais, setMais] = useState(false);       // colunas extras: empenhado e % executado
-  const [fechado, setFechado] = useState({});      // grupos recolhidos (hook antes dos retornos antecipados)
+  const [abertos, setAbertos] = useState({});      // gerências abertas: por padrão todas vêm recolhidas
+  const [fechado, setFechado] = useState({});      // origens recolhidas dentro de uma gerência aberta
   useEffect(() => { api("/projetos").then(setPs).catch((e) => setErro(e.message)); api("/listas").then(setListas).catch(() => {}); }, []);
   if (erro) return <p className="erro">{erro}</p>;
   if (!todos) return <p>Carregando…</p>;
   const ps = todos.filter((p) => p.tipo !== "receita" && (!fGer || (p.gerencia || "Sem gerência definida") === fGer) && (!fFin || p.finalidade === fFin) && (!semEntregas || semEntregas.includes(p.orcamento)) && (!semFonte || semFonte.includes(p.orcamento)));
-  const inativo = (p) => p.extinto;      // sem previsão de execução em 2027; os contingenciados ficam na tabela das gerências, em outra cor
+  const alternaGer = (k) => setAbertos((f) => ({ ...f, [k]: !f[k] }));
   const alterna = (k) => setFechado((f) => ({ ...f, [k]: !f[k] }));
   const ordem = (a, b) => a.localeCompare(b, "pt-BR");
   const agrupa = (lista, pre) => {
@@ -99,9 +100,11 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
       return { chave: pre + g, nome: g, origens, ps: origens.flatMap((o) => o.ps) };
     });
   };
-  const ativos = ps.filter((p) => !inativo(p)), inativos = ps.filter(inativo);
-  const gAtivos = agrupa(ativos, ""), gInativos = agrupa(inativos, "x:");
-  const todasChaves = [...gAtivos, ...gInativos].flatMap((g) => [g.chave, ...g.origens.map((o) => o.chave)]);
+  // três grupos: planejados (seguem para 2027), contingenciados (aguardam liberação) e extintos (sem orçamento em 2027)
+  const ativos = ps.filter((p) => !p.extinto && !p.contingenciado), conting = ps.filter((p) => p.contingenciado && !p.extinto), inativos = ps.filter((p) => p.extinto);
+  const gAtivos = agrupa(ativos, ""), gConting = agrupa(conting, "c:"), gInativos = agrupa(inativos, "x:");
+  const todasChaves = [...gAtivos, ...gConting, ...gInativos].flatMap((g) => [g.chave, ...g.origens.map((o) => o.chave)]);
+  const chavesGer = todasChaves.filter((k) => !k.includes("|")), chavesOrigem = todasChaves.filter((k) => k.includes("|"));
   const subtotal = (lista) => {
     const s = (k) => lista.reduce((a, p) => a + p[k], 0);
     const t26 = s("total_2026"), re = s("realizado_2026");
@@ -112,7 +115,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
     : p.contingenciado ? <span className="tag aviso" title="Orçamento contingenciado, não liberado para execução">contingenciado</span>
     : p.pendencias.length > 0 ? <span className="tag aviso" title={p.pendencias.join(", ")}>{p.pendencias.length} {p.pendencias.length === 1 ? "pendência" : "pendências"}</span> : null;
   const linhaProjeto = (p) => (
-    <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido && !p.extinto ? "concluido " : "") + (p.extinto ? "extinta " : "") + (p.contingenciado && !p.extinto ? "conting" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
+    <tr key={p.orcamento} className={"proj " + (p.planejamento_concluido && !p.extinto ? "concluido " : "") + (p.extinto ? "extinta" : "")} title={p.planejamento_concluido ? "O gestor marcou o planejamento como concluído" : undefined} onClick={() => abrir(p.orcamento)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && abrir(p.orcamento)}>
       <td>{p.novo ? <span className="tag ok">novo</span> : p.orcamento}</td><td>{p.n_projeto || semValor}</td><td>{p.centro_custo || semValor}</td>
       <td>{p.descricao}<div className="sub-proj"><span className={"tag " + classeFinalidade(p.finalidade)} title="Finalidade do orçamento">{nomeFinalidade(p.finalidade)}</span>
         {estado(p)}{p.replicado_para && <span className="mudo"> migrado para {p.replicado_para}</span>}{p.replicado_de && <span className="mudo"> replicado de {p.replicado_de}</span>}</div></td>
@@ -132,9 +135,9 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
         </thead>
         <tbody>{grupos.map((g) => (
           <React.Fragment key={g.chave}>
-            <tr className="grupo-ger" onClick={() => alterna(g.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(g.chave))} aria-expanded={!fechado[g.chave]}>
-              <td colSpan={5}><span className="seta">{fechado[g.chave] ? "▸" : "▾"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
-            {!fechado[g.chave] && g.origens.map((o) => (
+            <tr className="grupo-ger" onClick={() => alternaGer(g.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alternaGer(g.chave))} aria-expanded={!!abertos[g.chave]}>
+              <td colSpan={5}><span className="seta">{abertos[g.chave] ? "▾" : "▸"}</span> <strong>{g.nome}</strong> <span className="contagem">{g.ps.length} {g.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(g.ps)}</tr>
+            {abertos[g.chave] && g.origens.map((o) => (
               <React.Fragment key={o.chave}>
                 <tr className="grupo-org" onClick={() => alterna(o.chave)} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), alterna(o.chave))} aria-expanded={!fechado[o.chave]}>
                   <td colSpan={5}><span className="seta">{fechado[o.chave] ? "▸" : "▾"}</span> {o.nome} <span className="contagem">{o.ps.length} {o.ps.length === 1 ? "projeto" : "projetos"}</span></td>{subtotal(o.ps)}</tr>
@@ -149,7 +152,7 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
     <>
       <div className="cab"><div><h2>PA 2027 por projeto</h2>
         <p className="mudo">Abra um projeto para ver o que foi aprovado e executado em 2026 e ajustar o plano de 2027. Os projetos são centros de custo; as receitas ficam na página Receitas.</p></div>
-        <div className="acoes"><a className="botao" href="/api/export/orcamento">Exportar planilha</a><button type="button" onClick={() => setFechado({})}>Expandir tudo</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => !k.includes("|")).map((k) => [k, true])))}>Recolher gerências</button><button type="button" onClick={() => setFechado(Object.fromEntries(todasChaves.filter((k) => k.includes("|")).map((k) => [k, true])))}>Recolher origens</button></div>
+        <div className="acoes"><a className="botao" href="/api/export/orcamento">Exportar planilha</a><button type="button" onClick={() => { setAbertos(Object.fromEntries(chavesGer.map((k) => [k, true]))); setFechado({}); }}>Expandir tudo</button><button type="button" onClick={() => setAbertos({})}>Recolher gerências</button><button type="button" onClick={() => { setAbertos(Object.fromEntries(chavesGer.map((k) => [k, true]))); setFechado(Object.fromEntries(chavesOrigem.map((k) => [k, true]))); }}>Recolher origens</button></div>
         {listas && <button className="destaque" onClick={() => setNovo(true)}>+ Novo orçamento</button>}</div>
       <Passos ativo={aba} onMudar={setAba} itens={[["despesas", "Planejamento de despesas"], ["pco", "Para lançar no PCO"]]} />
       {aba === "pco" ? <LancamentoPCO ps={todos} abrir={abrir} /> : <>
@@ -166,12 +169,25 @@ export default function Projetos({ abrir, semEntregas, semFonte, limparFiltro })
         <select value={fFin} onChange={(e) => setFFin(e.target.value)} aria-label="Filtrar por finalidade"><option value="">Todas as finalidades</option>{FINALIDADES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
       </div>
       {!ps.length && <p className="mudo">{todos.length ? "Nenhum projeto neste filtro." : "Nenhum projeto associado ao seu usuário. Crie um novo orçamento acima."}</p>}
-      {gAtivos.length > 0 && tabela(ativos, gAtivos)}
-      {gInativos.length > 0 && <>
-        <h3 className="secao">Projetos extintos</h3>
-        <p className="mudo" style={{ marginTop: 0 }}>Sem previsão de execução em 2027: as ações extintas migram suas entregas para outros projetos.</p>
-        {tabela(inativos, gInativos)}
-      </>}
+      {ps.length > 0 && <div className="plano-resumo">
+        {[["planejados", "Planejados", "plano", ativos, "Seguem para 2027"], ["contingenciados", "Contingenciados", "cont", conting, "Aguardam liberação"], ["extintos", "Extintos", "ext", inativos, "Sem orçamento em 2027"]].map(([id, nome, cor, l, sub]) => (
+          <button type="button" key={id} className={cor} disabled={!l.length} onClick={() => document.getElementById("plano-" + id)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            <span>{nome} <b>{l.length}</b></span><strong>{fmtV(l.reduce((a, p) => a + p.total_2027, 0))}</strong><small>{sub} · aprovado 2026 {fmtV(l.reduce((a, p) => a + p.total_2026, 0))}</small></button>))}
+      </div>}
+      {[["planejados", "Projetos planejados", "plano", ativos, gAtivos, "Seguem para o plano de 2027."],
+        ["contingenciados", "Projetos contingenciados", "cont", conting, gConting, "Orçamentos ainda não liberados para execução: ficam fora da exportação para o PCO e dos números do Resumo."],
+        ["extintos", "Projetos extintos", "ext", inativos, gInativos, "Sem previsão de execução em 2027: as ações extintas migram suas entregas para outros projetos."]]
+        .filter(([, , , l]) => l.length > 0).map(([id, titulo, cor, l, g, nota]) => {
+          const t = (k) => l.reduce((a, p) => a + p[k], 0);
+          return (
+            <section key={id} id={"plano-" + id} className={"plano-sec " + cor}>
+              <div className="plano-sec-cab">
+                <div><h3>{titulo} <span className="contagem">{l.length}</span></h3><p className="mudo">{nota}</p></div>
+                <div className="plano-sec-tot"><span>Aprovado 2026<strong>{fmtV(t("total_2026"))}</strong></span><span>Plano 2027<strong>{fmtV(t("total_2027"))}</strong></span><span>Variação<strong><Delta de={t("total_2026")} para={t("total_2027")} /></strong></span></div>
+              </div>
+              {tabela(l, g)}
+            </section>);
+        })}
       </>}
       <OutrosProjetos />
     </>

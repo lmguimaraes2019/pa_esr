@@ -565,3 +565,41 @@ label.est-gtit input{width:auto;flex:none}
 .resumo-proj{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:0}
 .resumo-proj .chip-id{font-size:.88rem;color:var(--texto,#333)}
 .resumo-proj .chip-id strong{color:var(--azul);font-variant-numeric:tabular-nums}
+
+/* Plano 2027: visão executiva em três grupos (planejados, contingenciados, extintos) */
+.plano-resumo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 6px}
+.plano-resumo button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--card);border:1px solid var(--bd);border-left:4px solid var(--azul);border-radius:12px;padding:14px 18px;cursor:pointer;font:inherit;box-shadow:none}
+.plano-resumo button.cont{border-left-color:var(--laranja)}
+.plano-resumo button.ext{border-left-color:var(--cinza-claro)}
+.plano-resumo button:disabled{opacity:.5;cursor:default}
+.plano-resumo button:hover:not(:disabled){background:#FAFBFD;border-color:#C9D3E0}
+.plano-resumo span{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mudo);font-weight:700}
+.plano-resumo span b{color:var(--azul);margin-left:4px}
+.plano-resumo strong{font-size:1.4rem;color:var(--azul);font-weight:800;line-height:1.2}
+.plano-resumo small{color:var(--mudo);font-size:.76rem}
+.plano-sec{margin:26px 0 6px}
+.plano-sec-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:10px;padding-left:14px;border-left:4px solid var(--azul)}
+.plano-sec.cont .plano-sec-cab{border-left-color:var(--laranja)}
+.plano-sec.ext .plano-sec-cab{border-left-color:var(--cinza-claro)}
+.plano-sec-cab h3{margin:0;font-size:1.1rem}
+.plano-sec-cab p{margin:2px 0 0;font-size:.82rem}
+.plano-sec-tot{display:flex;gap:26px;flex-wrap:wrap}
+.plano-sec-tot span{display:flex;flex-direction:column;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mudo);font-weight:700}
+.plano-sec-tot strong{font-size:1rem;color:var(--azul);letter-spacing:0;text-transform:none;font-weight:800}
+.plano-sec .rolagem{background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:auto}
+.plano-sec .tab.clic.pa{margin:0}
+/* tabelas mais leves: gerência em faixa clara, origem discreta, projetos com linha fina */
+.tab.clic.pa tr.grupo-ger td{background:#EEF2F8;color:var(--azul);border-top:1px solid var(--bd)}
+.tab.clic.pa tr.grupo-ger:hover td{background:#E4EBF4;color:var(--azul)}
+.tab.clic.pa tr.grupo-ger .contagem{background:#fff;color:var(--mudo);border:1px solid var(--bd)}
+.tab.clic.pa tr.grupo-ger .mudo{color:var(--mudo)}
+.tab.clic.pa tr.grupo-ger .up{color:var(--aviso)}
+.tab.clic.pa tr.grupo-ger .down{color:var(--ok)}
+.tab.clic.pa tr.grupo-ger .res-pos{color:var(--ok)}
+.tab.clic.pa tr.grupo-ger .res-neg{color:var(--erro)}
+.tab.clic.pa tr.grupo-org td{background:#fff;color:var(--mudo);font-weight:600;border-top:1px solid #EEF1F5}
+.tab.clic.pa tr.grupo-org:hover td{background:#FAFBFD;color:var(--azul)}
+.tab.clic.pa tr.grupo-org td:first-child{padding-left:26px}
+.tab.clic.pa tr.proj td{border-top:1px solid #F0F2F6}
+.tab.clic.pa tfoot td{background:#fff;border-top:2px solid var(--azul);color:var(--azul)}
+@media (max-width:900px){.plano-resumo{grid-template-columns:1fr}}
